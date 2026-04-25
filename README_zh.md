@@ -11,10 +11,10 @@
 
 <p align="center">
   <a href="README.md">English</a> •
-  <a href="#核心特性">核心特性</a> •
-  <a href="#技术亮点">技术亮点</a> •
-  <a href="#快速开始">快速开始</a> •
-  <a href="#社区交流">社区交流</a>
+  <a href="#-视觉与体验">视觉与体验</a> •
+  <a href="#-核心特性">核心特性</a> •
+  <a href="#-快速开始">快速开始</a> •
+  <a href="#-贡献与参与">贡献与参与</a>
 </p>
 
 <p align="center">

@@ -11,10 +11,10 @@
 
 <p align="center">
   <a href="README_zh.md">中文</a> •
-  <a href="#core-features">Core Features</a> •
-  <a href="#tech-stack">Tech Stack</a> •
-  <a href="#quick-start">Quick Start</a> •
-  <a href="#community">Community</a>
+  <a href="#-visuals-&-experience">Visuals & Experience</a> •
+  <a href="#-core-features">Core Features</a> •
+  <a href="#-tech-stack">Tech Stack</a> •
+  <a href="#-quick-start">Quick Start</a>
 </p>
 
 <p align="center">
