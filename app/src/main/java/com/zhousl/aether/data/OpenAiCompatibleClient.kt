@@ -31,6 +31,7 @@ import kotlin.coroutines.resumeWithException
 import kotlin.math.roundToLong
 
 class OpenAiCompatibleClient(
+    private val diagnosticLogger: AetherDiagnosticLogger = AetherDiagnosticLogger.NoOp,
     private val httpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(DefaultHttpConnectTimeoutMillis, TimeUnit.MILLISECONDS)
         .readTimeout(DefaultHttpReadTimeoutMillis, TimeUnit.MILLISECONDS)
@@ -38,6 +39,8 @@ class OpenAiCompatibleClient(
         .callTimeout(DefaultHttpCallTimeoutMillis, TimeUnit.MILLISECONDS)
         .build(),
 ) {
+    private val requestCounter = AtomicLong(1)
+
     suspend fun createChatCompletion(
         settings: AppSettings,
         systemPrompt: String,
@@ -46,69 +49,102 @@ class OpenAiCompatibleClient(
         toolChoice: String? = null,
         parallelToolCalls: Boolean? = null,
         disableReasoning: Boolean = false,
-    ): Result<ChatCompletionResult> = try {
-        val request = when (settings.provider) {
-            LlmProvider.OpenAiResponses -> buildOpenAiResponsesRequest(
-                settings = settings,
-                systemPrompt = systemPrompt,
-                conversation = conversation,
-                tools = tools,
-                toolChoice = toolChoice,
-                parallelToolCalls = parallelToolCalls,
-                disableReasoning = disableReasoning,
+    ): Result<ChatCompletionResult> {
+        val requestId = nextLlmRequestId()
+        diagnosticLogger.event(
+            category = "llm",
+            event = "request_start",
+            requestId = requestId,
+            details = llmDiagnosticDetails(settings) + mapOf(
+                "streaming" to false,
+                "conversation_message_count" to conversation.size,
+                "tool_count" to tools.size,
+                "tool_choice" to toolChoice.orEmpty(),
+                "parallel_tool_calls" to parallelToolCalls,
+            ),
+        )
+        return try {
+            val request = when (settings.provider) {
+                LlmProvider.OpenAiResponses -> buildOpenAiResponsesRequest(
+                    settings = settings,
+                    systemPrompt = systemPrompt,
+                    conversation = conversation,
+                    tools = tools,
+                    toolChoice = toolChoice,
+                    parallelToolCalls = parallelToolCalls,
+                    disableReasoning = disableReasoning,
             )
 
-            LlmProvider.OpenAiCompatible -> buildOpenAiRequest(
-                settings = settings,
-                systemPrompt = systemPrompt,
-                conversation = conversation,
-                tools = tools,
-                toolChoice = toolChoice,
-                parallelToolCalls = parallelToolCalls,
-                disableReasoning = disableReasoning,
+                LlmProvider.OpenAiCompatible -> buildOpenAiRequest(
+                    settings = settings,
+                    systemPrompt = systemPrompt,
+                    conversation = conversation,
+                    tools = tools,
+                    toolChoice = toolChoice,
+                    parallelToolCalls = parallelToolCalls,
+                    disableReasoning = disableReasoning,
             )
 
-            LlmProvider.VertexExpress -> buildVertexRequest(
-                settings = settings,
-                systemPrompt = systemPrompt,
-                conversation = conversation,
-                tools = tools,
-                toolChoice = toolChoice,
+                LlmProvider.VertexExpress -> buildVertexRequest(
+                    settings = settings,
+                    systemPrompt = systemPrompt,
+                    conversation = conversation,
+                    tools = tools,
+                    toolChoice = toolChoice,
             )
 
-            LlmProvider.AnthropicMessages -> buildAnthropicMessagesRequest(
-                settings = settings,
-                systemPrompt = systemPrompt,
-                conversation = conversation,
-                tools = tools,
-                toolChoice = toolChoice,
+                LlmProvider.AnthropicMessages -> buildAnthropicMessagesRequest(
+                    settings = settings,
+                    systemPrompt = systemPrompt,
+                    conversation = conversation,
+                    tools = tools,
+                    toolChoice = toolChoice,
             )
-        }
+            }
 
-        val responsePayload = executeRequest(request)
-        val json = parseJsonObject(responsePayload.bodyString)
+            val responsePayload = executeRequest(request)
+            val json = parseJsonObject(responsePayload.bodyString)
 
-        if (!responsePayload.isSuccessful) {
-            val errorMessage = extractLlmErrorMessage(json, responsePayload)
-            throw buildLlmRequestException(responsePayload, errorMessage)
-        }
+            if (!responsePayload.isSuccessful) {
+                val errorMessage = extractLlmErrorMessage(json, responsePayload)
+                throw buildLlmRequestException(responsePayload, errorMessage)
+            }
 
-        if (json == null) {
-            error(buildUnexpectedResponseMessage(responsePayload))
-        }
+            if (json == null) {
+                error(buildUnexpectedResponseMessage(responsePayload))
+            }
 
-        Result.success(
-            when (settings.provider) {
+            val result = when (settings.provider) {
                 LlmProvider.OpenAiResponses -> parseOpenAiResponses(json)
                 LlmProvider.OpenAiCompatible -> parseOpenAiChatCompletion(json)
                 LlmProvider.VertexExpress -> parseVertexGenerateContent(json)
                 LlmProvider.AnthropicMessages -> parseAnthropicMessage(json)
             }
-        )
-    } catch (cancellationException: CancellationException) {
-        throw cancellationException
-    } catch (throwable: Throwable) {
-        Result.failure(throwable)
+            diagnosticLogger.event(
+                category = "llm",
+                event = "request_end",
+                requestId = requestId,
+                details = mapOf(
+                    "http_code" to responsePayload.code,
+                    "content_type" to responsePayload.contentType,
+                    "request_url" to responsePayload.requestUrl,
+                    "assistant_text_chars" to result.assistantText.length,
+                    "tool_call_count" to result.toolCalls.size,
+                ),
+            )
+            Result.success(result)
+        } catch (cancellationException: CancellationException) {
+            throw cancellationException
+        } catch (throwable: Throwable) {
+            diagnosticLogger.exception(
+                category = "llm",
+                event = "request_failed",
+                requestId = requestId,
+                throwable = throwable,
+                details = llmDiagnosticDetails(settings) + mapOf("streaming" to false),
+            )
+            Result.failure(throwable)
+        }
     }
 
     suspend fun streamChatCompletion(
@@ -122,9 +158,22 @@ class OpenAiCompatibleClient(
         onReasoningDelta: suspend (String) -> Unit = {},
         onReasoningSummaryDelta: suspend (String) -> Unit = {},
         onStreamActivity: suspend () -> Unit = {},
-    ): Result<ChatCompletionResult> = try {
-        Result.success(
-            when (settings.provider) {
+    ): Result<ChatCompletionResult> {
+        val requestId = nextLlmRequestId()
+        diagnosticLogger.event(
+            category = "llm",
+            event = "request_start",
+            requestId = requestId,
+            details = llmDiagnosticDetails(settings) + mapOf(
+                "streaming" to true,
+                "conversation_message_count" to conversation.size,
+                "tool_count" to tools.size,
+                "tool_choice" to toolChoice.orEmpty(),
+                "parallel_tool_calls" to parallelToolCalls,
+            ),
+        )
+        return try {
+            val result = when (settings.provider) {
                 LlmProvider.OpenAiResponses -> streamOpenAiResponses(
                     settings = settings,
                     systemPrompt = systemPrompt,
@@ -169,11 +218,29 @@ class OpenAiCompatibleClient(
                     onStreamActivity = onStreamActivity,
                 )
             }
-        )
-    } catch (cancellationException: CancellationException) {
-        throw cancellationException
-    } catch (throwable: Throwable) {
-        Result.failure(throwable)
+            diagnosticLogger.event(
+                category = "llm",
+                event = "request_end",
+                requestId = requestId,
+                details = mapOf(
+                    "streaming" to true,
+                    "assistant_text_chars" to result.assistantText.length,
+                    "tool_call_count" to result.toolCalls.size,
+                ),
+            )
+            Result.success(result)
+        } catch (cancellationException: CancellationException) {
+            throw cancellationException
+        } catch (throwable: Throwable) {
+            diagnosticLogger.exception(
+                category = "llm",
+                event = "request_failed",
+                requestId = requestId,
+                throwable = throwable,
+                details = llmDiagnosticDetails(settings) + mapOf("streaming" to true),
+            )
+            Result.failure(throwable)
+        }
     }
 
     fun buildConversation(
@@ -308,6 +375,17 @@ class OpenAiCompatibleClient(
             }
         )
     }
+
+    private fun nextLlmRequestId(): String = "llm-${requestCounter.getAndIncrement()}"
+
+    private fun llmDiagnosticDetails(settings: AppSettings): Map<String, Any?> =
+        mapOf(
+            "provider" to settings.provider.storageValue,
+            "model" to settings.modelId,
+            "base_url" to DiagnosticRedactor.sanitizedBaseUrl(settings.baseUrl),
+            "inactivity_reconnect_timeout_seconds" to settings.llmInactivityReconnectTimeoutSeconds,
+            "basic_tool_compatibility" to settings.basicFunctionCallingCompatibilityMode,
+        )
 
     private fun parseOpenAiChatCompletion(json: JSONObject): ChatCompletionResult {
         val message = json.optJSONArray("choices")

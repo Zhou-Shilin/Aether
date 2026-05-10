@@ -103,15 +103,17 @@ class SessionExecutionManager(
     private val application: Application,
     private val scope: CoroutineScope,
     private val settingsRepository: SettingsRepository,
-    extensionsRepository: AgentExtensionsRepository,
+    private val extensionsRepository: AgentExtensionsRepository,
     private val chatStateStore: ChatStateStore,
     private val bashTool: TermuxBashTool,
     private val workspaceFileBridge: WorkspaceFileBridge,
+    private val rootSetupController: RootSetupController,
     private val agentModeController: AgentModeController,
     private val skillManager: AgentSkillManager,
     private val webToolsClient: WebToolsClient,
     private val notificationController: AetherNotificationController,
     private val appForegroundTracker: AppForegroundTracker,
+    private val diagnosticLogger: AetherDiagnosticLogger = AetherDiagnosticLogger.NoOp,
 ) {
     private val currentSettings = MutableStateFlow(AppSettings())
     private val currentProviderConfigs = MutableStateFlow<List<LlmProviderConfig>>(emptyList())
@@ -153,6 +155,13 @@ class SessionExecutionManager(
 
         val validationError = validateRequest(request)
         if (validationError != null) {
+            diagnosticLogger.event(
+                category = "session",
+                event = "turn_validation_failed",
+                level = "warn",
+                sessionId = request.sessionId,
+                details = mapOf("message" to validationError),
+            )
             executionHandles.remove(request.sessionId, handle)
             val completion = appendAgentMessage(
                 sessionId = request.sessionId,
@@ -181,6 +190,20 @@ class SessionExecutionManager(
                 activeTurnStartedAtMillis = System.currentTimeMillis(),
             )
         }
+        diagnosticLogger.event(
+            category = "session",
+            event = "turn_queued",
+            sessionId = request.sessionId,
+            details = mapOf(
+                "provider" to request.settings.provider.storageValue,
+                "model" to request.settings.modelId,
+                "base_url" to DiagnosticRedactor.sanitizedBaseUrl(request.settings.baseUrl),
+                "request_message_count" to request.requestMessages.size,
+                "selected_skill_count" to request.selectedSkillIds.size,
+                "active_mcp_server_count" to request.activeMcpServerIds.size,
+                "agent_mode_enabled" to request.agentModeEnabled,
+            ),
+        )
 
         handle.job = scope.launch {
             runSession(
@@ -316,15 +339,42 @@ class SessionExecutionManager(
         request: SessionTurnRequest,
     ): CompletionSummary {
         val turnStartedAtMillis = System.currentTimeMillis()
-        val mcpClientManager = McpClientManager(bashTool = bashTool)
+        val turnId = "turn-$turnStartedAtMillis"
+        diagnosticLogger.event(
+            category = "session",
+            event = "turn_start",
+            sessionId = handle.sessionId,
+            turnId = turnId,
+            details = mapOf(
+                "session_title" to resolveSessionTitle(handle.sessionId),
+                "provider" to request.settings.provider.storageValue,
+                "model" to request.settings.modelId,
+                "base_url" to DiagnosticRedactor.sanitizedBaseUrl(request.settings.baseUrl),
+            ),
+        )
+        val mcpClientManager = McpClientManager(
+            bashTool = bashTool,
+            diagnosticLogger = diagnosticLogger,
+        )
         val agent = AetherAgent(
-            client = OpenAiCompatibleClient(),
+            client = OpenAiCompatibleClient(diagnosticLogger = diagnosticLogger),
             bashTool = bashTool,
             workspaceFileBridge = workspaceFileBridge,
             agentModeController = agentModeController,
             skillManager = skillManager,
             mcpClientManager = mcpClientManager,
             webToolsClient = webToolsClient,
+            selfManagementTool = AetherSelfManagementTool(
+                settingsRepository = settingsRepository,
+                extensionsRepository = extensionsRepository,
+                skillManager = skillManager,
+                bashTool = bashTool,
+                rootSetupController = rootSetupController,
+                agentModeController = agentModeController,
+                mcpClientManager = mcpClientManager,
+                diagnosticLogger = diagnosticLogger,
+            ),
+            diagnosticLogger = diagnosticLogger,
             onParallelToolCallsUnsupported = settingsRepository::markParallelToolCallsUnsupported,
         )
 
@@ -360,9 +410,29 @@ class SessionExecutionManager(
             )
 
             val workspaceDirectory = workspaceFileBridge.workspaceDirectory(handle.sessionId)
+            diagnosticLogger.event(
+                category = "mcp",
+                event = "sync_start",
+                sessionId = handle.sessionId,
+                turnId = turnId,
+                details = mapOf(
+                    "server_count" to resolvedMcpServers.size,
+                    "workspace_directory" to workspaceDirectory,
+                ),
+            )
             mcpClientManager.syncServers(
                 servers = resolvedMcpServers,
                 workspaceDirectory = workspaceDirectory,
+            )
+            diagnosticLogger.event(
+                category = "mcp",
+                event = "sync_end",
+                sessionId = handle.sessionId,
+                turnId = turnId,
+                details = mapOf(
+                    "server_count" to resolvedMcpServers.size,
+                    "tool_binding_count" to mcpClientManager.toolBindings().size,
+                ),
             )
             val reasoningTraceToolRoutingEnabled = request.settings.supportsVisibleReasoningTrace()
 
@@ -531,6 +601,16 @@ class SessionExecutionManager(
             val thoughtDurationMillis = (System.currentTimeMillis() - turnStartedAtMillis).coerceAtLeast(0L)
             val completion = result.fold(
                 onSuccess = { reply ->
+                    diagnosticLogger.event(
+                        category = "session",
+                        event = "turn_model_success",
+                        sessionId = handle.sessionId,
+                        turnId = turnId,
+                        details = mapOf(
+                            "reply_chars" to reply.length,
+                            "duration_millis" to thoughtDurationMillis,
+                        ),
+                    )
                     appendAgentMessage(
                         sessionId = handle.sessionId,
                         blocks = ensureAssistantResponseFinalText(
@@ -542,6 +622,14 @@ class SessionExecutionManager(
                     )
                 },
                 onFailure = { throwable ->
+                    diagnosticLogger.exception(
+                        category = "session",
+                        event = "turn_model_failed",
+                        sessionId = handle.sessionId,
+                        turnId = turnId,
+                        throwable = throwable,
+                        details = mapOf("duration_millis" to thoughtDurationMillis),
+                    )
                     appendAgentMessage(
                         sessionId = handle.sessionId,
                         blocks = appendAssistantResponseText(
@@ -560,8 +648,29 @@ class SessionExecutionManager(
             )
             chatStateStore.flush()
             _turnEvents.tryEmit(completion.toTurnEvent(handle.sessionId))
+            diagnosticLogger.event(
+                category = "session",
+                event = "turn_end",
+                sessionId = handle.sessionId,
+                turnId = turnId,
+                level = if (completion.outcome == SessionTurnOutcome.Failure) "warn" else "info",
+                details = mapOf(
+                    "outcome" to completion.outcome.name,
+                    "tool_call_count" to completion.toolCallCount,
+                    "distinct_tool_count" to completion.distinctToolCount,
+                    "duration_millis" to completion.durationMillis,
+                ),
+            )
             completion
         } catch (_: CancellationException) {
+            diagnosticLogger.event(
+                category = "session",
+                event = "turn_cancelled",
+                level = "warn",
+                sessionId = handle.sessionId,
+                turnId = turnId,
+                details = mapOf("pause_finalized" to handle.pauseFinalized),
+            )
             clearPendingInputs(handle)
             val completion = if (handle.pauseFinalized) {
                 CompletionSummary(
@@ -1186,12 +1295,94 @@ class SessionExecutionManager(
             "find" -> if (invocation.isRunning) "Finding files" else "Found files"
             "ls" -> if (invocation.isRunning) "Listing files" else "Listed files"
             "analyze_image" -> if (invocation.isRunning) "Analyzing image" else "Analyzed image"
+            "aether_config_get" -> formatReasoningToolAction(
+                isRunning = invocation.isRunning,
+                runningVerb = "Reading",
+                completedVerb = "Read",
+                subject = formatAetherReasoningCategories(arguments),
+                fallback = "Aether settings",
+            )
+
+            "aether_config_set" -> formatReasoningToolAction(
+                isRunning = invocation.isRunning,
+                runningVerb = "Updating",
+                completedVerb = "Updated",
+                subject = arguments?.optString("category").orEmpty(),
+                fallback = "Aether settings",
+            )
+
+            "aether_skill_manage" -> formatReasoningToolAction(
+                isRunning = invocation.isRunning,
+                runningVerb = aetherSkillReasoningVerb(arguments, running = true),
+                completedVerb = aetherSkillReasoningVerb(arguments, running = false),
+                subject = arguments?.optString("skill_id").orEmpty()
+                    .ifBlank { arguments?.optString("skillId").orEmpty() }
+                    .ifBlank { arguments?.optString("url").orEmpty() },
+                fallback = "Agent Skills",
+            )
+
+            "aether_mcp_manage" -> formatReasoningToolAction(
+                isRunning = invocation.isRunning,
+                runningVerb = aetherMcpReasoningVerb(arguments, running = true),
+                completedVerb = aetherMcpReasoningVerb(arguments, running = false),
+                subject = arguments?.optString("server_id").orEmpty()
+                    .ifBlank { arguments?.optString("serverId").orEmpty() }
+                    .ifBlank { arguments?.optString("display_name").orEmpty() }
+                    .ifBlank { arguments?.optString("displayName").orEmpty() },
+                fallback = "MCP servers",
+            )
+
+            "aether_termux_manage" -> when (arguments?.optString("action").orEmpty().lowercase()) {
+                "configure_root_access" -> if (invocation.isRunning) "Configuring Termux root access" else "Configured Termux root access"
+                "inspect_root_setup" -> if (invocation.isRunning) "Checking Root setup" else "Checked Root setup"
+                else -> if (invocation.isRunning) "Checking Termux setup" else "Checked Termux setup"
+            }
+
+            "aether_agent_mode_manage" -> when (arguments?.optString("action").orEmpty().lowercase()) {
+                "set_authorization" -> if (invocation.isRunning) "Updating Agent Mode authorization" else "Updated Agent Mode authorization"
+                "request_shizuku_permission" -> if (invocation.isRunning) "Requesting Shizuku permission" else "Requested Shizuku permission"
+                "stop_display" -> if (invocation.isRunning) "Stopping Agent Mode display" else "Stopped Agent Mode display"
+                "refresh_displays" -> if (invocation.isRunning) "Refreshing Agent Mode displays" else "Refreshed Agent Mode displays"
+                else -> if (invocation.isRunning) "Checking Agent Mode authorization" else "Checked Agent Mode authorization"
+            }
+
+            "aether_developer_manage" -> if (invocation.isRunning) "Reading Aether diagnostics" else "Read Aether diagnostics"
             else -> if (invocation.isRunning) {
                 "Using ${invocation.toolName}"
             } else {
                 "Used ${invocation.toolName}"
             }
         }
+    }
+
+    private fun formatAetherReasoningCategories(arguments: JSONObject?): String {
+        val categories = arguments?.optJSONArray("categories") ?: return ""
+        return buildList {
+            for (index in 0 until categories.length()) {
+                val value = categories.optString(index).trim()
+                if (value.isNotBlank()) add(value)
+            }
+        }.joinToString(", ")
+    }
+
+    private fun aetherSkillReasoningVerb(
+        arguments: JSONObject?,
+        running: Boolean,
+    ): String = when (arguments?.optString("action").orEmpty().lowercase()) {
+        "install_remote" -> if (running) "Installing" else "Installed"
+        "remove" -> if (running) "Removing" else "Removed"
+        "set_enabled" -> if (running) "Updating" else "Updated"
+        else -> if (running) "Reading" else "Read"
+    }
+
+    private fun aetherMcpReasoningVerb(
+        arguments: JSONObject?,
+        running: Boolean,
+    ): String = when (arguments?.optString("action").orEmpty().lowercase()) {
+        "upsert_streamable_http", "upsert_stdio" -> if (running) "Saving" else "Saved"
+        "remove" -> if (running) "Removing" else "Removed"
+        "set_enabled" -> if (running) "Updating" else "Updated"
+        else -> if (running) "Reading" else "Read"
     }
 
     private fun formatReasoningToolAction(

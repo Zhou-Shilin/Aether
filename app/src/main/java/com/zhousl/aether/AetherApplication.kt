@@ -10,6 +10,7 @@ import com.posthog.android.PostHogAndroidConfig
 import com.zhousl.aether.data.AgentExtensionsRepository
 import com.zhousl.aether.data.AgentModeController
 import com.zhousl.aether.data.AgentSkillManager
+import com.zhousl.aether.data.AetherDiagnosticLogger
 import com.zhousl.aether.data.ChatRepository
 import com.zhousl.aether.data.RootSetupController
 import com.zhousl.aether.data.ChatStateStore
@@ -18,6 +19,7 @@ import com.zhousl.aether.data.SettingsRepository
 import com.zhousl.aether.data.WebToolsClient
 import com.zhousl.aether.data.WorkspaceFileBridge
 import com.zhousl.aether.termux.TermuxBashTool
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -69,12 +71,26 @@ class AetherApplication : Application() {
 class AetherAppRuntime(
     private val application: AetherApplication,
 ) {
-    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val diagnosticLogger = AetherDiagnosticLogger(application)
+    private val appScope = CoroutineScope(
+        SupervisorJob() +
+            Dispatchers.Default +
+            CoroutineExceptionHandler { _, throwable ->
+                diagnosticLogger.exception(
+                    category = "coroutine",
+                    event = "uncaught_exception",
+                    throwable = throwable,
+                )
+            }
+    )
 
     val settingsRepository = SettingsRepository(application)
     val chatRepository = ChatRepository(application)
     val extensionsRepository = AgentExtensionsRepository(application)
-    val bashTool = TermuxBashTool(application)
+    val bashTool = TermuxBashTool(
+        context = application,
+        diagnosticLogger = diagnosticLogger,
+    )
     val rootSetupController = RootSetupController(
         context = application,
         bashTool = bashTool,
@@ -87,6 +103,7 @@ class AetherAppRuntime(
         context = application,
         bashTool = bashTool,
         workspaceFileBridge = workspaceFileBridge,
+        diagnosticLogger = diagnosticLogger,
     )
     val skillManager = AgentSkillManager(
         context = application,
@@ -107,14 +124,26 @@ class AetherAppRuntime(
         chatStateStore = chatStateStore,
         bashTool = bashTool,
         workspaceFileBridge = workspaceFileBridge,
+        rootSetupController = rootSetupController,
         agentModeController = agentModeController,
         skillManager = skillManager,
         webToolsClient = webToolsClient,
         notificationController = notificationController,
         appForegroundTracker = appForegroundTracker,
+        diagnosticLogger = diagnosticLogger,
     )
 
     fun initialize() {
+        diagnosticLogger.installUncaughtExceptionHandler()
+        diagnosticLogger.event(
+            category = "app",
+            event = "startup",
+            details = mapOf(
+                "version_name" to BuildConfig.VERSION_NAME,
+                "version_code" to BuildConfig.VERSION_CODE,
+                "debug" to BuildConfig.DEBUG,
+            ),
+        )
         notificationController.ensureChannels()
         ProcessLifecycleOwner.get().lifecycle.addObserver(appForegroundTracker)
         appScope.launch {

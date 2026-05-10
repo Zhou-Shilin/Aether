@@ -5,3 +5,9 @@
 -dontwarn android.app.ActivityThread
 -dontwarn android.app.ContextImpl
 -dontwarn android.app.LoadedApk
+
+# Flexmark's BitFieldSet reflects enum constant names at runtime.
+# Keep its enum members stable in release builds.
+-keepclassmembers enum com.vladsch.flexmark.** {
+    *;
+}
