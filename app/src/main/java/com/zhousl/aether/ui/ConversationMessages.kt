@@ -163,6 +163,7 @@ private const val StreamingInitialChunkFadeDurationMillis = 600
 private const val StreamingCjkChunkLength = 1
 private const val StreamingFallbackChunkLength = 18
 private const val FaviconFetchTimeoutMillis = 3_000
+private const val MinimumEpochMillis = 946_684_800_000L
 private const val TavilyFallbackDomain = "tavily.com"
 private const val DefaultFaviconUserAgent =
     "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Mobile Safari/537.36"
@@ -255,6 +256,7 @@ fun TermuxSetupNotice(
     onInstallTermux: () -> Unit,
     onRefresh: () -> Unit,
     showRefreshAction: Boolean = true,
+    onDismiss: (() -> Unit)? = null,
 ) {
     if (setupState.isReady) return
     val strings = rememberAetherStrings()
@@ -341,11 +343,36 @@ fun TermuxSetupNotice(
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, style = MaterialTheme.typography.labelLarge, color = AetherOnSurface)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = AetherOnSurfaceVariant)
-            if (setupState.detail.isNotBlank() && setupState.detail != subtitle) {
-                Text(setupState.detail, style = MaterialTheme.typography.bodySmall, color = AetherOnSurfaceVariant)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(title, style = MaterialTheme.typography.labelLarge, color = AetherOnSurface)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = AetherOnSurfaceVariant)
+                if (setupState.detail.isNotBlank() && setupState.detail != subtitle) {
+                    Text(setupState.detail, style = MaterialTheme.typography.bodySmall, color = AetherOnSurfaceVariant)
+                }
+            }
+            if (onDismiss != null) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onDismiss),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "关闭" else "Close",
+                        tint = AetherOnSurfaceVariant,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
             }
         }
 
@@ -817,6 +844,11 @@ private fun AssistantMessageBlock(
     onDelete: () -> Unit,
 ) {
     val strings = rememberAetherStrings()
+    val shouldFoldWorkBeforeFinalText = message.text.isNotBlank() &&
+        (message.reasoningTrace != null ||
+            message.thoughtDurationMillis != null ||
+            message.toolInvocations.isNotEmpty() ||
+            message.attachments.isNotEmpty())
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -824,6 +856,27 @@ private fun AssistantMessageBlock(
         val agentModeFrames = remember(message.toolInvocations) {
             buildAgentModeReplayFrames(message.toolInvocations)
         }
+        val workContent: @Composable () -> Unit = {
+            AssistantMessageWorkContent(
+                message = message,
+                agentModeFrames = agentModeFrames,
+                workspaceDirectory = workspaceDirectory,
+                allowRootImageRead = allowRootImageRead,
+                onOpenAttachment = onOpenAttachment,
+                onOpenLink = onOpenLink,
+            )
+        }
+        if (shouldFoldWorkBeforeFinalText) {
+            AgentWorkSummaryDisclosure(
+                title = formatWorkedSummaryTitle(
+                    message.thoughtDurationMillis
+                        ?: workDurationMillisForMessages(listOf(message), endAtMillis = message.createdAtMillis),
+                ),
+                stateKey = "message-work-${message.id}",
+                content = workContent,
+            )
+        }
+        if (!shouldFoldWorkBeforeFinalText) {
         if (message.reasoningTrace != null) {
             ReasoningTraceStatus(
                 trace = message.reasoningTrace,
@@ -860,6 +913,7 @@ private fun AssistantMessageBlock(
             attachments = message.attachments,
             onOpenAttachment = onOpenAttachment,
         )
+        }
         if (message.text.isNotBlank()) {
             MarkdownContent(
                 markdown = message.text,
@@ -893,6 +947,54 @@ private fun AssistantMessageBlock(
 }
 
 @Composable
+private fun AssistantMessageWorkContent(
+    message: ChatMessage,
+    agentModeFrames: List<AgentModeReplayFrame>,
+    workspaceDirectory: String?,
+    allowRootImageRead: Boolean,
+    onOpenAttachment: (ChatAttachment) -> Unit,
+    onOpenLink: (String) -> Unit,
+) {
+    val strings = rememberAetherStrings()
+    if (message.reasoningTrace != null) {
+        ReasoningTraceStatus(
+            trace = message.reasoningTrace,
+            onOpenLink = onOpenLink,
+        )
+    } else {
+        message.thoughtDurationMillis?.let { duration ->
+            Text(
+                text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) {
+                    "思考了 ${formatThoughtDuration(duration)}"
+                } else {
+                    "Thought for ${formatThoughtDuration(duration)}"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = AetherOnSurfaceVariant,
+            )
+        }
+    }
+    if (message.reasoningTrace == null && agentModeFrames.isNotEmpty()) {
+        AgentModeReplayPanel(
+            frames = agentModeFrames,
+            stateKey = "agent-mode-replay-${message.id}",
+            workspaceDirectory = workspaceDirectory,
+            allowRootImageRead = allowRootImageRead,
+            onOpenLink = onOpenLink,
+        )
+    } else if (message.reasoningTrace == null) {
+        ToolInvocationList(
+            toolInvocations = message.toolInvocations,
+            stateKey = "message-tools-${message.id}",
+        )
+    }
+    AssistantAttachments(
+        attachments = message.attachments,
+        onOpenAttachment = onOpenAttachment,
+    )
+}
+
+@Composable
 fun ConversationAssistantGroupBubble(
     messages: List<ChatMessage>,
     actionsEnabled: Boolean,
@@ -915,11 +1017,25 @@ fun ConversationAssistantGroupBubble(
     val groupAgentModeFrames = agentModeReplayTimeline.frames
     val interleavedAgentModeTextIds = agentModeReplayTimeline.interleavedTextMessageIds
     val firstAgentModeMessageIndex = agentModeReplayTimeline.firstFrameMessageIndex
+    val finalTextMessageIndex = messages.indexOfLast { message ->
+        message.text.isNotBlank() && message.id !in interleavedAgentModeTextIds
+    }
+    val shouldFoldWorkBeforeFinalText = finalTextMessageIndex > 0
+    val workMessages = if (shouldFoldWorkBeforeFinalText) {
+        messages.take(finalTextMessageIndex)
+    } else {
+        emptyList()
+    }
+    val visibleMessages = if (shouldFoldWorkBeforeFinalText) {
+        messages.drop(finalTextMessageIndex)
+    } else {
+        messages
+    }
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        if (!hasReasoningTrace) thoughtDurationMillis?.let { duration ->
+        if (!shouldFoldWorkBeforeFinalText && !hasReasoningTrace) thoughtDurationMillis?.let { duration ->
             Text(
                 text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) {
                     "思考了 ${formatThoughtDuration(duration)}"
@@ -930,7 +1046,44 @@ fun ConversationAssistantGroupBubble(
                 color = AetherOnSurfaceVariant,
             )
         }
-        if (groupAgentModeFrames.isNotEmpty() && firstAgentModeMessageIndex > 0) {
+        if (shouldFoldWorkBeforeFinalText) {
+            AgentWorkSummaryDisclosure(
+                title = formatWorkedSummaryTitle(
+                    thoughtDurationMillis
+                        ?: workDurationMillisForMessages(
+                            workMessages,
+                            endAtMillis = messages[finalTextMessageIndex].createdAtMillis,
+                        ),
+                ),
+                stateKey = "assistant-work-${messages.first().responseGroupId ?: messages.first().id}",
+            ) {
+                if (groupAgentModeFrames.isNotEmpty()) {
+                    AgentModeReplayPanel(
+                        frames = groupAgentModeFrames,
+                        stateKey = "agent-mode-replay-${messages.first().responseGroupId ?: messages.first().id}-folded",
+                        workspaceDirectory = workspaceDirectory,
+                        allowRootImageRead = allowRootImageRead,
+                        onOpenLink = onOpenLink,
+                    )
+                }
+                workMessages.forEachIndexed { index, message ->
+                    AssistantGroupMessageContent(
+                        message = message,
+                        groupAgentModeFrames = if (groupAgentModeFrames.isNotEmpty() && index >= firstAgentModeMessageIndex) {
+                            groupAgentModeFrames
+                        } else {
+                            emptyList()
+                        },
+                        interleavedAgentModeTextIds = interleavedAgentModeTextIds,
+                        workspaceDirectory = workspaceDirectory,
+                        allowRootImageRead = allowRootImageRead,
+                        onOpenAttachment = onOpenAttachment,
+                        onOpenLink = onOpenLink,
+                    )
+                }
+            }
+        }
+        if (!shouldFoldWorkBeforeFinalText && groupAgentModeFrames.isNotEmpty() && firstAgentModeMessageIndex > 0) {
             messages.take(firstAgentModeMessageIndex).forEach { message ->
                 AssistantGroupMessageContent(
                     message = message,
@@ -943,7 +1096,7 @@ fun ConversationAssistantGroupBubble(
                 )
             }
         }
-        if (groupAgentModeFrames.isNotEmpty()) {
+        if (!shouldFoldWorkBeforeFinalText && groupAgentModeFrames.isNotEmpty()) {
             AgentModeReplayPanel(
                 frames = groupAgentModeFrames,
                 stateKey = "agent-mode-replay-${messages.first().responseGroupId ?: messages.first().id}",
@@ -953,6 +1106,9 @@ fun ConversationAssistantGroupBubble(
             )
         }
         messages.forEachIndexed { index, message ->
+            if (shouldFoldWorkBeforeFinalText && message !in visibleMessages) {
+                return@forEachIndexed
+            }
             if (groupAgentModeFrames.isNotEmpty() && index < firstAgentModeMessageIndex) {
                 return@forEachIndexed
             }
@@ -1476,6 +1632,84 @@ fun ToolInvocationList(
                 indent = childIndent,
                 topPadding = 4.dp,
             )
+        }
+    }
+}
+
+@Composable
+fun AgentWorkSummaryDisclosure(
+    title: String,
+    stateKey: String,
+    modifier: Modifier = Modifier,
+    initiallyExpanded: Boolean = false,
+    content: @Composable () -> Unit,
+) {
+    var expanded by rememberSaveable(stateKey) { mutableStateOf(initiallyExpanded) }
+    val arrowRotation by animateFloatAsState(
+        targetValue = if (expanded) 90f else 0f,
+        animationSpec = tween(durationMillis = ToolTransitionDurationMillis, easing = ToolTransitionEasing),
+        label = "agent_work_arrow_rotation",
+    )
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .noRippleClickable { expanded = !expanded },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = title,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+                color = AetherOnSurfaceVariant,
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Rounded.ArrowForwardIos,
+                contentDescription = if (expanded) "Collapse work" else "Expand work",
+                tint = AetherOnSurfaceVariant,
+                modifier = Modifier
+                    .size(14.dp)
+                    .graphicsLayer { rotationZ = arrowRotation },
+            )
+        }
+
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically(
+                animationSpec = tween(durationMillis = ToolTransitionDurationMillis, easing = ToolTransitionEasing),
+                expandFrom = Alignment.Top,
+            ) + fadeIn(
+                animationSpec = tween(
+                    durationMillis = ToolTransitionDurationMillis - 90,
+                    delayMillis = 40,
+                    easing = ToolTransitionEasing,
+                ),
+            ),
+            exit = shrinkVertically(
+                animationSpec = tween(durationMillis = 260, easing = FastOutLinearInEasing),
+                shrinkTowards = Alignment.Top,
+            ) + fadeOut(
+                animationSpec = tween(durationMillis = 180, easing = FastOutLinearInEasing),
+            ),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = ToolGroupIndent)
+                    .animateContentSize(
+                        animationSpec = tween(durationMillis = ToolTransitionDurationMillis, easing = ToolTransitionEasing),
+                    ),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                content()
+            }
         }
     }
 }
@@ -3125,6 +3359,79 @@ private fun formatThoughtDuration(durationMillis: Long): String {
     }
 }
 
+fun formatWorkedSummaryTitle(durationMillis: Long): String =
+    "Worked for ${formatWorkDurationSeconds(durationMillis)} seconds"
+
+fun workDurationMillisForMessages(
+    messages: List<ChatMessage>,
+    endAtMillis: Long? = null,
+): Long {
+    val timestamps = mutableListOf<Long>()
+    messages.forEach { message ->
+        if (message.createdAtMillis > 0L) {
+            timestamps += message.createdAtMillis
+        }
+        message.reasoningTrace?.let { trace ->
+            if (trace.startedAtMillis > 0L) timestamps += trace.startedAtMillis
+            trace.completedAtMillis?.takeIf { it > 0L }?.let { timestamps += it }
+            trace.chunks.forEach { chunk ->
+                if (chunk.createdAtMillis > 0L) timestamps += chunk.createdAtMillis
+            }
+        }
+        message.toolInvocations.forEach { invocation ->
+            if (invocation.startedAtMillis > 0L) timestamps += invocation.startedAtMillis
+            invocation.completedAtMillis?.takeIf { it > 0L }?.let { timestamps += it }
+        }
+    }
+    endAtMillis?.takeIf { it > 0L }?.let { timestamps += it }
+
+    val wallClockTimestamps = timestamps.filter { it >= MinimumEpochMillis }
+    if (wallClockTimestamps.size < 2) {
+        return messages.lastOrNull()?.thoughtDurationMillis ?: 1_000L
+    }
+    return (wallClockTimestamps.maxOrNull()!! - wallClockTimestamps.minOrNull()!!)
+        .coerceAtLeast(1_000L)
+}
+
+fun workDurationMillisForBlocks(
+    blocks: List<AssistantResponseBlock>,
+    endAtMillis: Long = System.currentTimeMillis(),
+): Long {
+    val timestamps = mutableListOf<Long>()
+    blocks.forEach { block ->
+        when (block) {
+            is AssistantResponseBlock.Text -> Unit
+            is AssistantResponseBlock.ToolGroup -> block.toolInvocations.forEach { invocation ->
+                if (invocation.startedAtMillis > 0L) timestamps += invocation.startedAtMillis
+                invocation.completedAtMillis?.takeIf { it > 0L }?.let { timestamps += it }
+            }
+            is AssistantResponseBlock.Reasoning -> {
+                val trace = block.trace
+                if (trace.startedAtMillis > 0L) timestamps += trace.startedAtMillis
+                trace.completedAtMillis?.takeIf { it > 0L }?.let { timestamps += it }
+                trace.chunks.forEach { chunk ->
+                    if (chunk.createdAtMillis > 0L) timestamps += chunk.createdAtMillis
+                }
+                trace.toolInvocations.forEach { invocation ->
+                    if (invocation.startedAtMillis > 0L) timestamps += invocation.startedAtMillis
+                    invocation.completedAtMillis?.takeIf { it > 0L }?.let { timestamps += it }
+                }
+            }
+        }
+    }
+    timestamps += endAtMillis
+
+    val wallClockTimestamps = timestamps.filter { it >= MinimumEpochMillis }
+    if (wallClockTimestamps.size < 2) {
+        return 1_000L
+    }
+    return (wallClockTimestamps.maxOrNull()!! - wallClockTimestamps.minOrNull()!!)
+        .coerceAtLeast(1_000L)
+}
+
+private fun formatWorkDurationSeconds(durationMillis: Long): Int =
+    (durationMillis / 1000f).roundToInt().coerceAtLeast(1)
+
 private fun formatReasoningTraceDoneLabel(
     strings: AetherStrings,
     trace: ReasoningTrace,
@@ -3170,8 +3477,33 @@ private fun formatComposerAttachmentMetaLabel(strings: AetherStrings, attachment
     }
     return listOfNotNull(
         formatAttachmentMetaLabel(strings, attachment).ifBlank { null },
-        statusLabel,
+        if (attachment.workspaceState == AttachmentWorkspaceState.Pending) {
+            formatWorkspaceCopyProgress(strings, attachment)
+        } else {
+            statusLabel
+        },
     ).joinToString(" | ")
+}
+
+private fun formatWorkspaceCopyProgress(strings: AetherStrings, attachment: ChatAttachment): String {
+    val copiedLabel = attachment.workspaceBytesCopied
+        .takeIf { it > 0L }
+        ?.let(::formatAttachmentSize)
+    val totalLabel = attachment.sizeBytes?.takeIf { it > 0L }?.let(::formatAttachmentSize)
+    val speedLabel = attachment.workspaceBytesPerSecond
+        .takeIf { it > 0L }
+        ?.let { "${formatAttachmentSize(it)}/s" }
+    val progressLabel = when {
+        copiedLabel != null && totalLabel != null -> "$copiedLabel / $totalLabel"
+        copiedLabel != null -> copiedLabel
+        else -> null
+    }
+    val prefix = if (strings.appLanguage == AppLanguage.SimplifiedChinese) {
+        "正在复制到工作区"
+    } else {
+        "Copying to workspace"
+    }
+    return listOfNotNull(prefix, progressLabel, speedLabel).joinToString(" · ")
 }
 
 private fun formatToolInvocationTitleLabel(toolInvocation: ChatToolInvocation): String {

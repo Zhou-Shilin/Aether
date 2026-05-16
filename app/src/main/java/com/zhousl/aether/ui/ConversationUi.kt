@@ -78,8 +78,6 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -152,7 +150,6 @@ import com.zhousl.aether.termux.TermuxSetupState
 import com.zhousl.aether.ui.theme.AetherBackground
 import com.zhousl.aether.ui.theme.AetherBackgroundGradientTop
 import com.zhousl.aether.ui.theme.AetherOnSurface
-import com.zhousl.aether.ui.theme.AetherOnPrimary
 import com.zhousl.aether.ui.theme.AetherOnSurfaceVariant
 import com.zhousl.aether.ui.theme.AetherPrimary
 import com.zhousl.aether.ui.theme.AetherScrim
@@ -265,7 +262,6 @@ fun ConversationScreen(
     allowRootImageRead: Boolean = false,
     isEditing: Boolean,
     termuxSetupState: TermuxSetupState,
-    showResumeSetupBanner: Boolean,
     showStarterPromptHint: Boolean,
     showTermuxSetupNotice: Boolean,
     onInputChanged: (String) -> Unit,
@@ -299,7 +295,7 @@ fun ConversationScreen(
     onAttachAgentModePreviewSurface: (Surface) -> Unit,
     onDetachAgentModePreviewSurface: (Surface) -> Unit,
     onPauseGeneration: () -> Unit,
-    onResumeOnboarding: () -> Unit,
+    onDismissTermuxSetupNotice: () -> Unit,
     onDismissStarterPromptHint: () -> Unit,
     isSending: Boolean,
 ) {
@@ -476,8 +472,6 @@ fun ConversationScreen(
                         bottom = composerBodyHeight + animatedImeBottom + 16.dp,
                     ),
                     inputFocused = composerFocused,
-                    showResumeSetupBanner = showResumeSetupBanner,
-                    onResumeOnboarding = onResumeOnboarding,
                     onStarterPromptSelected = onInputChanged,
                 )
             } else {
@@ -640,6 +634,7 @@ fun ConversationScreen(
                 onInstallTermux = onInstallTermux,
                         onRefreshTermuxSetup = onRefreshTermuxSetup,
                         onPauseGeneration = onPauseGeneration,
+                        onDismissTermuxSetupNotice = onDismissTermuxSetupNotice,
                         onDismissStarterPromptHint = onDismissStarterPromptHint,
                         onFocusChanged = { composerFocused = it },
                 onSend = onSend,
@@ -890,8 +885,6 @@ private fun ConversationModelSelector(
 private fun ConversationEmptyState(
     modifier: Modifier = Modifier,
     inputFocused: Boolean,
-    showResumeSetupBanner: Boolean,
-    onResumeOnboarding: () -> Unit,
     onStarterPromptSelected: (String) -> Unit,
 ) {
     val strings = rememberAetherStrings()
@@ -908,10 +901,6 @@ private fun ConversationEmptyState(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        if (showResumeSetupBanner) {
-            ResumeSetupCard(onResumeOnboarding = onResumeOnboarding)
-            Spacer(modifier = Modifier.height(22.dp))
-        }
         Text(
             text = strings.whatCanIHelpWith,
             style = MaterialTheme.typography.titleLarge.copy(
@@ -992,43 +981,6 @@ private fun EmptyStateChip(
 }
 
 @Composable
-private fun ResumeSetupCard(
-    onResumeOnboarding: () -> Unit,
-) {
-    val strings = rememberAetherStrings()
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(12.dp, RoundedCornerShape(24.dp), ambientColor = AetherScrim, spotColor = AetherScrim)
-            .clip(RoundedCornerShape(24.dp))
-            .background(AetherSurface.copy(alpha = 0.96f))
-            .padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(
-            text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "完成设置" else "Finish setup",
-            style = MaterialTheme.typography.titleMedium,
-            color = AetherOnSurface,
-        )
-        Text(
-            text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "连接模型后返回聊天。" else "Connect a model, then come back to chat.",
-            style = MaterialTheme.typography.bodySmall,
-            color = AetherOnSurfaceVariant,
-        )
-        Button(
-            onClick = onResumeOnboarding,
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = AetherPrimary,
-                contentColor = AetherOnPrimary,
-            ),
-        ) {
-            Text(if (strings.appLanguage == AppLanguage.SimplifiedChinese) "继续设置" else "Resume setup")
-        }
-    }
-}
-
-@Composable
 private fun ConversationThinkingIndicator() {
     val strings = rememberAetherStrings()
     ShimmerStatusText(
@@ -1050,12 +1002,20 @@ private fun PendingAssistantTimeline(
     onAttachAgentModePreviewSurface: (Surface) -> Unit,
     onDetachAgentModePreviewSurface: (Surface) -> Unit,
 ) {
+    val finalTextBlockIndex = blocks.indexOfLast { block ->
+        block is AssistantResponseBlock.Text && block.text.isNotBlank()
+    }
+    val shouldFoldWorkBeforeFinalText = finalTextBlockIndex > 0
+    val workBlocks = if (shouldFoldWorkBeforeFinalText) {
+        blocks.take(finalTextBlockIndex)
+    } else {
+        emptyList()
+    }
     val blockAgentModeInvocations = blocks.flatMap { it.agentModeToolInvocations() }
     val pendingAgentModeInvocations = pendingToolInvocations.filter { it.isAgentModeDisplayInvocation() }
     val agentModePreviewVisible =
-        (agentModeSelected ||
-            agentModeDisplayState.isActive ||
-            agentModeDisplayState.latestPreviewPath.isNotBlank()) &&
+        agentModeSelected &&
+            agentModeDisplayState.isActive &&
             (blockAgentModeInvocations.isNotEmpty() ||
                 pendingAgentModeInvocations.isNotEmpty() ||
                 agentModeDisplayState.latestPreviewPath.isNotBlank())
@@ -1067,7 +1027,7 @@ private fun PendingAssistantTimeline(
     } else {
         ""
     }
-    if (agentModePreviewVisible && firstAgentModeBlockIndex > 0) {
+    if (!shouldFoldWorkBeforeFinalText && agentModePreviewVisible && firstAgentModeBlockIndex > 0) {
         blocks.take(firstAgentModeBlockIndex).forEachIndexed { index, block ->
             PendingAssistantTimelineBlock(
                 block = block,
@@ -1085,7 +1045,7 @@ private fun PendingAssistantTimeline(
             )
         }
     }
-    if (agentModePreviewVisible) {
+    if (!shouldFoldWorkBeforeFinalText && agentModePreviewVisible) {
         AgentModePreviewPanel(
             displayState = agentModeDisplayState,
             toolInvocation = (blockAgentModeInvocations + pendingAgentModeInvocations).lastOrNull()
@@ -1110,7 +1070,34 @@ private fun PendingAssistantTimeline(
         return
     }
 
+    if (shouldFoldWorkBeforeFinalText) {
+        AgentWorkSummaryDisclosure(
+            title = formatWorkedSummaryTitle(workDurationMillisForBlocks(workBlocks)),
+            stateKey = "pending-work-$pendingToolInvocationStateKey",
+        ) {
+            workBlocks.forEachIndexed { index, block ->
+                PendingAssistantTimelineBlock(
+                    block = block,
+                    index = index,
+                    isLastBlock = false,
+                    agentModePreviewVisible = false,
+                    workspaceDirectory = workspaceDirectory,
+                    allowRootImageRead = allowRootImageRead,
+                    onOpenLink = onOpenLink,
+                    pendingToolInvocationStateKey = pendingToolInvocationStateKey,
+                    agentModeSelected = agentModeSelected,
+                    agentModeDisplayState = agentModeDisplayState,
+                    onAttachAgentModePreviewSurface = onAttachAgentModePreviewSurface,
+                    onDetachAgentModePreviewSurface = onDetachAgentModePreviewSurface,
+                )
+            }
+        }
+    }
+
     blocks.forEachIndexed { index, block ->
+        if (shouldFoldWorkBeforeFinalText && index < finalTextBlockIndex) {
+            return@forEachIndexed
+        }
         if (agentModePreviewVisible && index < firstAgentModeBlockIndex) {
             return@forEachIndexed
         }
@@ -1167,9 +1154,8 @@ private fun PendingAssistantTimelineBlock(
             val shouldShowAgentModePreview =
                 !agentModePreviewVisible &&
                     isLastBlock &&
-                    (agentModeSelected ||
-                        agentModeDisplayState.isActive ||
-                        agentModeDisplayState.latestPreviewPath.isNotBlank()) &&
+                    agentModeSelected &&
+                    agentModeDisplayState.isActive &&
                     block.toolInvocations.any { it.toolName.equals("agent_display", ignoreCase = true) }
             if (shouldShowAgentModePreview) {
                 AgentModePreviewPanel(
@@ -1375,6 +1361,7 @@ private fun ConversationComposerOverlay(
     onInstallTermux: () -> Unit,
     onRefreshTermuxSetup: () -> Unit,
     onPauseGeneration: () -> Unit,
+    onDismissTermuxSetupNotice: () -> Unit,
     onDismissStarterPromptHint: () -> Unit,
     onFocusChanged: (Boolean) -> Unit,
     onSend: () -> Unit,
@@ -1431,6 +1418,7 @@ private fun ConversationComposerOverlay(
                     onInstallTermux = onInstallTermux,
                     onRefreshTermuxSetup = onRefreshTermuxSetup,
                     onPauseGeneration = onPauseGeneration,
+                    onDismissTermuxSetupNotice = onDismissTermuxSetupNotice,
                     onDismissStarterPromptHint = onDismissStarterPromptHint,
                     onFocusChanged = onFocusChanged,
                     onSend = onSend,
@@ -1474,6 +1462,7 @@ private fun ConversationComposerBar(
     onInstallTermux: () -> Unit,
     onRefreshTermuxSetup: () -> Unit,
     onPauseGeneration: () -> Unit,
+    onDismissTermuxSetupNotice: () -> Unit,
     onDismissStarterPromptHint: () -> Unit,
     onFocusChanged: (Boolean) -> Unit,
     onSend: () -> Unit,
@@ -1607,6 +1596,7 @@ private fun ConversationComposerBar(
                 onOpenTermux = onOpenTermux,
                 onInstallTermux = onInstallTermux,
                 onRefresh = onRefreshTermuxSetup,
+                onDismiss = onDismissTermuxSetupNotice,
             )
         }
         if (showStarterPromptHint) {
