@@ -83,6 +83,7 @@ class AgentExtensionsSerializationTest {
                 displayName = "Local",
                 transport = McpTransportConfig.StdIo(
                     command = "python server.py",
+                    arguments = listOf("--profile", "demo"),
                     workingDirectory = "~/.servers/demo",
                     environment = listOf(
                         McpKeyValue("DEBUG", "1"),
@@ -100,6 +101,10 @@ class AgentExtensionsSerializationTest {
         assertEquals(
             "~/.servers/demo",
             (reparsed[1].transport as McpTransportConfig.StdIo).workingDirectory,
+        )
+        assertEquals(
+            listOf("--profile", "demo"),
+            (reparsed[1].transport as McpTransportConfig.StdIo).arguments,
         )
     }
 

@@ -39,6 +39,12 @@ enum class McpConnectionStatus {
     Error,
 }
 
+enum class McpServerTestOperation {
+    ListTools,
+    ListResources,
+    ListPrompts,
+}
+
 data class McpToolBinding(
     val serverId: String,
     val serverName: String,
@@ -164,25 +170,9 @@ class McpClientManager(
                 val existing = sessions[server.id]
                 if (existing == null || existing.config != server || existing.workspaceDirectory != workspaceDirectory) {
                     disconnect(server.id)
-                    val transport = when (val transportConfig = server.transport) {
-                        is McpTransportConfig.StdIo -> StdIoMcpTransport(
-                            serverId = server.id,
-                            config = transportConfig,
-                            workspaceDirectory = workspaceDirectory,
-                            bashTool = bashTool,
-                        )
-
-                        is McpTransportConfig.StreamableHttp -> StreamableHttpMcpTransport(
-                            config = transportConfig,
-                            protocolVersion = DefaultMcpProtocolVersion,
-                            httpClient = httpClient,
-                            connectTimeoutMillis = server.connectTimeoutMillis,
-                            requestTimeoutMillis = server.requestTimeoutMillis,
-                        )
-                    }
                     val session = McpServerSession(
                         config = server,
-                        transport = transport,
+                        transport = createTransport(server, workspaceDirectory),
                         workspaceDirectory = workspaceDirectory,
                         callbacks = callbacks,
                         diagnosticLogger = diagnosticLogger,
@@ -204,6 +194,93 @@ class McpClientManager(
 
     suspend fun refreshServer(serverId: String) = withContext(Dispatchers.IO) {
         sessions[serverId]?.refreshCatalog()
+    }
+
+    suspend fun testServer(
+        server: McpServerConfig,
+        workspaceDirectory: String,
+        operation: McpServerTestOperation,
+    ): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val testSession = McpServerSession(
+                config = server.copy(isEnabled = true),
+                transport = createTransport(server.copy(isEnabled = true), workspaceDirectory),
+                workspaceDirectory = workspaceDirectory,
+                callbacks = callbacks,
+                diagnosticLogger = diagnosticLogger,
+            )
+            try {
+                testSession.connectAndRefresh()
+                val snapshot = testSession.snapshot
+                if (snapshot.status == McpConnectionStatus.Error) {
+                    error(snapshot.errorMessage.ifBlank { "Couldn't connect to MCP server." })
+                }
+                JSONObject().apply {
+                    put("ok", true)
+                    put("server_id", snapshot.config.id)
+                    put("server_name", snapshot.config.displayName)
+                    put("status", snapshot.status.name.lowercase())
+                    put("protocol_version", snapshot.protocolVersion)
+                    put("server_info", snapshot.serverInfo)
+                    when (operation) {
+                        McpServerTestOperation.ListTools -> {
+                            put("operation", "tools/list")
+                            put(
+                                "tools",
+                                JSONArray().apply {
+                                    snapshot.tools.forEach { binding ->
+                                        put(
+                                            JSONObject()
+                                                .put("name", binding.toolName)
+                                                .put("description", binding.description)
+                                                .put("call_name", binding.namespacedToolName)
+                                                .put("input_schema", JSONObject(binding.inputSchema.toString()))
+                                        )
+                                    }
+                                },
+                            )
+                        }
+
+                        McpServerTestOperation.ListResources -> {
+                            put("operation", "resources/list")
+                            put(
+                                "resources",
+                                JSONArray().apply {
+                                    snapshot.resources.forEach { resource ->
+                                        put(
+                                            JSONObject()
+                                                .put("uri", resource.uri)
+                                                .put("name", resource.name)
+                                                .put("description", resource.description)
+                                                .put("mime_type", resource.mimeType)
+                                        )
+                                    }
+                                },
+                            )
+                        }
+
+                        McpServerTestOperation.ListPrompts -> {
+                            put("operation", "prompts/list")
+                            put(
+                                "prompts",
+                                JSONArray().apply {
+                                    snapshot.prompts.forEach { prompt ->
+                                        put(
+                                            JSONObject()
+                                                .put("name", prompt.name)
+                                                .put("description", prompt.description)
+                                                .put("arguments", JSONArray(prompt.arguments.toString()))
+                                        )
+                                    }
+                                },
+                            )
+                        }
+                    }
+                }.toString()
+            } finally {
+                testSession.close()
+            }
+        }
     }
 
     fun snapshots(): List<McpServerSnapshot> =
@@ -421,6 +498,26 @@ class McpClientManager(
         return sessions.values.firstOrNull {
             it.config.displayName.equals(normalizedServerId, ignoreCase = true)
         }?.config?.id ?: normalizedServerId
+    }
+
+    private fun createTransport(
+        server: McpServerConfig,
+        workspaceDirectory: String,
+    ): McpSessionTransport = when (val transportConfig = server.transport) {
+        is McpTransportConfig.StdIo -> StdIoMcpTransport(
+            serverId = server.id,
+            config = transportConfig,
+            workspaceDirectory = workspaceDirectory,
+            bashTool = bashTool,
+        )
+
+        is McpTransportConfig.StreamableHttp -> StreamableHttpMcpTransport(
+            config = transportConfig,
+            protocolVersion = DefaultMcpProtocolVersion,
+            httpClient = httpClient,
+            connectTimeoutMillis = server.connectTimeoutMillis,
+            requestTimeoutMillis = server.requestTimeoutMillis,
+        )
     }
 }
 
@@ -1242,10 +1339,20 @@ private class StdIoMcpTransport(
             appendLine("export ${escapeShellName(keyValue.key)}='${escapeForSingleQuoted(keyValue.value)}'")
         }
         appendLine("command='${escapeForSingleQuoted(config.command)}'")
+        appendLine("arguments=(")
+        config.arguments.forEach { argument ->
+            appendLine("  '${escapeForSingleQuoted(argument)}'")
+        }
+        appendLine(")")
+        appendLine("command_line=\"\$command\"")
+        appendLine("for argument in \"\${arguments[@]}\"; do")
+        appendLine("  printf -v quoted_argument '%q' \"\$argument\"")
+        appendLine("  command_line=\"\$command_line \$quoted_argument\"")
+        appendLine("done")
         appendLine("working_directory='${escapeForSingleQuoted(config.workingDirectory.ifBlank { workspaceDirectory })}'")
         appendLine("coproc SERVER_PROCESS {")
         appendLine("  cd \"\$working_directory\"")
-        appendLine("  bash -lc \"\$command\" 2>> \"\$stderr_path\"")
+        appendLine("  bash -lc \"\$command_line\" 2>> \"\$stderr_path\"")
         appendLine("}")
         appendLine("server_pid=\$SERVER_PROCESS_PID")
         appendLine("exec {server_stdin_fd}>&\"\${SERVER_PROCESS[1]}\"")

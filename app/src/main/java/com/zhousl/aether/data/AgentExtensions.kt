@@ -111,6 +111,7 @@ sealed interface McpTransportConfig {
 
     data class StdIo(
         val command: String,
+        val arguments: List<String> = emptyList(),
         val workingDirectory: String = "",
         val environment: List<McpKeyValue> = emptyList(),
     ) : McpTransportConfig {
@@ -204,6 +205,7 @@ internal fun McpTransportConfig.toJson(): JSONObject = JSONObject().apply {
     when (this@toJson) {
         is McpTransportConfig.StdIo -> {
             put("command", command)
+            put("arguments", JSONArray().apply { arguments.forEach(::put) })
             put("workingDirectory", workingDirectory)
             put("environment", JSONArray().apply { environment.forEach { put(it.toJson()) } })
         }
@@ -363,6 +365,8 @@ private fun parseMcpTransportConfig(json: JSONObject): McpTransportConfig? =
     when (McpTransportType.fromStorage(json.optString("type"))) {
         McpTransportType.StdIo -> McpTransportConfig.StdIo(
             command = json.optString("command"),
+            arguments = json.optJSONArray("arguments").toStringList()
+                .ifEmpty { json.optJSONArray("args").toStringList() },
             workingDirectory = json.optString("workingDirectory"),
             environment = parseKeyValues(json.optJSONArray("environment")),
         )

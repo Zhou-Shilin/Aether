@@ -123,6 +123,8 @@ class AetherSelfManagementTool(
                 put("display_name", JSONObject().apply { put("type", "string") })
                 put("url", JSONObject().apply { put("type", "string") })
                 put("command", JSONObject().apply { put("type", "string") })
+                put("arguments", stringArraySchema("Command-line arguments for stdio MCP servers."))
+                put("args", stringArraySchema("Alias for arguments."))
                 put("working_directory", JSONObject().apply { put("type", "string") })
                 put("enabled", JSONObject().apply { put("type", "boolean") })
                 put("connect_timeout_millis", JSONObject().apply { put("type", "integer") })
@@ -514,6 +516,12 @@ class AetherSelfManagementTool(
                 if (command.isBlank()) return failure("command is required for upsert_stdio.")
                 McpTransportConfig.StdIo(
                     command = command,
+                    arguments = if (arguments.hasAny("arguments", "args")) {
+                        parseStringArray(arguments.optJSONArray("arguments"))
+                            .ifEmpty { parseStringArray(arguments.optJSONArray("args")) }
+                    } else {
+                        (existing?.transport as? McpTransportConfig.StdIo)?.arguments.orEmpty()
+                    },
                     workingDirectory = arguments.optString("working_directory").trim()
                         .ifBlank { arguments.optString("workingDirectory").trim() }
                         .ifBlank {
@@ -841,6 +849,7 @@ class AetherSelfManagementTool(
 
                 is McpTransportConfig.StdIo -> {
                     put("command", transport.command)
+                    put("arguments", JSONArray().apply { transport.arguments.forEach(::put) })
                     put("working_directory", transport.workingDirectory)
                     put("environment", keyValuesJson(transport.environment, redactValues = true))
                 }
@@ -950,6 +959,18 @@ class AetherSelfManagementTool(
             )
         }
 
+    private fun stringArraySchema(description: String): JSONObject =
+        JSONObject().apply {
+            put("type", "array")
+            put("description", description)
+            put(
+                "items",
+                JSONObject().apply {
+                    put("type", "string")
+                },
+            )
+        }
+
     private fun parseArguments(argumentsJson: String): JSONObject? =
         runCatching { JSONObject(argumentsJson) }.getOrNull()
 
@@ -971,6 +992,18 @@ class AetherSelfManagementTool(
                 val key = json.optString("key").trim()
                 if (key.isBlank()) continue
                 add(McpKeyValue(key = key, value = json.optString("value")))
+            }
+        }
+    }
+
+    private fun parseStringArray(array: JSONArray?): List<String> {
+        if (array == null) return emptyList()
+        return buildList {
+            for (index in 0 until array.length()) {
+                val value = array.optString(index).trim()
+                if (value.isNotBlank()) {
+                    add(value)
+                }
             }
         }
     }
