@@ -1448,9 +1448,19 @@ class AetherAgent(
         workspaceDirectory: String,
     ): String {
         val arguments = runCatching { JSONObject(argumentsJson) }.getOrNull() ?: return argumentsJson
-        if (!arguments.has("workingDirectory") && !arguments.has("working_directory")) {
-            arguments.put("working_directory", workspaceDirectory)
+
+        val snake = arguments.cleanOptionalString("working_directory")
+        val camel = arguments.cleanOptionalString("workingDirectory")
+
+        arguments.remove("working_directory")
+        arguments.remove("workingDirectory")
+
+        when {
+            snake.isNotBlank() -> arguments.put("working_directory", snake)
+            camel.isNotBlank() -> arguments.put("working_directory", camel)
+            else -> arguments.put("working_directory", workspaceDirectory)
         }
+
         return arguments.toString()
     }
 
