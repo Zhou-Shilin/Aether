@@ -4,7 +4,10 @@ import android.os.SystemClock
 import com.zhousl.aether.termux.TermuxBashTool
 import com.zhousl.aether.termux.TermuxFilesystemTool
 import java.io.File
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Base64
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -20,6 +23,7 @@ private const val MaxSkillResourceBytes = 1024 * 1024
 private const val DefaultSkillResourceMaxChars = 20_000
 private const val SkillMetadataContextBudgetChars = 8_000
 private const val MaxSleepDurationMillis = 10 * 60 * 1000L
+private val DynamicPromptPlaceholderRegex = Regex("""\{\{\s*([A-Za-z0-9_-]+)\s*\}\}""")
 
 class AetherAgent(
     private val client: OpenAiCompatibleClient,
@@ -124,7 +128,7 @@ class AetherAgent(
                 )
             }
             val systemPrompt = buildAgentInstructions(
-                systemPrompt = settings.systemPrompt,
+                systemPrompt = expandDynamicPromptPlaceholders(settings.systemPrompt),
                 workspaceDirectory = workspaceDirectory,
                 availableSkills = resolvedAvailableSkills,
                 activeSkills = resolvedActiveSkills,
@@ -1550,6 +1554,23 @@ class AetherAgent(
             "- ${skill.name}: (file: $path)"
         } else {
             "- ${skill.name}: $description (file: $path)"
+        }
+    }
+
+    private fun expandDynamicPromptPlaceholders(
+        prompt: String,
+        now: ZonedDateTime = ZonedDateTime.now(),
+    ): String {
+        if (!prompt.contains("{{")) return prompt
+        val values = mapOf(
+            "current_datetime" to now.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+            "current_date" to now.toLocalDate().toString(),
+            "current_time" to now.toLocalTime().withNano(0).toString(),
+            "timezone" to now.zone.id,
+            "unix_timestamp" to now.toEpochSecond().toString(),
+        )
+        return DynamicPromptPlaceholderRegex.replace(prompt) { match ->
+            values[match.groupValues[1].lowercase(Locale.US)] ?: match.value
         }
     }
 

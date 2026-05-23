@@ -1809,8 +1809,8 @@ private fun PersonalizationPage(
         Text(
             text = tr(
                 strings,
-                "This is the system prompt Aether uses in every conversation. It doesn't affect tool capabilities.",
-                "This is the system prompt Aether uses in every conversation. It doesn't affect tool capabilities.",
+                "Supports {{current_datetime}}, {{current_date}}, {{current_time}}, {{timezone}}, and {{unix_timestamp}}.",
+                "支持 {{current_datetime}}、{{current_date}}、{{current_time}}、{{timezone}} 和 {{unix_timestamp}}。",
             ),
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
