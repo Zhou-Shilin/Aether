@@ -333,7 +333,7 @@ class AetherViewModel(
             current.copy(
                 rootSetupState = RootSetupState(
                     issue = RootSetupIssue.Running,
-                    detail = "Requesting root access...",
+                    detail = "Root access is available. Preparing Termux command access and Root Agent Mode...",
                     rootAvailable = currentRootState.rootAvailable,
                     suPath = currentRootState.suPath,
                     lastUpdatedMillis = System.currentTimeMillis(),

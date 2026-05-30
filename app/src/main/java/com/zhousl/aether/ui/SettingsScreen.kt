@@ -3565,8 +3565,8 @@ private fun RootSetupProgressPage(
         agentModeAuthorizationMethod == AgentModeAuthorizationMethod.Root &&
         agentModeAuthorizationState.isReady
     val rootStepStatus = when {
-        rootSetupState.isRunning -> RootSetupProgressStepStatus.Active
         rootSetupState.isReady || rootSetupState.rootAvailable -> RootSetupProgressStepStatus.Complete
+        rootSetupState.isRunning -> RootSetupProgressStepStatus.Active
         rootSetupState.issue == RootSetupIssue.Unavailable -> RootSetupProgressStepStatus.Attention
         else -> RootSetupProgressStepStatus.Pending
     }
@@ -3579,7 +3579,9 @@ private fun RootSetupProgressPage(
     }
     val agentModeStepStatus = when {
         rootSetupState.isReady || rootAgentModeReady -> RootSetupProgressStepStatus.Complete
-        rootSetupState.isRunning -> RootSetupProgressStepStatus.Active
+        rootSetupState.isRunning && termuxStepStatus == RootSetupProgressStepStatus.Complete ->
+            RootSetupProgressStepStatus.Active
+        rootSetupState.isRunning -> RootSetupProgressStepStatus.Pending
         rootSetupState.issue == RootSetupIssue.PermissionDenied ||
             rootSetupState.issue == RootSetupIssue.Failed -> RootSetupProgressStepStatus.Attention
         else -> RootSetupProgressStepStatus.Pending
@@ -3792,7 +3794,7 @@ private fun rootSetupProgressTitle(
     issue: RootSetupIssue,
     strings: AetherStrings,
 ): String = when (issue) {
-    RootSetupIssue.Running -> tr(strings, "Configuring Root setup", "正在执行 Root 自动配置")
+    RootSetupIssue.Running -> tr(strings, "Configuring local access", "正在配置本地访问")
     RootSetupIssue.Ready -> tr(strings, "Root setup completed", "Root 自动配置已完成")
     RootSetupIssue.Available -> tr(strings, "Ready to start", "准备开始")
     RootSetupIssue.Unavailable -> tr(strings, "Root is unavailable", "Root 不可用")
@@ -3808,8 +3810,8 @@ private fun rootSetupProgressBody(
 ): String = when (issue) {
     RootSetupIssue.Running -> tr(
         strings,
-        "Aether is requesting su, enabling Termux command access, and preparing Root Agent Mode.",
-        "Aether \u6b63\u5728\u8bf7\u6c42 su\u3001\u542f\u7528 Termux \u547d\u4ee4\u8bbf\u95ee\uff0c\u5e76\u51c6\u5907 Root Agent Mode\u3002",
+        "Root access is available. Aether is enabling Termux command access and selecting Root Agent Mode.",
+        "Root \u8bbf\u95ee\u5df2\u53ef\u7528\u3002Aether \u6b63\u5728\u542f\u7528 Termux \u547d\u4ee4\u8bbf\u95ee\uff0c\u5e76\u9009\u62e9 Root Agent Mode\u3002",
     )
 
     RootSetupIssue.Ready -> tr(

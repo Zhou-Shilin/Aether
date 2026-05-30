@@ -99,6 +99,7 @@ class AetherAppRuntime(
     val rootSetupController = RootSetupController(
         context = application,
         bashTool = bashTool,
+        diagnosticLogger = diagnosticLogger,
     )
     val workspaceFileBridge = WorkspaceFileBridge(
         context = application,
