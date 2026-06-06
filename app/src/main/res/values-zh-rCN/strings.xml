@@ -97,6 +97,21 @@
     <string name="settings_get_started_tour_subtitle">重新播放首次启动和设置流程</string>
     <string name="settings_developer_subtitle">重新播放后续引导流程</string>
 
+    <string name="onboarding_root_body_unknown">如果这台手机有 Root，Aether 可以自动配置 Termux 和 Agent Mode。</string>
+    <string name="onboarding_root_body_available">已检测到 Root。授予 Aether su 后，可以跳过后续 Termux 和 Agent Mode 手动步骤。</string>
+    <string name="onboarding_root_body_running">Aether 正在启用 Termux 外部应用、授予命令权限，并选择 Root Agent Mode。</string>
+    <string name="onboarding_root_body_ready">Root 配置已完成，Termux 和 Agent Mode 已就绪。</string>
+    <string name="onboarding_root_body_unavailable">如果你有 Root，可以尝试自动配置；否则继续现有的手动流程。</string>
+    <string name="onboarding_root_body_permission_denied">Root 权限被拒绝或请求超时。</string>
+    <string name="onboarding_root_body_termux_not_installed">请先安装 Termux，之后 Aether 可以通过 Root 完成配置。</string>
+    <string name="onboarding_root_body_failed">Root 配置未完成。你可以重试，或继续手动配置。</string>
+    <string name="onboarding_termux_status_ready">本地工具已就绪。</string>
+    <string name="onboarding_termux_status_not_installed">先安装 Termux，然后再回到这里。</string>
+    <string name="onboarding_termux_status_permission_missing">在系统权限中授予“在 Termux 环境中运行命令”。</string>
+    <string name="onboarding_termux_status_external_apps_disabled_configured">打开一次 Termux，然后回来刷新。</string>
+    <string name="onboarding_termux_status_external_apps_disabled">复制配置命令，在 Termux 中粘贴运行后再回来刷新。</string>
+    <string name="onboarding_termux_status_dispatch_failed_configured">先打开一次 Termux，然后回到这里刷新。</string>
+    <string name="onboarding_termux_status_dispatch_failed">复制配置命令，在 Termux 中粘贴运行后再回来刷新。</string>
     <!-- Search -->
     <string name="search_chats">搜索对话</string>
     <string name="search_no_chats_match">没有匹配的对话</string>

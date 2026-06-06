@@ -82,7 +82,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.zhousl.aether.data.AgentModeAuthorizationMethod
-import com.zhousl.aether.data.AppLanguage
 import com.zhousl.aether.data.AutomaticModelPurpose
 import com.zhousl.aether.data.LlmProvider
 import com.zhousl.aether.data.LlmProviderConfig
@@ -151,8 +150,6 @@ private val TourGold: Color
 private val TourPurple: Color
     get() = AetherPrimary
 
-private fun tr(strings: AetherStrings, english: String, chinese: String): String =
-    if (strings.appLanguage == AppLanguage.SimplifiedChinese) chinese else english
 
 private enum class ProviderTourStage {
     PickProvider,
@@ -200,7 +197,7 @@ fun OnboardingScreen(
     onCompleteFollowUp: () -> Unit,
     onExploreSettings: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
+
     var currentStep by rememberSaveable(initialStep, replayMode) {
         mutableStateOf(initialStep)
     }
@@ -339,7 +336,7 @@ fun OnboardingScreen(
                 chips = listOf(stringResource(R.string.onboarding_skill_chip_prompts), stringResource(R.string.onboarding_skill_chip_checks), stringResource(R.string.onboarding_skill_chip_templates)),
                 primaryLabel = stringResource(R.string.common_continue),
                 onPrimary = { currentStep = OnboardingStep.McpOverview },
-                secondaryLabel = strings.back,
+                secondaryLabel = stringResource(R.string.common_back),
                 onSecondary = { currentStep = OnboardingStep.TavilySetup },
                 onClose = onClose,
             )
@@ -358,11 +355,11 @@ fun OnboardingScreen(
                 },
                 lineTwo = stringResource(R.string.onboarding_mcp_line_two),
                 chips = listOf(stringResource(R.string.onboarding_chip_docs), stringResource(R.string.onboarding_chip_search), "APIs"),
-                primaryLabel = strings.done,
+                primaryLabel = stringResource(R.string.common_done),
                 onPrimary = onCompleteFollowUp,
                 secondaryLabel = stringResource(R.string.onboarding_open_settings),
                 onSecondary = onExploreSettings,
-                tertiaryLabel = strings.back,
+                tertiaryLabel = stringResource(R.string.common_back),
                 onTertiary = { currentStep = OnboardingStep.SkillsOverview },
                 onClose = onClose,
             )
@@ -378,7 +375,7 @@ private fun LandingStep(
     onPrimary: () -> Unit,
     onSecondary: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
+
     var visible by remember(stepIndex, replayMode) { mutableStateOf(false) }
     LaunchedEffect(stepIndex, replayMode) {
         delay(180)
@@ -608,7 +605,7 @@ private fun ProviderSetupStep(
     onReturnToLanding: () -> Unit,
     onComplete: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
+
     var stage by rememberSaveable(stepIndex, replayMode) { mutableStateOf(ProviderTourStage.PickProvider) }
     var isFinishing by rememberSaveable(stepIndex, replayMode) { mutableStateOf(false) }
     val provider = selectedProvider
@@ -859,7 +856,7 @@ private fun TermuxStep(
     onRefreshRootSetup: () -> Unit,
     onConfigureWithRoot: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
+
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     var shouldAutoContinue by rememberSaveable(stepIndex) { mutableStateOf(!setupState.isReady) }
@@ -918,19 +915,19 @@ private fun TermuxStep(
                 StepLead(
                     icon = Icons.Rounded.Terminal,
                     accent = termuxStatusColor(setupState.issue),
-                    title = strings.termux,
-                    body = termuxStatusSentence(setupState, strings.appLanguage),
+                    title = stringResource(R.string.settings_termux),
+                    body = termuxStatusSentence(setupState),
                 )
                 when (setupState.issue) {
                     TermuxSetupIssue.Ready -> TourActionRow(
                         primaryLabel = stringResource(R.string.common_continue),
                         onPrimary = onContinue,
-                        secondaryLabel = strings.refresh,
+                        secondaryLabel = stringResource(R.string.common_refresh),
                         onSecondary = onRefresh,
                     )
 
                     TermuxSetupIssue.NotInstalled -> TourActionRow(
-                        primaryLabel = strings.install,
+                        primaryLabel = stringResource(R.string.common_install),
                         onPrimary = onInstallTermux,
                         secondaryLabel = stringResource(R.string.common_skip),
                         onSecondary = onContinue,
@@ -938,7 +935,7 @@ private fun TermuxStep(
 
                     TermuxSetupIssue.PermissionMissing -> {
                         TourActionRow(
-                            primaryLabel = strings.grantAccess,
+                            primaryLabel = stringResource(R.string.common_grant_access),
                             onPrimary = onRequestPermission,
                             secondaryLabel = stringResource(R.string.common_skip),
                             onSecondary = onContinue,
@@ -957,7 +954,7 @@ private fun TermuxStep(
 
                     TermuxSetupIssue.DispatchFailed -> {
                         TourActionRow(
-                            primaryLabel = if (setupState.previouslyConfigured) stringResource(R.string.common_open) else strings.openTermux,
+                            primaryLabel = if (setupState.previouslyConfigured) stringResource(R.string.common_open) else stringResource(R.string.common_open_termux),
                             onPrimary = onOpenTermux,
                             secondaryLabel = stringResource(R.string.common_skip),
                             onSecondary = onContinue,
@@ -981,7 +978,7 @@ private fun RootSetupPrompt(
     onRootConfigured: () -> Unit,
     onInstallTermux: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
+
     StepLead(
         icon = Icons.Rounded.VerifiedUser,
         accent = when (rootSetupState.issue) {
@@ -995,7 +992,7 @@ private fun RootSetupPrompt(
             RootSetupIssue.Unavailable -> TourTextSecondary
         },
         title = stringResource(R.string.onboarding_root_shortcut),
-        body = rootSetupPromptBody(rootSetupState, strings),
+        body = rootSetupPromptBody(rootSetupState),
     )
 
     when (rootSetupState.issue) {
@@ -1030,7 +1027,7 @@ private fun RootSetupPrompt(
         )
 
         RootSetupIssue.TermuxNotInstalled -> TourActionRow(
-            primaryLabel = strings.install,
+            primaryLabel = stringResource(R.string.common_install),
             onPrimary = onInstallTermux,
             secondaryLabel = stringResource(R.string.onboarding_continue_manual_setup),
             onSecondary = onContinueManual,
@@ -1057,52 +1054,19 @@ private fun RootSetupPrompt(
     }
 }
 
-private fun rootSetupPromptBody(
-    rootSetupState: RootSetupState,
-    strings: AetherStrings,
-): String = when (rootSetupState.issue) {
-    RootSetupIssue.Unknown -> tr(
-        strings,
-        "If this phone has Root, Aether can configure Termux and Agent Mode automatically.",
-        "如果这台手机有 Root，Aether 可以自动配置 Termux 和 Agent Mode。",
-    )
-
-    RootSetupIssue.Available -> tr(
-        strings,
-        "Root is available. Grant su to Aether to skip the manual Termux and Agent Mode steps.",
-        "已检测到 Root。授予 Aether su 后，可以跳过后续 Termux 和 Agent Mode 手动步骤。",
-    )
-
-    RootSetupIssue.Running -> tr(
-        strings,
-        "Aether is enabling Termux external apps, granting command permission, and selecting Root Agent Mode.",
-        "Aether 正在启用 Termux 外部应用、授予命令权限，并选择 Root Agent Mode。",
-    )
-
-    RootSetupIssue.Ready -> tr(
-        strings,
-        "Root setup is complete. Termux and Agent Mode are ready.",
-        "Root 配置已完成，Termux 和 Agent Mode 已就绪。",
-    )
-
-    RootSetupIssue.Unavailable -> tr(
-        strings,
-        "If you have Root, try the automatic setup. Otherwise continue with the existing manual flow.",
-        "如果你有 Root，可以尝试自动配置；否则继续现有的手动流程。",
-    )
-
+@Composable
+private fun rootSetupPromptBody(rootSetupState: RootSetupState): String = when (rootSetupState.issue) {
+    RootSetupIssue.Unknown -> stringResource(R.string.onboarding_root_body_unknown)
+    RootSetupIssue.Available -> stringResource(R.string.onboarding_root_body_available)
+    RootSetupIssue.Running -> stringResource(R.string.onboarding_root_body_running)
+    RootSetupIssue.Ready -> stringResource(R.string.onboarding_root_body_ready)
+    RootSetupIssue.Unavailable -> stringResource(R.string.onboarding_root_body_unavailable)
     RootSetupIssue.PermissionDenied -> rootSetupState.detail.ifBlank {
-        tr(strings, "Root access was denied or timed out.", "Root 权限被拒绝或请求超时。")
+        stringResource(R.string.onboarding_root_body_permission_denied)
     }
-
-    RootSetupIssue.TermuxNotInstalled -> tr(
-        strings,
-        "Install Termux first, then Aether can finish this setup with Root.",
-        "请先安装 Termux，之后 Aether 可以通过 Root 完成配置。",
-    )
-
+    RootSetupIssue.TermuxNotInstalled -> stringResource(R.string.onboarding_root_body_termux_not_installed)
     RootSetupIssue.Failed -> rootSetupState.detail.ifBlank {
-        tr(strings, "Root setup did not complete. You can retry or continue manually.", "Root 配置未完成。你可以重试，或继续手动配置。")
+        stringResource(R.string.onboarding_root_body_failed)
     }
 }
 
@@ -1115,7 +1079,7 @@ private fun AgentModeAuthorizationStep(
     onClose: () -> Unit,
     onContinue: (Boolean, AgentModeAuthorizationMethod) -> Unit,
 ) {
-    val strings = rememberAetherStrings()
+
     ConversationStepPage(
         stepIndex = stepIndex,
         stepCount = stepCount,
@@ -1131,7 +1095,7 @@ private fun AgentModeAuthorizationStep(
             StepLead(
                 icon = Icons.Rounded.SmartToy,
                 accent = TourGreen,
-                title = strings.agentMode,
+                title = stringResource(R.string.settings_agent_mode),
                 body = stringResource(R.string.onboarding_agent_mode_choose_method),
             )
             Column(
@@ -1171,7 +1135,7 @@ private fun TavilyStep(
     onClose: () -> Unit,
     onContinue: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
+
     ConversationStepPage(
         stepIndex = stepIndex,
         stepCount = stepCount,
@@ -1222,7 +1186,7 @@ private fun SummaryStep(
     onTertiary: (() -> Unit)? = null,
     onClose: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
+
     ConversationStepPage(
         stepIndex = stepIndex,
         stepCount = stepCount,
@@ -1912,28 +1876,24 @@ private fun providerModelRank(
     null -> 5
 }
 
-private fun termuxStatusSentence(
-    setupState: TermuxSetupState,
-    appLanguage: AppLanguage,
-): String = setupState.detail.ifBlank {
-    when (setupState.issue) {
-        TermuxSetupIssue.Ready -> if (appLanguage == AppLanguage.SimplifiedChinese) "本地工具已就绪。" else "Local tools are ready."
-        TermuxSetupIssue.NotInstalled -> if (appLanguage == AppLanguage.SimplifiedChinese) "先安装 Termux，然后再回到这里。" else "Install Termux first, then come back here."
-        TermuxSetupIssue.PermissionMissing -> if (appLanguage == AppLanguage.SimplifiedChinese) "在系统权限中授予“在 Termux 环境中运行命令”。" else "Grant the \"Run commands in Termux environment\" permission in Android settings."
-        TermuxSetupIssue.ExternalAppsDisabled -> if (setupState.previouslyConfigured) {
-            if (appLanguage == AppLanguage.SimplifiedChinese) {
-                "Termux \u4f3c\u4e4e\u4e0d\u5728\u540e\u53f0\u8fd0\u884c\u3002\u6253\u5f00 Termux \u5e76\u4fdd\u6301\u5b83\u5728\u540e\u53f0\u8fd0\u884c\uff0c\u7136\u540e\u56de\u5230 Aether \u5237\u65b0\u72b6\u6001\u3002"
-            } else {
-                "Termux seems to be not running in the background. Open Termux and keep it running in the background, then return to Aether and refresh."
-            }
-        } else if (appLanguage == AppLanguage.SimplifiedChinese) "复制配置命令，在 Termux 中粘贴运行后再回来刷新。" else "Copy the setup command, paste it in Termux, then return and refresh."
-        TermuxSetupIssue.DispatchFailed -> if (setupState.previouslyConfigured) {
-            if (appLanguage == AppLanguage.SimplifiedChinese) {
-                "Termux \u4f3c\u4e4e\u4e0d\u5728\u540e\u53f0\u8fd0\u884c\u3002\u6253\u5f00 Termux \u5e76\u4fdd\u6301\u5b83\u5728\u540e\u53f0\u8fd0\u884c\uff0c\u7136\u540e\u56de\u5230 Aether \u5237\u65b0\u72b6\u6001\u3002"
-            } else {
-                "Termux seems to be not running in the background. Open Termux and keep it running in the background, then return to Aether and refresh."
-            }
-        } else if (appLanguage == AppLanguage.SimplifiedChinese) "先打开一次 Termux，然后回到这里刷新。" else "Open Termux once, then refresh here."
+@Composable
+private fun termuxStatusSentence(setupState: TermuxSetupState): String = when (setupState.issue) {
+    TermuxSetupIssue.Ready -> stringResource(R.string.onboarding_termux_status_ready)
+    TermuxSetupIssue.NotInstalled -> stringResource(R.string.onboarding_termux_status_not_installed)
+    TermuxSetupIssue.PermissionMissing -> stringResource(R.string.onboarding_termux_status_permission_missing)
+    TermuxSetupIssue.ExternalAppsDisabled -> {
+        if (setupState.previouslyConfigured) {
+            stringResource(R.string.onboarding_termux_status_external_apps_disabled_configured)
+        } else {
+            stringResource(R.string.onboarding_termux_status_external_apps_disabled)
+        }
+    }
+    TermuxSetupIssue.DispatchFailed -> {
+        if (setupState.previouslyConfigured) {
+            stringResource(R.string.onboarding_termux_status_dispatch_failed_configured)
+        } else {
+            stringResource(R.string.onboarding_termux_status_dispatch_failed)
+        }
     }
 }
 

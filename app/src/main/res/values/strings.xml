@@ -130,6 +130,21 @@
     <string name="provider_form_header_value">Value</string>
     <string name="provider_form_remove_header">Remove header</string>
 
+    <string name="onboarding_root_body_unknown">If this phone has Root, Aether can configure Termux and Agent Mode automatically.</string>
+    <string name="onboarding_root_body_available">Root is available. Grant su to Aether to skip the manual Termux and Agent Mode steps.</string>
+    <string name="onboarding_root_body_running">Aether is enabling Termux external apps, granting command permission, and selecting Root Agent Mode.</string>
+    <string name="onboarding_root_body_ready">Root setup is complete. Termux and Agent Mode are ready.</string>
+    <string name="onboarding_root_body_unavailable">If you have Root, try the automatic setup. Otherwise continue with the existing manual flow.</string>
+    <string name="onboarding_root_body_permission_denied">Root access was denied or timed out.</string>
+    <string name="onboarding_root_body_termux_not_installed">Install Termux first, then Aether can finish this setup with Root.</string>
+    <string name="onboarding_root_body_failed">Root setup did not complete. You can retry or continue manually.</string>
+    <string name="onboarding_termux_status_ready">Local tools are ready.</string>
+    <string name="onboarding_termux_status_not_installed">Install Termux first, then come back here.</string>
+    <string name="onboarding_termux_status_permission_missing">Grant the &quot;Run commands in Termux environment&quot; permission in Android settings.</string>
+    <string name="onboarding_termux_status_external_apps_disabled_configured">Open Termux once, then return and refresh.</string>
+    <string name="onboarding_termux_status_external_apps_disabled">Copy the setup command, paste it in Termux, then return and refresh.</string>
+    <string name="onboarding_termux_status_dispatch_failed_configured">Open Termux once, then refresh here.</string>
+    <string name="onboarding_termux_status_dispatch_failed">Copy the setup command, paste it in Termux, then return and refresh.</string>
     <!-- Search -->
     <string name="search_chats">Search chats</string>
     <string name="search_no_chats_match">No chats match</string>
