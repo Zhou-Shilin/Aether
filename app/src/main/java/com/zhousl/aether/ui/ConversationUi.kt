@@ -2750,13 +2750,184 @@ private fun AgentModePreviewToolStatus(
 
 @Composable
 private fun formatPendingAgentModeToolLabel(toolInvocation: ChatToolInvocation): String {
-    val strings = rememberAetherStrings()
     val arguments = parseJsonObject(toolInvocation.argumentsJson)
-    return strings.toolInvocationTitleLabel(
+    return formatPendingToolTitle(
         toolName = toolInvocation.toolName,
         isRunning = toolInvocation.isRunning,
         arguments = arguments,
     )
+}
+
+@Composable
+private fun formatPendingToolTitle(
+    toolName: String,
+    isRunning: Boolean,
+    arguments: JSONObject?,
+): String = when (toolName.lowercase()) {
+    "bash" -> toolStatusLabel(isRunning, R.string.tool_title_bash_running, R.string.tool_title_bash_done)
+    "fetch_bash_output" -> toolStatusLabel(isRunning, R.string.tool_title_fetch_bash_output_running, R.string.tool_title_fetch_bash_output_done)
+    "kill_bash" -> toolStatusLabel(isRunning, R.string.tool_title_kill_bash_running, R.string.tool_title_kill_bash_done)
+    "sleep" -> toolStatusLabel(isRunning, R.string.tool_title_sleep_running, R.string.tool_title_sleep_done)
+    "read" -> toolStatusLabel(isRunning, R.string.tool_title_read_running, R.string.tool_title_read_done)
+    "edit" -> toolStatusLabel(isRunning, R.string.tool_title_edit_running, R.string.tool_title_edit_done)
+    "write" -> toolStatusLabel(isRunning, R.string.tool_title_write_running, R.string.tool_title_write_done)
+    "grep" -> toolStatusLabel(isRunning, R.string.tool_title_grep_running, R.string.tool_title_grep_done)
+    "find" -> toolStatusLabel(isRunning, R.string.tool_title_find_running, R.string.tool_title_find_done)
+    "ls" -> toolStatusLabel(isRunning, R.string.tool_title_ls_running, R.string.tool_title_ls_done)
+    "analyze_image" -> toolStatusLabel(isRunning, R.string.tool_title_analyze_image_running, R.string.tool_title_analyze_image_done)
+    "tavily_search" -> formatArgumentDrivenToolTitle(
+        isRunning = isRunning,
+        runningVerbRes = R.string.tool_title_searching,
+        doneVerbRes = R.string.tool_title_searched,
+        subject = arguments?.optString("query").orEmpty(),
+        fallbackRes = R.string.tool_title_tavily_search_fallback,
+    )
+    "fetch_web_url" -> formatArgumentDrivenToolTitle(
+        isRunning = isRunning,
+        runningVerbRes = R.string.tool_title_fetching,
+        doneVerbRes = R.string.tool_title_fetched,
+        subject = arguments?.optString("url").orEmpty(),
+        fallbackRes = R.string.tool_title_web_page_fallback,
+    )
+    "aether_config_get",
+    "aether_config_set",
+    "aether_skill_manage",
+    "aether_mcp_manage",
+    "aether_termux_manage",
+    "aether_agent_mode_manage",
+    "aether_scheduled_task_manage",
+    "aether_developer_manage" -> formatAetherToolTitle(toolName, isRunning, arguments)
+    "agent_display" -> formatAgentDisplayToolTitle(isRunning, arguments)
+    else -> if (isRunning) {
+        stringResource(R.string.tool_title_using_tool, toolName)
+    } else {
+        stringResource(R.string.tool_title_used_tool, toolName)
+    }
+}
+
+@Composable
+private fun toolStatusLabel(
+    isRunning: Boolean,
+    runningRes: Int,
+    doneRes: Int,
+): String = stringResource(if (isRunning) runningRes else doneRes)
+
+@Composable
+private fun formatArgumentDrivenToolTitle(
+    isRunning: Boolean,
+    runningVerbRes: Int,
+    doneVerbRes: Int,
+    subject: String,
+    fallbackRes: Int,
+): String {
+    val action = stringResource(if (isRunning) runningVerbRes else doneVerbRes)
+    val normalizedSubject = subject.trim()
+    if (normalizedSubject.isBlank()) {
+        return stringResource(R.string.tool_title_action_subject, action, stringResource(fallbackRes))
+    }
+    val clipped = normalizedSubject.take(72)
+    val displaySubject = if (normalizedSubject.length > 72) "$clipped..." else clipped
+    return stringResource(R.string.tool_title_action_subject, action, displaySubject)
+}
+
+@Composable
+private fun formatAetherToolTitle(
+    toolName: String,
+    isRunning: Boolean,
+    arguments: JSONObject?,
+): String {
+    val action = arguments?.optString("action").orEmpty().trim()
+    return when (toolName.lowercase()) {
+        "aether_config_get" -> formatArgumentDrivenToolTitle(isRunning, R.string.tool_title_reading, R.string.tool_title_read, formatAetherCategories(arguments), R.string.tool_title_aether_settings_fallback)
+        "aether_config_set" -> formatArgumentDrivenToolTitle(isRunning, R.string.tool_title_updating, R.string.tool_title_updated, arguments?.optString("category").orEmpty(), R.string.tool_title_aether_settings_fallback)
+        "aether_skill_manage" -> when (action.lowercase()) {
+            "install_remote" -> formatArgumentDrivenToolTitle(isRunning, R.string.tool_title_installing, R.string.tool_title_installed, arguments?.optString("url").orEmpty(), R.string.tool_title_agent_skill_fallback)
+            "remove" -> formatArgumentDrivenToolTitle(isRunning, R.string.tool_title_removing, R.string.tool_title_removed, optAetherString(arguments, "skill_id", "skillId"), R.string.tool_title_agent_skill_fallback)
+            "set_enabled" -> formatArgumentDrivenToolTitle(isRunning, R.string.tool_title_updating, R.string.tool_title_updated, optAetherString(arguments, "skill_id", "skillId"), R.string.tool_title_agent_skill_fallback)
+            else -> toolStatusLabel(isRunning, R.string.tool_title_reading_agent_skills, R.string.tool_title_read_agent_skills)
+        }
+        "aether_mcp_manage" -> when (action.lowercase()) {
+            "upsert_streamable_http", "upsert_stdio" -> formatArgumentDrivenToolTitle(isRunning, R.string.tool_title_saving, R.string.tool_title_saved, optAetherString(arguments, "display_name", "displayName"), R.string.tool_title_mcp_server_fallback)
+            "remove" -> formatArgumentDrivenToolTitle(isRunning, R.string.tool_title_removing, R.string.tool_title_removed, optAetherString(arguments, "server_id", "serverId"), R.string.tool_title_mcp_server_fallback)
+            "set_enabled" -> formatArgumentDrivenToolTitle(isRunning, R.string.tool_title_updating, R.string.tool_title_updated, optAetherString(arguments, "server_id", "serverId"), R.string.tool_title_mcp_server_fallback)
+            else -> toolStatusLabel(isRunning, R.string.tool_title_reading_mcp_servers, R.string.tool_title_read_mcp_servers)
+        }
+        "aether_termux_manage" -> when (action.lowercase()) {
+            "configure_root_access" -> toolStatusLabel(isRunning, R.string.tool_title_configuring_termux_root, R.string.tool_title_configured_termux_root)
+            "inspect_root_setup" -> toolStatusLabel(isRunning, R.string.tool_title_checking_root_setup, R.string.tool_title_checked_root_setup)
+            else -> toolStatusLabel(isRunning, R.string.tool_title_checking_termux_setup, R.string.tool_title_checked_termux_setup)
+        }
+        "aether_agent_mode_manage" -> when (action.lowercase()) {
+            "set_authorization" -> toolStatusLabel(isRunning, R.string.tool_title_updating_agent_mode_authorization, R.string.tool_title_updated_agent_mode_authorization)
+            "request_shizuku_permission" -> toolStatusLabel(isRunning, R.string.tool_title_requesting_shizuku_permission, R.string.tool_title_requested_shizuku_permission)
+            "stop_display" -> toolStatusLabel(isRunning, R.string.tool_title_stopping_agent_mode_display, R.string.tool_title_stopped_agent_mode_display)
+            "refresh_displays" -> toolStatusLabel(isRunning, R.string.tool_title_refreshing_agent_mode_displays, R.string.tool_title_refreshed_agent_mode_displays)
+            else -> toolStatusLabel(isRunning, R.string.tool_title_checking_agent_mode_authorization, R.string.tool_title_checked_agent_mode_authorization)
+        }
+        "aether_scheduled_task_manage" -> when (action.lowercase()) {
+            "create" -> formatArgumentDrivenToolTitle(isRunning, R.string.tool_title_creating, R.string.tool_title_created, arguments?.optString("name").orEmpty(), R.string.tool_title_scheduled_task_fallback)
+            "update" -> formatArgumentDrivenToolTitle(isRunning, R.string.tool_title_updating, R.string.tool_title_updated, optAetherString(arguments, "task_id", "taskId"), R.string.tool_title_scheduled_task_fallback)
+            "remove" -> formatArgumentDrivenToolTitle(isRunning, R.string.tool_title_removing, R.string.tool_title_removed, optAetherString(arguments, "task_id", "taskId"), R.string.tool_title_scheduled_task_fallback)
+            "set_enabled" -> formatArgumentDrivenToolTitle(isRunning, R.string.tool_title_updating, R.string.tool_title_updated, optAetherString(arguments, "task_id", "taskId"), R.string.tool_title_scheduled_task_fallback)
+            else -> toolStatusLabel(isRunning, R.string.tool_title_reading_scheduled_tasks, R.string.tool_title_read_scheduled_tasks)
+        }
+        "aether_developer_manage" -> toolStatusLabel(isRunning, R.string.tool_title_reading_aether_diagnostics, R.string.tool_title_read_aether_diagnostics)
+        else -> toolStatusLabel(isRunning, R.string.tool_title_managing_aether, R.string.tool_title_managed_aether)
+    }
+}
+
+@Composable
+private fun formatAgentDisplayToolTitle(
+    isRunning: Boolean,
+    arguments: JSONObject?,
+): String = when (arguments?.optString("action").orEmpty().lowercase()) {
+    "list_apps", "apps", "installed_apps" -> formatArgumentDrivenToolTitle(
+        isRunning = isRunning,
+        runningVerbRes = R.string.tool_title_reading,
+        doneVerbRes = R.string.tool_title_read,
+        subject = arguments?.optString("query").orEmpty(),
+        fallbackRes = R.string.tool_title_installed_apps_fallback,
+    )
+    "start" -> toolStatusLabel(isRunning, R.string.tool_title_starting_agent_mode_display, R.string.tool_title_started_agent_mode_display)
+    "status" -> toolStatusLabel(isRunning, R.string.tool_title_checking_agent_mode_display, R.string.tool_title_checked_agent_mode_display)
+    "launch" -> formatArgumentDrivenToolTitle(
+        isRunning = isRunning,
+        runningVerbRes = R.string.tool_title_launching,
+        doneVerbRes = R.string.tool_title_launched,
+        subject = arguments?.optString("target").orEmpty(),
+        fallbackRes = R.string.tool_title_agent_mode_app_fallback,
+    )
+    "tap" -> toolStatusLabel(isRunning, R.string.tool_title_tapping_agent_mode_display, R.string.tool_title_tapped_agent_mode_display)
+    "swipe" -> toolStatusLabel(isRunning, R.string.tool_title_swiping_agent_mode_display, R.string.tool_title_swiped_agent_mode_display)
+    "key" -> formatArgumentDrivenToolTitle(
+        isRunning = isRunning,
+        runningVerbRes = R.string.tool_title_pressing,
+        doneVerbRes = R.string.tool_title_pressed,
+        subject = arguments?.optString("key").orEmpty(),
+        fallbackRes = R.string.tool_title_agent_mode_key_fallback,
+    )
+    "text" -> toolStatusLabel(isRunning, R.string.tool_title_typing_agent_mode, R.string.tool_title_typed_agent_mode)
+    "screenshot" -> toolStatusLabel(isRunning, R.string.tool_title_capturing_agent_mode_display, R.string.tool_title_captured_agent_mode_display)
+    "stop" -> toolStatusLabel(isRunning, R.string.tool_title_stopping_agent_mode_display, R.string.tool_title_stopped_agent_mode_display)
+    else -> toolStatusLabel(isRunning, R.string.tool_title_using_agent_mode_display, R.string.tool_title_used_agent_mode_display)
+}
+
+private fun formatAetherCategories(arguments: JSONObject?): String {
+    val categories = arguments?.optJSONArray("categories") ?: return ""
+    return buildList {
+        for (index in 0 until categories.length()) {
+            val value = categories.optString(index).trim()
+            if (value.isNotBlank()) add(value)
+        }
+    }.joinToString(",")
+}
+
+private fun optAetherString(
+    arguments: JSONObject?,
+    primary: String,
+    secondary: String,
+): String = arguments?.optString(primary).orEmpty().ifBlank {
+    arguments?.optString(secondary).orEmpty()
 }
 
 private fun parseJsonObject(rawValue: String): JSONObject? =
