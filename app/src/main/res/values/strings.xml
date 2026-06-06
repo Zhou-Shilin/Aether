@@ -155,6 +155,35 @@
     <string name="settings_reliability">Reliability</string>
     <string name="settings_agent_skills">Agent Skills</string>
     <string name="settings_mcp_servers">MCP Servers</string>
+    <string name="settings_mcp_servers_description">Manage MCP servers, inspect each transport config, and keep only the connections you want active.</string>
+    <string name="settings_no_mcp_servers">No MCP servers</string>
+    <string name="settings_add_mcp_server_description">Add HTTP or stdio servers to extend capabilities.</string>
+    <string name="settings_add_server">Add Server</string>
+    <string name="settings_mcp_tools">Tools</string>
+    <string name="settings_mcp_resources">Resources</string>
+    <string name="settings_mcp_prompts">Prompts</string>
+    <string name="settings_server_id">Server ID</string>
+    <string name="settings_quick_action">Quick action</string>
+    <string name="settings_transport">Transport</string>
+    <string name="settings_headers">Headers</string>
+    <string name="settings_command">Command</string>
+    <string name="settings_working_dir">Working dir</string>
+    <string name="settings_working_directory">Working directory</string>
+    <string name="settings_environment">Environment</string>
+    <string name="settings_connect_timeout">Connect timeout</string>
+    <string name="settings_request_timeout">Request timeout</string>
+    <string name="settings_stdio">Stdio</string>
+    <string name="settings_update_mcp_server_description">Update the transport config and quick action source for this MCP server.</string>
+    <string name="settings_add_mcp_server_page_description">Add an HTTP server for remote APIs or a stdio server for local Termux processes.</string>
+    <string name="settings_server_name">Server name</string>
+    <string name="settings_server_url">Server URL</string>
+    <string name="settings_optional_headers_hint">Optional headers, one KEY=VALUE per line.</string>
+    <string name="settings_save_http_server">Save HTTP Server</string>
+    <string name="settings_add_http_server">Add HTTP Server</string>
+    <string name="settings_arguments">Arguments</string>
+    <string name="settings_optional_environment_hint">Optional environment variables, one KEY=VALUE per line.</string>
+    <string name="settings_save_stdio_server">Save Stdio Server</string>
+    <string name="settings_add_stdio_server">Add Stdio Server</string>
     <string name="settings_termux">Termux</string>
     <string name="settings_agent_mode">Agent Mode</string>
     <string name="settings_developer">Developer Settings</string>

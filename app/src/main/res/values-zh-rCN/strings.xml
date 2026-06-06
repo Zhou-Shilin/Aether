@@ -146,6 +146,35 @@
     <string name="settings_reliability">可靠性</string>
     <string name="settings_agent_skills">Agent 技能</string>
     <string name="settings_mcp_servers">MCP 服务器</string>
+    <string name="settings_mcp_servers_description">管理 MCP 服务器、检查每个传输配置，并只保留你想启用的连接。</string>
+    <string name="settings_no_mcp_servers">没有 MCP 服务器</string>
+    <string name="settings_add_mcp_server_description">添加 HTTP 或 stdio 服务器来扩展能力。</string>
+    <string name="settings_add_server">添加服务器</string>
+    <string name="settings_mcp_tools">工具</string>
+    <string name="settings_mcp_resources">资源</string>
+    <string name="settings_mcp_prompts">提示词</string>
+    <string name="settings_server_id">服务器 ID</string>
+    <string name="settings_quick_action">快捷操作</string>
+    <string name="settings_transport">传输方式</string>
+    <string name="settings_headers">Headers</string>
+    <string name="settings_command">命令</string>
+    <string name="settings_working_dir">工作目录</string>
+    <string name="settings_working_directory">工作目录</string>
+    <string name="settings_environment">环境变量</string>
+    <string name="settings_connect_timeout">连接超时</string>
+    <string name="settings_request_timeout">请求超时</string>
+    <string name="settings_stdio">标准输入输出</string>
+    <string name="settings_update_mcp_server_description">更新此 MCP 服务器的传输配置和快捷操作来源。</string>
+    <string name="settings_add_mcp_server_page_description">添加用于远程 API 的 HTTP 服务器，或用于本地 Termux 进程的 stdio 服务器。</string>
+    <string name="settings_server_name">服务器名称</string>
+    <string name="settings_server_url">服务器 URL</string>
+    <string name="settings_optional_headers_hint">可选 headers，每行一个 KEY=VALUE。</string>
+    <string name="settings_save_http_server">保存 HTTP 服务器</string>
+    <string name="settings_add_http_server">添加 HTTP 服务器</string>
+    <string name="settings_arguments">参数</string>
+    <string name="settings_optional_environment_hint">可选环境变量，每行一个 KEY=VALUE。</string>
+    <string name="settings_save_stdio_server">保存 Stdio 服务器</string>
+    <string name="settings_add_stdio_server">添加 Stdio 服务器</string>
     <string name="settings_termux">Termux</string>
     <string name="settings_agent_mode">Agent 模式</string>
     <string name="settings_developer">开发者设置</string>

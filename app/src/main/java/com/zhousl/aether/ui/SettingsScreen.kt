@@ -2304,7 +2304,6 @@ private fun McpServersListPage(
     onAddNew: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     var testResultText by rememberSaveable { mutableStateOf("") }
     SubPageScaffold(
         title = title,
@@ -2313,7 +2312,7 @@ private fun McpServersListPage(
         onTrailingAction = onAddNew,
     ) {
         Text(
-            text = tr(strings, "Manage MCP servers, inspect each transport config, and keep only the connections you want active.", "Manage MCP servers, inspect each transport config, and keep only the connections you want active."),
+            text = stringResource(R.string.settings_mcp_servers_description),
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -2330,19 +2329,19 @@ private fun McpServersListPage(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        tr(strings, "No MCP servers", "No MCP servers"),
+                        stringResource(R.string.settings_no_mcp_servers),
                         style = MaterialTheme.typography.titleMedium,
                         color = AetherOnSurface,
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        tr(strings, "Add HTTP or stdio servers to extend capabilities.", "Add HTTP or stdio servers to extend capabilities."),
+                        stringResource(R.string.settings_add_mcp_server_description),
                         style = MaterialTheme.typography.bodyMedium,
                         color = AetherOnSurfaceVariant,
                     )
                     Spacer(Modifier.height(16.dp))
                     SettingsActionButton(
-                        label = tr(strings, "Add Server", "Add Server"),
+                        label = stringResource(R.string.settings_add_server),
                         onClick = onAddNew,
                     )
                 }
@@ -2384,7 +2383,6 @@ private fun McpServerCard(
     onRemove: () -> Unit,
     onTest: (McpServerTestOperation) -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     var expanded by rememberSaveable(server.id) { mutableStateOf(false) }
     Column(
         modifier = Modifier
@@ -2417,7 +2415,7 @@ private fun McpServerCard(
             IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(36.dp)) {
                 Icon(
                     if (expanded) Icons.Rounded.ArrowDropDown else Icons.AutoMirrored.Rounded.ArrowForwardIos,
-                    contentDescription = if (expanded) tr(strings, "Collapse", "收起") else tr(strings, "Expand", "展开"),
+                    contentDescription = if (expanded) stringResource(R.string.action_collapse) else stringResource(R.string.action_expand),
                     tint = AetherOnSurfaceVariant,
                     modifier = Modifier.size(20.dp),
                 )
@@ -2451,41 +2449,41 @@ private fun McpServerCard(
             Spacer(Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Tools", "工具"),
+                    label = stringResource(R.string.settings_mcp_tools),
                     onClick = { onTest(McpServerTestOperation.ListTools) },
                     modifier = Modifier.weight(1f),
                 )
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Resources", "资源"),
+                    label = stringResource(R.string.settings_mcp_resources),
                     onClick = { onTest(McpServerTestOperation.ListResources) },
                     modifier = Modifier.weight(1f),
                 )
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Prompts", "提示词"),
+                    label = stringResource(R.string.settings_mcp_prompts),
                     onClick = { onTest(McpServerTestOperation.ListPrompts) },
                     modifier = Modifier.weight(1f),
                 )
             }
             Spacer(Modifier.height(14.dp))
-            DetailLine(tr(strings, "Server ID", "服务器 ID"), server.id)
-            DetailLine(tr(strings, "Quick action", "快捷操作"), server.quickActionLabel())
-            DetailLine(tr(strings, "Transport", "传输方式"), server.transport.transportType.storageValue.uppercase())
+            DetailLine(stringResource(R.string.settings_server_id), server.id)
+            DetailLine(stringResource(R.string.settings_quick_action), server.quickActionLabel())
+            DetailLine(stringResource(R.string.settings_transport), server.transport.transportType.storageValue.uppercase())
             when (val transport = server.transport) {
                 is com.zhousl.aether.data.McpTransportConfig.StreamableHttp -> {
                     DetailLine("URL", transport.url)
-                    DetailLine(tr(strings, "Headers", "Headers"), transport.headers.size.toString())
+                    DetailLine(stringResource(R.string.settings_headers), transport.headers.size.toString())
                 }
 
                 is com.zhousl.aether.data.McpTransportConfig.StdIo -> {
-                    DetailLine(tr(strings, "Command", "命令"), transport.command)
+                    DetailLine(stringResource(R.string.settings_command), transport.command)
                     if (transport.workingDirectory.isNotBlank()) {
-                        DetailLine(tr(strings, "Working dir", "工作目录"), transport.workingDirectory)
+                        DetailLine(stringResource(R.string.settings_working_dir), transport.workingDirectory)
                     }
-                    DetailLine(tr(strings, "Environment", "环境变量"), transport.environment.size.toString())
+                    DetailLine(stringResource(R.string.settings_environment), transport.environment.size.toString())
                 }
             }
-            DetailLine(tr(strings, "Connect timeout", "连接超时"), "${server.connectTimeoutMillis} ms")
-            DetailLine(tr(strings, "Request timeout", "请求超时"), "${server.requestTimeoutMillis} ms")
+            DetailLine(stringResource(R.string.settings_connect_timeout), "${server.connectTimeoutMillis} ms")
+            DetailLine(stringResource(R.string.settings_request_timeout), "${server.requestTimeoutMillis} ms")
         }
     }
 }
@@ -2882,14 +2880,14 @@ private fun AddMcpServerPage(
         )
     }
 
-    val tabOptions = listOf("HTTP", tr(strings, "Stdio", "标准输入输出"))
+    val tabOptions = listOf("HTTP", stringResource(R.string.settings_stdio))
 
     SubPageScaffold(title = title, onBack = onBack) {
         Text(
             text = if (isEditing) {
-                tr(strings, "Update the transport config and quick action source for this MCP server.", "Update the transport config and quick action source for this MCP server.")
+                stringResource(R.string.settings_update_mcp_server_description)
             } else {
-                tr(strings, "Add an HTTP server for remote APIs or a stdio server for local Termux processes.", "Add an HTTP server for remote APIs or a stdio server for local Termux processes.")
+                stringResource(R.string.settings_add_mcp_server_page_description)
             },
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
@@ -2923,22 +2921,22 @@ private fun AddMcpServerPage(
             0 -> {
                 // HTTP server
                 SettingsCardGroup {
-                    ChatGptTextField(tr(strings, "Server name", "Server name"), httpServerNameValue) { httpServerNameValue = it }
+                    ChatGptTextField(stringResource(R.string.settings_server_name), httpServerNameValue) { httpServerNameValue = it }
                     CardDivider()
-                    ChatGptTextField(tr(strings, "Server URL", "服务器 URL"), httpServerUrlValue) { httpServerUrlValue = it }
+                    ChatGptTextField(stringResource(R.string.settings_server_url), httpServerUrlValue) { httpServerUrlValue = it }
                     CardDivider()
-                    ChatGptTextField(tr(strings, "Headers", "Headers"), httpHeadersValue, minLines = 2) { httpHeadersValue = it }
+                    ChatGptTextField(stringResource(R.string.settings_headers), httpHeadersValue, minLines = 2) { httpHeadersValue = it }
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    tr(strings, "Optional headers, one KEY=VALUE per line.", "Optional headers, one KEY=VALUE per line."),
+                    stringResource(R.string.settings_optional_headers_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 4.dp),
                 )
                 Spacer(Modifier.height(16.dp))
                 SettingsActionButton(
-                    label = if (isEditing) tr(strings, "Save HTTP Server", "Save HTTP Server") else tr(strings, "Add HTTP Server", "Add HTTP Server"),
+                    label = if (isEditing) stringResource(R.string.settings_save_http_server) else stringResource(R.string.settings_add_http_server),
                     onClick = {
                         if (httpServerNameValue.text.isNotBlank() && httpServerUrlValue.text.isNotBlank()) {
                             onSaveHttpMcpServer(
@@ -2956,26 +2954,26 @@ private fun AddMcpServerPage(
             1 -> {
                 // Stdio server
                 SettingsCardGroup {
-                    ChatGptTextField(tr(strings, "Server name", "Server name"), stdioServerNameValue) { stdioServerNameValue = it }
+                    ChatGptTextField(stringResource(R.string.settings_server_name), stdioServerNameValue) { stdioServerNameValue = it }
                     CardDivider()
-                    ChatGptTextField(tr(strings, "Command", "命令"), stdioCommandValue, minLines = 2) { stdioCommandValue = it }
+                    ChatGptTextField(stringResource(R.string.settings_command), stdioCommandValue, minLines = 2) { stdioCommandValue = it }
                     CardDivider()
-                    ChatGptTextField(tr(strings, "Arguments", "参数"), stdioArgumentsValue, minLines = 2) { stdioArgumentsValue = it }
+                    ChatGptTextField(stringResource(R.string.settings_arguments), stdioArgumentsValue, minLines = 2) { stdioArgumentsValue = it }
                     CardDivider()
-                    ChatGptTextField(tr(strings, "Working directory", "工作目录"), stdioWorkingDirectoryValue) { stdioWorkingDirectoryValue = it }
+                    ChatGptTextField(stringResource(R.string.settings_working_directory), stdioWorkingDirectoryValue) { stdioWorkingDirectoryValue = it }
                     CardDivider()
-                    ChatGptTextField(tr(strings, "Environment", "环境变量"), stdioEnvValue, minLines = 2) { stdioEnvValue = it }
+                    ChatGptTextField(stringResource(R.string.settings_environment), stdioEnvValue, minLines = 2) { stdioEnvValue = it }
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    tr(strings, "Optional environment variables, one KEY=VALUE per line.", "Optional environment variables, one KEY=VALUE per line."),
+                    stringResource(R.string.settings_optional_environment_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 4.dp),
                 )
                 Spacer(Modifier.height(16.dp))
                 SettingsActionButton(
-                    label = if (isEditing) tr(strings, "Save Stdio Server", "Save Stdio Server") else tr(strings, "Add Stdio Server", "Add Stdio Server"),
+                    label = if (isEditing) stringResource(R.string.settings_save_stdio_server) else stringResource(R.string.settings_add_stdio_server),
                     onClick = {
                         if (stdioServerNameValue.text.isNotBlank() && stdioCommandValue.text.isNotBlank()) {
                             onSaveStdIoMcpServer(
