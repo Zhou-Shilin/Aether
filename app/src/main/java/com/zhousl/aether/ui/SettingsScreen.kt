@@ -3172,7 +3172,6 @@ private fun AgentModeSettingsPage(
     onRefreshAgentModeDisplays: (AgentModeAuthorizationMethod) -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     var showAlreadyConfiguredDialog by rememberSaveable { mutableStateOf(false) }
     val agentModeConfigured = agentModeAuthorizationEnabled && agentModeAuthorizationState.isReady
 
@@ -3205,7 +3204,7 @@ private fun AgentModeSettingsPage(
             SettingsCardGroup {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = tr(strings, "Agent Mode is unavailable", "Agent Mode is unavailable"),
+                        text = stringResource(R.string.settings_agent_mode_unavailable),
                         style = MaterialTheme.typography.labelLarge,
                         color = AetherOnSurface,
                     )
@@ -3239,7 +3238,7 @@ private fun AgentModeSettingsPage(
     }
     if (showAlreadyConfiguredDialog) {
         RootSetupAlreadyConfiguredDialog(
-            title = tr(strings, "Agent Mode is already configured", "Agent Mode 已配置完成"),
+            title = stringResource(R.string.settings_agent_mode_already_configured),
             body = if (agentModeAuthorizationMethod == AgentModeAuthorizationMethod.Root) {
                 tr(
                     strings,
@@ -3276,7 +3275,7 @@ private fun AgentModeSettingsPage(
         onTrailingAction = ::refreshAgentModeStatus,
     ) {
         Text(
-            text = tr(strings, "Authorize isolated virtual-display tools with Shizuku or Root. Skip this on devices without either option.", "Authorize isolated virtual-display tools with Shizuku or Root. Skip this on devices without either option."),
+            text = stringResource(R.string.settings_agent_mode_description),
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -3287,14 +3286,14 @@ private fun AgentModeSettingsPage(
         SettingsCardGroup {
             Column(modifier = Modifier.padding(16.dp)) {
                 SettingsToggleRow(
-                    title = tr(strings, "Agent Mode authorization", "Agent 模式授权"),
-                    subtitle = tr(strings, "Enables isolated virtual-display tools. Requires Shizuku or Root.", "Enables isolated virtual-display tools. Requires Shizuku or Root."),
+                    title = stringResource(R.string.settings_agent_mode_authorization),
+                    subtitle = stringResource(R.string.settings_agent_mode_authorization_subtitle),
                     checked = agentModeAuthorizationEnabled,
                     onCheckedChange = onAgentModeAuthorizationEnabledChanged,
                 )
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    text = tr(strings, "Authorization method", "授权方式"),
+                    text = stringResource(R.string.settings_authorization_method),
                     style = MaterialTheme.typography.labelLarge,
                     color = AetherOnSurface,
                 )
@@ -3304,8 +3303,8 @@ private fun AgentModeSettingsPage(
                         SettingsChoiceRow(
                             title = method.displayName,
                             subtitle = when (method) {
-                                AgentModeAuthorizationMethod.Shizuku -> tr(strings, "Uses an elevated Shizuku service.", "Uses an elevated Shizuku service.")
-                                AgentModeAuthorizationMethod.Root -> tr(strings, "Uses root shell for privileged input.", "Uses root shell for privileged input.")
+                                AgentModeAuthorizationMethod.Shizuku -> stringResource(R.string.settings_agent_mode_method_shizuku_subtitle)
+                                AgentModeAuthorizationMethod.Root -> stringResource(R.string.settings_agent_mode_method_root_subtitle)
                             },
                             selected = agentModeAuthorizationMethod == method,
                             onClick = { onAgentModeAuthorizationMethodChanged(method) },
@@ -3314,7 +3313,7 @@ private fun AgentModeSettingsPage(
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = tr(strings, "Shizuku mode creates the display from a Shizuku user service so apps can render off the main screen. Root mode remains experimental.", "Shizuku mode creates the display from a Shizuku user service so apps can render off the main screen. Root mode remains experimental."),
+                    text = stringResource(R.string.settings_agent_mode_method_description),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                 )
@@ -3329,7 +3328,7 @@ private fun AgentModeSettingsPage(
                 )
                 Spacer(Modifier.height(12.dp))
                 RootSetupSettingsSection(
-                    title = tr(strings, "Root automatic setup", "Root 自动配置"),
+                    title = stringResource(R.string.settings_root_automatic_setup),
                     rootSetupState = rootSetupState,
                     body = tr(
                         strings,
@@ -3346,16 +3345,21 @@ private fun AgentModeSettingsPage(
         SettingsCardGroup {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = tr(strings, "Virtual Display", "虚拟显示"),
+                    text = stringResource(R.string.settings_virtual_display),
                     style = MaterialTheme.typography.labelLarge,
                     color = AetherOnSurface,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
                     text = if (agentModeDisplayState.isActive) {
-                        tr(strings, "Display ${agentModeDisplayState.displayId ?: "-"} is active at ${agentModeDisplayState.width} x ${agentModeDisplayState.height}.", "Display ${agentModeDisplayState.displayId ?: "-"} is active at ${agentModeDisplayState.width} x ${agentModeDisplayState.height}.")
+                        stringResource(
+                            R.string.settings_agent_mode_display_active,
+                            agentModeDisplayState.displayId ?: "-",
+                            agentModeDisplayState.width,
+                            agentModeDisplayState.height,
+                        )
                     } else {
-                        tr(strings, "No Agent Mode virtual display is active.", "No Agent Mode virtual display is active.")
+                        stringResource(R.string.settings_agent_mode_no_virtual_display)
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
@@ -3372,14 +3376,14 @@ private fun AgentModeSettingsPage(
                 }
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    text = tr(strings, "Visible displays", "可见显示"),
+                    text = stringResource(R.string.settings_visible_displays),
                     style = MaterialTheme.typography.labelMedium,
                     color = AetherOnSurface,
                 )
                 Spacer(Modifier.height(8.dp))
                 if (agentModeDisplayState.displays.isEmpty()) {
                     Text(
-                        text = tr(strings, "No displays are currently visible to Aether.", "No displays are currently visible to Aether."),
+                        text = stringResource(R.string.settings_no_visible_displays),
                         style = MaterialTheme.typography.bodySmall,
                         color = AetherOnSurfaceVariant,
                     )
@@ -3402,13 +3406,13 @@ private fun AgentModeSettingsPage(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = tr(strings, "Display ${display.displayId}", "显示 ${display.displayId}"),
+                                        text = stringResource(R.string.agent_mode_display_id, display.displayId),
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = AetherOnSurface,
                                     )
                                     Text(
                                         text = listOf(
-                                            display.name.ifBlank { tr(strings, "Unnamed", "Unnamed") },
+                                            display.name.ifBlank { stringResource(R.string.settings_unnamed_display) },
                                             "${display.width} x ${display.height}",
                                             if (display.isAetherDisplay) "Aether" else "",
                                         ).filter { it.isNotBlank() }.joinToString(" · "),
@@ -3424,7 +3428,7 @@ private fun AgentModeSettingsPage(
                 }
                 Spacer(Modifier.height(16.dp))
                 SettingsActionButton(
-                    label = tr(strings, "Stop virtual display", "停止虚拟显示"),
+                    label = stringResource(R.string.settings_stop_virtual_display),
                     onClick = onStopAgentModeDisplay,
                     modifier = Modifier.fillMaxWidth(),
                     enabled = agentModeDisplayState.isActive,
@@ -3874,43 +3878,42 @@ private fun AgentModeAuthorizationNotice(
     onOpenShizuku: () -> Unit,
     onInstallShizuku: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val statusText = when {
         enabled && method == AgentModeAuthorizationMethod.Root -> when (state.issue) {
-            AgentModeAuthorizationIssue.Ready -> tr(strings, "Root authorization is ready.", "Root authorization is ready.")
-            AgentModeAuthorizationIssue.RootUnavailable -> tr(strings, "No su binary was detected on this device.", "No su binary was detected on this device.")
-            AgentModeAuthorizationIssue.RootPermissionMissing -> tr(strings, "Grant su to Aether, then refresh this status.", "Grant su to Aether, then refresh this status.")
-            AgentModeAuthorizationIssue.RootPermissionDenied -> tr(strings, "Root authorization was denied. Grant su to Aether, then refresh this status.", "Root authorization was denied. Grant su to Aether, then refresh this status.")
+            AgentModeAuthorizationIssue.Ready -> stringResource(R.string.settings_root_authorization_ready)
+            AgentModeAuthorizationIssue.RootUnavailable -> stringResource(R.string.settings_root_authorization_no_su)
+            AgentModeAuthorizationIssue.RootPermissionMissing -> stringResource(R.string.settings_root_authorization_grant_su)
+            AgentModeAuthorizationIssue.RootPermissionDenied -> stringResource(R.string.settings_root_authorization_denied)
             AgentModeAuthorizationIssue.Error -> state.detail.ifBlank {
-                tr(strings, "Unable to inspect Root status.", "Unable to inspect Root status.")
+                stringResource(R.string.settings_root_authorization_inspect_failed)
             }
             else -> state.detail.ifBlank {
-                tr(strings, "Refresh Root status before using Agent Mode.", "Refresh Root status before using Agent Mode.")
+                stringResource(R.string.settings_root_authorization_refresh_first)
             }
         }
-        !enabled -> tr(strings, "Agent Mode authorization is off.", "Agent 模式授权已关闭。")
-        method == AgentModeAuthorizationMethod.Root -> tr(strings, "Root mode will request su when Agent Mode starts.", "Root 模式会在启动 Agent 模式时请求 su。")
+        !enabled -> stringResource(R.string.settings_agent_mode_authorization_off)
+        method == AgentModeAuthorizationMethod.Root -> stringResource(R.string.settings_agent_mode_root_requests_su)
         else -> when (state.issue) {
-            AgentModeAuthorizationIssue.Ready -> tr(strings, "Shizuku is running and Aether is authorized.", "Shizuku 正在运行，Aether 已获得授权。")
-            AgentModeAuthorizationIssue.ShizukuNotInstalled -> tr(strings, "Install Shizuku before using Shizuku mode.", "使用 Shizuku 模式前，请先安装 Shizuku。")
-            AgentModeAuthorizationIssue.ShizukuNotRunning -> tr(strings, "Start Shizuku, then refresh this status.", "先启动 Shizuku，然后刷新此状态。")
-            AgentModeAuthorizationIssue.ShizukuPermissionMissing -> tr(strings, "Grant Aether permission in Shizuku before using Agent Mode.", "使用 Agent 模式前，请先在 Shizuku 中授予 Aether 权限。")
-            AgentModeAuthorizationIssue.ShizukuPermissionDenied -> tr(strings, "Shizuku permission was denied. Request it again or enable Aether inside Shizuku.", "Shizuku 权限被拒绝。请重新请求授权，或在 Shizuku 中启用 Aether。")
-            AgentModeAuthorizationIssue.Disabled -> tr(strings, "Save Agent Mode settings, then refresh Shizuku status.", "保存 Agent 模式设置后，再刷新 Shizuku 状态。")
+            AgentModeAuthorizationIssue.Ready -> stringResource(R.string.settings_shizuku_authorized)
+            AgentModeAuthorizationIssue.ShizukuNotInstalled -> stringResource(R.string.settings_shizuku_install_first)
+            AgentModeAuthorizationIssue.ShizukuNotRunning -> stringResource(R.string.settings_shizuku_start_first)
+            AgentModeAuthorizationIssue.ShizukuPermissionMissing -> stringResource(R.string.settings_shizuku_grant_permission)
+            AgentModeAuthorizationIssue.ShizukuPermissionDenied -> stringResource(R.string.settings_shizuku_permission_denied)
+            AgentModeAuthorizationIssue.Disabled -> stringResource(R.string.settings_shizuku_save_then_refresh)
             AgentModeAuthorizationIssue.RootUnavailable,
             AgentModeAuthorizationIssue.RootPermissionMissing,
             AgentModeAuthorizationIssue.RootPermissionDenied -> state.detail.ifBlank {
-                tr(strings, "Switch to Root mode to inspect Root status.", "Switch to Root mode to inspect Root status.")
+                stringResource(R.string.settings_switch_to_root_to_inspect)
             }
             AgentModeAuthorizationIssue.Error -> state.detail.ifBlank {
-                tr(strings, "Unable to inspect Shizuku status.", "无法检查 Shizuku 状态。")
+                stringResource(R.string.settings_shizuku_inspect_failed)
             }
         }
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
-            text = tr(strings, "Authorization status", "授权状态"),
+            text = stringResource(R.string.settings_authorization_status),
             style = MaterialTheme.typography.labelLarge,
             color = AetherOnSurface,
         )
@@ -3929,7 +3932,7 @@ private fun AgentModeAuthorizationNotice(
 
             state.issue == AgentModeAuthorizationIssue.ShizukuNotInstalled -> {
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Install Shizuku", "安装 Shizuku"),
+                    label = stringResource(R.string.settings_install_shizuku),
                     onClick = onInstallShizuku,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -3937,7 +3940,7 @@ private fun AgentModeAuthorizationNotice(
 
             state.issue == AgentModeAuthorizationIssue.ShizukuNotRunning -> {
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Open Shizuku", "打开 Shizuku"),
+                    label = stringResource(R.string.settings_open_shizuku),
                     onClick = onOpenShizuku,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -3946,7 +3949,7 @@ private fun AgentModeAuthorizationNotice(
             state.issue == AgentModeAuthorizationIssue.ShizukuPermissionMissing ||
                 state.issue == AgentModeAuthorizationIssue.ShizukuPermissionDenied -> {
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Grant access", "授予权限"),
+                    label = stringResource(R.string.settings_grant_access),
                     onClick = onRequestShizukuPermission,
                     modifier = Modifier.fillMaxWidth(),
                 )
