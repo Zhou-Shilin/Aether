@@ -1,5 +1,8 @@
 ﻿package com.zhousl.aether.ui
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -16,6 +19,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +31,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -39,7 +44,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForwardIos
@@ -88,22 +96,46 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.zhousl.aether.BuildConfig
 import com.zhousl.aether.R
@@ -120,7 +152,9 @@ import com.zhousl.aether.data.AppLanguage
 import com.zhousl.aether.data.AppThemeMode
 import com.zhousl.aether.data.LlmProvider
 import com.zhousl.aether.data.LlmProviderConfig
+import com.zhousl.aether.data.LocalRuntimeId
 import com.zhousl.aether.data.McpServerTestOperation
+import com.zhousl.aether.data.PackageProfileState
 import com.zhousl.aether.data.ProviderModelOption
 import com.zhousl.aether.data.RootSetupIssue
 import com.zhousl.aether.data.RootSetupState
@@ -138,6 +172,8 @@ import com.zhousl.aether.data.normalizeLlmInactivityReconnectTimeoutSeconds
 import com.zhousl.aether.data.normalizeTavilyBaseUrl
 import com.zhousl.aether.data.quickActionLabel
 import com.zhousl.aether.data.resolveAutomaticModelKey
+import com.zhousl.aether.runtime.LocalRuntimeIssue
+import com.zhousl.aether.runtime.LocalRuntimeSetupState
 import com.zhousl.aether.termux.TermuxSetupState
 import com.zhousl.aether.ui.theme.AetherBackground
 import com.zhousl.aether.ui.theme.AetherOnSurface
@@ -177,6 +213,9 @@ private enum class SettingsPage {
     AddScheduledTask,
     EditScheduledTask,
     Termux,
+    Alpine,
+    AlpineTerminal,
+    RuntimeDefaults,
     AgentMode,
     RootSetupProgress,
     Developer,
@@ -196,6 +235,9 @@ private fun SettingsPage.depth(): Int = when (this) {
     SettingsPage.McpServers,
     SettingsPage.ScheduledTasks,
     SettingsPage.Termux,
+    SettingsPage.Alpine,
+    SettingsPage.AlpineTerminal,
+    SettingsPage.RuntimeDefaults,
     SettingsPage.AgentMode,
     SettingsPage.Developer,
     SettingsPage.About -> 1
@@ -327,6 +369,11 @@ fun SettingsScreen(
     providerConfigs: List<LlmProviderConfig>,
     scheduledTasks: List<ScheduledTask>,
     termuxSetupState: TermuxSetupState,
+    alpineSetupState: LocalRuntimeSetupState,
+    enabledRuntimeIds: Set<LocalRuntimeId>,
+    defaultRuntimeId: LocalRuntimeId?,
+    alpinePackageProfiles: Map<String, PackageProfileState>,
+    alpineTerminal: AlpineTerminalUiState,
     developerTermuxReadyOverride: Boolean?,
     installedSkills: List<com.zhousl.aether.data.InstalledSkill>,
     mcpServers: List<com.zhousl.aether.data.McpServerConfig>,
@@ -367,7 +414,7 @@ fun SettingsScreen(
     onToggleSkillEnabled: (String, Boolean) -> Unit,
     onRemoveSkill: (String) -> Unit,
     onSaveHttpMcpServer: (String?, String, String, String) -> Unit,
-    onSaveStdIoMcpServer: (String?, String, String, String, String, String) -> Unit,
+    onSaveStdIoMcpServer: (String?, String, String, String, String, String, LocalRuntimeId?) -> Unit,
     onToggleMcpServerEnabled: (String, Boolean) -> Unit,
     onRemoveMcpServer: (String) -> Unit,
     onTestMcpServer: (String, McpServerTestOperation, (String) -> Unit) -> Unit,
@@ -383,6 +430,16 @@ fun SettingsScreen(
     onOpenTermux: () -> Unit,
     onInstallTermux: () -> Unit,
     onRefreshTermuxSetup: () -> Unit,
+    onInitializeAlpineRuntime: () -> Unit,
+    onResetAlpineRuntime: () -> Unit,
+    onRefreshAlpineSetup: () -> Unit,
+    onInstallAlpinePackageProfile: (String) -> Unit,
+    onOpenAlpineTerminal: () -> Unit,
+    onCloseAlpineTerminal: () -> Unit,
+    onSendAlpineTerminalControl: (String) -> Unit,
+    onResizeAlpineTerminal: (Int, Int) -> Unit,
+    onClearAlpineTerminalOutput: () -> Unit,
+    onSetDefaultRuntime: (LocalRuntimeId) -> Unit,
     onRefreshRootSetup: () -> Unit,
     onStartRootSetupFromSettings: (RootSetupProgressReturnPage) -> Unit,
     onDismissRootSetupProgress: () -> Unit,
@@ -598,6 +655,7 @@ fun SettingsScreen(
         SettingsPage.AddSkill -> SettingsPage.Skills
         SettingsPage.AddMcpServer, SettingsPage.EditMcpServer -> SettingsPage.McpServers
         SettingsPage.AddScheduledTask, SettingsPage.EditScheduledTask -> SettingsPage.ScheduledTasks
+        SettingsPage.AlpineTerminal -> SettingsPage.Alpine
         SettingsPage.RootSetupProgress -> rootSetupReturnPageValue()
         else -> SettingsPage.Hub
     }
@@ -661,6 +719,9 @@ fun SettingsScreen(
                     )
                 },
                 termuxReady = termuxSetupState.isReady,
+                alpineReady = alpineSetupState.isReady,
+                defaultRuntimeId = defaultRuntimeId,
+                showRuntimeDefaults = termuxSetupState.isReady && alpineSetupState.isReady,
                 skillCount = installedSkills.size,
                 mcpServerCount = mcpServers.size,
                 scheduledTaskCount = scheduledTasks.size,
@@ -883,8 +944,8 @@ fun SettingsScreen(
                     onSaveHttpMcpServer(serverId, name, url, headers)
                     currentPage = SettingsPage.McpServers.name
                 },
-                onSaveStdIoMcpServer = { serverId, name, cmd, args, wd, env ->
-                    onSaveStdIoMcpServer(serverId, name, cmd, args, wd, env)
+                onSaveStdIoMcpServer = { serverId, name, cmd, args, wd, env, runtimeEnvironment ->
+                    onSaveStdIoMcpServer(serverId, name, cmd, args, wd, env, runtimeEnvironment)
                     currentPage = SettingsPage.McpServers.name
                 },
                 onBack = { currentPage = SettingsPage.McpServers.name },
@@ -897,8 +958,8 @@ fun SettingsScreen(
                     onSaveHttpMcpServer(serverId, name, url, headers)
                     currentPage = SettingsPage.McpServers.name
                 },
-                onSaveStdIoMcpServer = { serverId, name, cmd, args, wd, env ->
-                    onSaveStdIoMcpServer(serverId, name, cmd, args, wd, env)
+                onSaveStdIoMcpServer = { serverId, name, cmd, args, wd, env, runtimeEnvironment ->
+                    onSaveStdIoMcpServer(serverId, name, cmd, args, wd, env, runtimeEnvironment)
                     currentPage = SettingsPage.McpServers.name
                 },
                 onBack = { currentPage = SettingsPage.McpServers.name },
@@ -952,6 +1013,48 @@ fun SettingsScreen(
                 onRefreshTermuxSetup = onRefreshTermuxSetup,
                 onRefreshRootSetup = onRefreshRootSetup,
                 onConfigureWithRoot = { openRootSetupProgress(SettingsPage.Termux) },
+                onBack = { currentPage = SettingsPage.Hub.name },
+            )
+
+            SettingsPage.Alpine -> AlpineSettingsPage(
+                title = "Alpine",
+                setupState = alpineSetupState,
+                packageProfiles = alpinePackageProfiles,
+                isDefaultRuntime = defaultRuntimeId == LocalRuntimeId.Alpine,
+                onInitialize = onInitializeAlpineRuntime,
+                onReset = onResetAlpineRuntime,
+                onRefresh = onRefreshAlpineSetup,
+                onInstallPackageProfile = { profileId ->
+                    currentPage = SettingsPage.AlpineTerminal.name
+                    onOpenAlpineTerminal()
+                    onInstallAlpinePackageProfile(profileId)
+                },
+                onOpenTerminal = {
+                    currentPage = SettingsPage.AlpineTerminal.name
+                    onOpenAlpineTerminal()
+                },
+                onSetDefault = { onSetDefaultRuntime(LocalRuntimeId.Alpine) },
+                onBack = { currentPage = SettingsPage.Hub.name },
+            )
+
+            SettingsPage.AlpineTerminal -> AlpineTerminalPage(
+                terminal = alpineTerminal,
+                onSendControl = onSendAlpineTerminalControl,
+                onResize = onResizeAlpineTerminal,
+                onClear = onClearAlpineTerminalOutput,
+                onBack = {
+                    onCloseAlpineTerminal()
+                    currentPage = SettingsPage.Alpine.name
+                },
+            )
+
+            SettingsPage.RuntimeDefaults -> RuntimeDefaultsPage(
+                title = tr(strings, "Runtime Defaults", "运行环境默认值"),
+                termuxReady = termuxSetupState.isReady,
+                alpineReady = alpineSetupState.isReady,
+                enabledRuntimeIds = enabledRuntimeIds,
+                defaultRuntimeId = defaultRuntimeId,
+                onSetDefaultRuntime = onSetDefaultRuntime,
                 onBack = { currentPage = SettingsPage.Hub.name },
             )
 
@@ -1030,6 +1133,9 @@ private fun SettingsHub(
     tavilyConfigured: Boolean,
     reliabilitySummary: String,
     termuxReady: Boolean,
+    alpineReady: Boolean,
+    defaultRuntimeId: LocalRuntimeId?,
+    showRuntimeDefaults: Boolean,
     skillCount: Int,
     mcpServerCount: Int,
     scheduledTaskCount: Int,
@@ -1146,6 +1252,27 @@ private fun SettingsHub(
                     subtitle = if (termuxReady) strings.connected else strings.setupRequired,
                     onClick = { onNavigate(SettingsPage.Termux) },
                 )
+                CardDivider()
+                SettingsNavRow(
+                    icon = Icons.Rounded.Code,
+                    title = "Alpine",
+                    subtitle = if (alpineReady) {
+                        tr(strings, "Built-in Linux VM ready", "内置 Linux 虚拟机已就绪")
+                    } else {
+                        tr(strings, "Built-in Linux VM setup", "内置 Linux 虚拟机配置")
+                    },
+                    onClick = { onNavigate(SettingsPage.Alpine) },
+                )
+                if (showRuntimeDefaults) {
+                    CardDivider()
+                    SettingsNavRow(
+                        icon = Icons.Rounded.Check,
+                        title = tr(strings, "Runtime Defaults", "运行环境默认值"),
+                        subtitle = defaultRuntimeId?.displayName
+                            ?: tr(strings, "Choose the default local runtime", "选择默认本地运行环境"),
+                        onClick = { onNavigate(SettingsPage.RuntimeDefaults) },
+                    )
+                }
                 CardDivider()
                 SettingsNavRow(
                     icon = LucideIcons.MousePointer2,
@@ -2839,7 +2966,7 @@ private fun AddMcpServerPage(
     title: String,
     existingServer: com.zhousl.aether.data.McpServerConfig?,
     onSaveHttpMcpServer: (String?, String, String, String) -> Unit,
-    onSaveStdIoMcpServer: (String?, String, String, String, String, String) -> Unit,
+    onSaveStdIoMcpServer: (String?, String, String, String, String, String, LocalRuntimeId?) -> Unit,
     onBack: () -> Unit,
 ) {
     val strings = rememberAetherStrings()
@@ -2886,6 +3013,9 @@ private fun AddMcpServerPage(
                     .orEmpty()
             )
         )
+    }
+    var stdioRuntimeEnvironment by rememberSaveable(existingServer?.id) {
+        mutableStateOf(existingStdIoTransport?.runtimeEnvironment)
     }
 
     val tabOptions = listOf("HTTP", tr(strings, "Stdio", "标准输入输出"))
@@ -2980,6 +3110,43 @@ private fun AddMcpServerPage(
                     modifier = Modifier.padding(horizontal = 4.dp),
                 )
                 Spacer(Modifier.height(16.dp))
+                SettingsCardGroup {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = tr(strings, "Runtime environment", "运行环境"),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = AetherOnSurface,
+                        )
+                        Text(
+                            text = tr(
+                                strings,
+                                "Leave this as default to follow the user's runtime default.",
+                                "保持默认时，会跟随用户的默认运行环境。",
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AetherOnSurfaceVariant,
+                        )
+                        SettingsChoiceRow(
+                            title = tr(strings, "Default runtime", "默认运行环境"),
+                            subtitle = tr(strings, "Use Settings > Runtime Defaults.", "使用 设置 > 运行环境默认值。"),
+                            selected = stdioRuntimeEnvironment == null,
+                            onClick = { stdioRuntimeEnvironment = null },
+                        )
+                        SettingsChoiceRow(
+                            title = "Termux",
+                            subtitle = tr(strings, "Run this stdio server through Termux.", "通过 Termux 运行这个 stdio server。"),
+                            selected = stdioRuntimeEnvironment == LocalRuntimeId.Termux,
+                            onClick = { stdioRuntimeEnvironment = LocalRuntimeId.Termux },
+                        )
+                        SettingsChoiceRow(
+                            title = "Alpine",
+                            subtitle = tr(strings, "Run this stdio server inside Alpine.", "在 Alpine 中运行这个 stdio server。"),
+                            selected = stdioRuntimeEnvironment == LocalRuntimeId.Alpine,
+                            onClick = { stdioRuntimeEnvironment = LocalRuntimeId.Alpine },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
                 SettingsActionButton(
                     label = if (isEditing) tr(strings, "Save Stdio Server", "Save Stdio Server") else tr(strings, "Add Stdio Server", "Add Stdio Server"),
                     onClick = {
@@ -2991,6 +3158,7 @@ private fun AddMcpServerPage(
                                 stdioArgumentsValue.text,
                                 stdioWorkingDirectoryValue.text,
                                 stdioEnvValue.text,
+                                stdioRuntimeEnvironment,
                             )
                         }
                     },
@@ -3157,6 +3325,2002 @@ private fun TermuxLiveOutputSettingsSection(
             )
         }
     }
+}
+
+@Composable
+private fun AlpineSettingsPage(
+    title: String,
+    setupState: LocalRuntimeSetupState,
+    packageProfiles: Map<String, PackageProfileState>,
+    isDefaultRuntime: Boolean,
+    onInitialize: () -> Unit,
+    onReset: () -> Unit,
+    onRefresh: () -> Unit,
+    onInstallPackageProfile: (String) -> Unit,
+    onOpenTerminal: () -> Unit,
+    onSetDefault: () -> Unit,
+    onBack: () -> Unit,
+) {
+    val strings = rememberAetherStrings()
+    LaunchedEffect(Unit) {
+        onRefresh()
+    }
+    SubPageScaffold(
+        title = title,
+        onBack = onBack,
+        trailingIcon = Icons.Rounded.Terminal,
+        trailingEnabled = setupState.isReady,
+        trailingContentDescription = tr(strings, "Open Alpine terminal", "打开 Alpine 终端"),
+        onTrailingAction = onOpenTerminal,
+    ) {
+        Text(
+            text = tr(
+                strings,
+                "Aether's built-in Linux environment is app-private and independent from Termux. Use it for shell scripts, development tools, and stdio MCP servers that do not need Android-side control.",
+                "Aether 的内置 Linux 环境位于应用私有目录，和 Termux 相互独立。它适合 shell 脚本、开发工具，以及不需要操作手机侧能力的 stdio MCP。",
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = AetherOnSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp),
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        SettingsCardGroup {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = tr(strings, "Runtime status", "运行环境状态"),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = AetherOnSurface,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = alpineSetupStatusText(setupState, strings),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AetherOnSurfaceVariant,
+                )
+                if (setupState.detail.isNotBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = setupState.detail,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AetherOnSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.height(14.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SettingsActionButton(
+                        label = when (setupState.issue) {
+                            LocalRuntimeIssue.Ready -> tr(strings, "Ready", "已就绪")
+                            else -> tr(strings, "Initialize", "初始化")
+                        },
+                        onClick = onInitialize,
+                        modifier = Modifier.weight(1f),
+                        enabled = !setupState.isReady,
+                    )
+                    SettingsSubtleActionButton(
+                        label = strings.refresh,
+                        onClick = onRefresh,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                SettingsSubtleActionButton(
+                    label = tr(strings, "Reset Alpine data", "重置 Alpine 数据"),
+                    onClick = onReset,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (setupState.isReady && !isDefaultRuntime) {
+                    Spacer(Modifier.height(10.dp))
+                    SettingsActionButton(
+                        label = tr(strings, "Use as default runtime", "设为默认运行环境"),
+                        onClick = onSetDefault,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        SettingsCardGroup {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = tr(strings, "Environment presets", "快捷环境配置"),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = AetherOnSurface,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = tr(
+                        strings,
+                        "Install only the toolchains you need. Each preset can be installed and tracked independently.",
+                        "按需安装工具链。每个预设都可以独立安装和跟踪状态。",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AetherOnSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                AlpineProfileRow(
+                    title = tr(strings, "Python environment", "Python 环境"),
+                    subtitle = "python3, pip, virtualenv",
+                    profileState = packageProfiles["python"],
+                    enabled = setupState.isReady,
+                    onInstall = { onInstallPackageProfile("python") },
+                )
+                CardDivider()
+                AlpineProfileRow(
+                    title = tr(strings, "Node.js/npm environment", "Node.js/npm 环境"),
+                    subtitle = "nodejs, npm",
+                    profileState = packageProfiles["node"],
+                    enabled = setupState.isReady,
+                    onInstall = { onInstallPackageProfile("node") },
+                )
+                CardDivider()
+                AlpineProfileRow(
+                    title = tr(strings, "Git and ripgrep tools", "Git 与 ripgrep 工具"),
+                    subtitle = "git, ripgrep",
+                    profileState = packageProfiles["git_search"],
+                    enabled = setupState.isReady,
+                    onInstall = { onInstallPackageProfile("git_search") },
+                )
+                CardDivider()
+                AlpineProfileRow(
+                    title = tr(strings, "SSH tools", "SSH 工具"),
+                    subtitle = "openssh-client",
+                    profileState = packageProfiles["ssh"],
+                    enabled = setupState.isReady,
+                    onInstall = { onInstallPackageProfile("ssh") },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AlpineProfileRow(
+    title: String,
+    subtitle: String,
+    profileState: PackageProfileState?,
+    enabled: Boolean,
+    onInstall: () -> Unit,
+) {
+    val strings = rememberAetherStrings()
+    val isInstalling = profileState?.lastError == "Installing..."
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium, color = AetherOnSurface)
+            Spacer(Modifier.height(2.dp))
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = AetherOnSurfaceVariant)
+            if (!profileState?.lastError.isNullOrBlank() && !isInstalling) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = profileState.lastError,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AetherOnSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        SettingsSubtleActionButton(
+            label = when {
+                isInstalling -> tr(strings, "Installing", "安装中")
+                profileState?.installed == true -> tr(strings, "Installed", "已安装")
+                else -> strings.install
+            },
+            onClick = onInstall,
+            enabled = enabled && profileState?.installed != true && !isInstalling,
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun AlpineTerminalPage(
+    terminal: AlpineTerminalUiState,
+    onSendControl: (String) -> Unit,
+    onResize: (Int, Int) -> Unit,
+    onClear: () -> Unit,
+    onBack: () -> Unit,
+) {
+    val scrollState = rememberScrollState()
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    var terminalFontSizeSp by rememberSaveable { mutableIntStateOf(DefaultTerminalFontSizeSp) }
+    val fontSize = terminalFontSizeSp.sp
+    val lineHeight = (terminalFontSizeSp + 5).sp
+    val terminalStyle = androidx.compose.ui.text.TextStyle(
+        color = Color(0xFFD7FFD9),
+        fontSize = fontSize,
+        lineHeight = lineHeight,
+        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+    )
+    val terminalContentPaddingPx = with(density) { 12.dp.toPx() }
+    val approximateCharacterWidthPx = with(density) { (fontSize.value * 0.62f).sp.toPx().coerceAtLeast(1f) }
+    val approximateLineHeightPx = with(density) { lineHeight.toPx().coerceAtLeast(1f) }
+    var measuredCharacterWidthPx by remember { mutableStateOf(0f) }
+    var measuredLineHeightPx by remember { mutableStateOf(0f) }
+    val characterWidthPx = measuredCharacterWidthPx.takeIf { it > 0f } ?: approximateCharacterWidthPx
+    val lineHeightPx = measuredLineHeightPx.takeIf { it > 0f } ?: approximateLineHeightPx
+    var terminalTextLayoutResult by remember {
+        mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null)
+    }
+    var terminalViewportSize by remember { mutableStateOf<androidx.compose.ui.unit.IntSize?>(null) }
+    var imeCaptureValue by remember {
+        mutableStateOf(terminalImeFieldValue())
+    }
+    var ctrlDown by rememberSaveable { mutableStateOf(false) }
+    var altDown by rememberSaveable { mutableStateOf(false) }
+    var fnDown by rememberSaveable { mutableStateOf(false) }
+    var contextMenuExpanded by remember { mutableStateOf(false) }
+    var urlSelectionExpanded by remember { mutableStateOf(false) }
+    var textSelectionExpanded by remember { mutableStateOf(false) }
+    var inlineSelectionMode by rememberSaveable { mutableStateOf(false) }
+    var mouseDownCell by remember { mutableStateOf<TerminalMouseCell?>(null) }
+    var transcriptTapCell by remember { mutableStateOf<TerminalTextCell?>(null) }
+    var followTerminalOutput by rememberSaveable { mutableStateOf(true) }
+    val terminalPrefixText = buildString {
+        if (terminal.isStarting) append("[Aether] Starting Alpine terminal...\n")
+        if (terminal.error.isNotBlank()) append("[Aether] ${terminal.error}\n")
+    }
+    val terminalOutputDisplayText = terminal.styledOutput.text.ifEmpty { "aether-alpine:/root# " }
+    val terminalDisplayText = buildString {
+        append(terminalPrefixText)
+        append(terminalOutputDisplayText)
+    }
+    val terminalDisplayStyledText = remember(
+        terminalPrefixText,
+        terminalOutputDisplayText,
+        terminal.styledOutput,
+    ) {
+        buildTerminalAnnotatedOutput(
+            prefix = terminalPrefixText,
+            styledOutput = terminal.styledOutput,
+            fallbackOutput = terminalOutputDisplayText,
+        )
+    }
+    val terminalPrefixLineCount = terminalPrefixText.count { it == '\n' }
+    val terminalCursorVisualPosition = terminalTextLayoutResult?.let { layoutResult ->
+        terminalCursorVisualPosition(
+            layoutResult = layoutResult,
+            text = terminalDisplayStyledText.text,
+            row = terminalPrefixLineCount + terminal.cursorRow,
+            column = terminal.cursorColumn,
+            characterWidthPx = characterWidthPx,
+        )
+    }
+    val terminalUrls = remember(terminal.output) {
+        extractTerminalUrls(terminal.output).asReversed()
+    }
+    LaunchedEffect(terminal.output, followTerminalOutput) {
+        if (followTerminalOutput) {
+            scrollState.animateScrollTo(scrollState.maxValue)
+        }
+    }
+    LaunchedEffect(scrollState.value, scrollState.maxValue) {
+        followTerminalOutput = shouldFollowTerminalOutput(scrollState.value, scrollState.maxValue)
+    }
+    LaunchedEffect(Unit) {
+        delay(250)
+        focusRequester.requestFocus()
+    }
+    LaunchedEffect(terminalViewportSize, characterWidthPx, lineHeightPx) {
+        terminalViewportSize?.let { size ->
+            val columns = ((size.width - terminalContentPaddingPx * 2) / characterWidthPx)
+                .toInt()
+                .coerceAtLeast(20)
+            val rows = ((size.height - terminalContentPaddingPx * 2) / lineHeightPx)
+                .toInt()
+                .coerceAtLeast(6)
+            onResize(rows, columns)
+        }
+    }
+    BackHandler {
+        if (inlineSelectionMode) {
+            inlineSelectionMode = false
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        } else {
+            onBack()
+        }
+    }
+    fun focusTerminal() {
+        focusRequester.requestFocus()
+        keyboardController?.show()
+    }
+    fun sendText(text: String) {
+        if (text.isEmpty()) return
+        onSendControl(
+            buildTerminalInputSequence(
+                text = text.replace("\n", "\r"),
+                ctrlDown = ctrlDown,
+                altDown = altDown,
+                fnDown = fnDown,
+            )
+        )
+        ctrlDown = false
+        altDown = false
+        fnDown = false
+    }
+    fun sendImeInput(sequence: String) {
+        if (sequence.isEmpty()) return
+        if (sequence == TerminalBackspaceSequence) {
+            onSendControl(sequence)
+        } else {
+            sendText(sequence)
+        }
+    }
+    fun pasteClipboard() {
+        clipboardManager.getText()?.text?.takeIf(String::isNotEmpty)?.let { text ->
+            if (terminal.bracketedPasteEnabled) {
+                onSendControl(buildTerminalPasteSequence(text, bracketedPasteEnabled = true))
+            } else {
+                sendText(text)
+            }
+        }
+        focusTerminal()
+    }
+    fun copyOutput() {
+        terminal.output.takeIf(String::isNotBlank)?.let { output ->
+            clipboardManager.setText(AnnotatedString(output))
+        }
+        focusTerminal()
+    }
+    fun copyTerminalUrl(url: String) {
+        clipboardManager.setText(AnnotatedString(url))
+        Toast.makeText(context, "URL copied", Toast.LENGTH_SHORT).show()
+        focusTerminal()
+    }
+    fun openTerminalUrl(url: String) {
+        openExternalTerminalUrl(context, url)
+        focusTerminal()
+    }
+    fun showUrlSelection() {
+        if (terminalUrls.isNotEmpty()) {
+            urlSelectionExpanded = true
+        } else {
+            Toast.makeText(context, "No URLs found", Toast.LENGTH_SHORT).show()
+            focusTerminal()
+        }
+    }
+    fun showTextSelection() {
+        if (terminal.output.isNotBlank()) {
+            textSelectionExpanded = true
+        } else {
+            Toast.makeText(context, "No output to select", Toast.LENGTH_SHORT).show()
+            focusTerminal()
+        }
+    }
+    fun enterInlineSelectionMode() {
+        if (terminalDisplayText.isNotBlank()) {
+            inlineSelectionMode = true
+            keyboardController?.hide()
+        }
+    }
+    fun handleTerminalLongClick() {
+        val cell = transcriptTapCell
+        if (cell != null &&
+            isTerminalTextCellOccupied(
+                text = terminalDisplayText,
+                column = cell.column,
+                row = cell.row,
+            )
+        ) {
+            enterInlineSelectionMode()
+        } else {
+            contextMenuExpanded = true
+            keyboardController?.hide()
+        }
+    }
+    fun updateTerminalTextMetrics(layoutResult: androidx.compose.ui.text.TextLayoutResult) {
+        terminalTextLayoutResult = layoutResult
+        val sampleOffset = terminalDisplayStyledText.text.indexOfFirst { char ->
+            char != '\n' && char.code in 33..126
+        }.takeIf { it >= 0 } ?: terminalDisplayStyledText.text.indexOfFirst { it != '\n' }
+        if (sampleOffset >= 0 && sampleOffset < terminalDisplayStyledText.text.length) {
+            val nextOffset = (sampleOffset + 1).coerceAtMost(terminalDisplayStyledText.text.length)
+            val width = if (nextOffset > sampleOffset) {
+                layoutResult.getCursorRect(nextOffset).left - layoutResult.getCursorRect(sampleOffset).left
+            } else {
+                0f
+            }.takeIf { it > 0f } ?: layoutResult.getBoundingBox(sampleOffset).width
+            if (width > 0f) measuredCharacterWidthPx = width
+        }
+        if (layoutResult.lineCount > 0) {
+            val height = layoutResult.getLineBottom(0) - layoutResult.getLineTop(0)
+            if (height > 0f) measuredLineHeightPx = height
+        }
+    }
+    fun changeTerminalFontSize(increase: Boolean) {
+        terminalFontSizeSp = nextTerminalFontSize(
+            current = terminalFontSizeSp,
+            increase = increase,
+        )
+        focusTerminal()
+    }
+    fun sendShortcut(shortcut: TerminalShortcut) {
+        when (shortcut.toggle) {
+            TerminalModifier.Ctrl -> ctrlDown = !ctrlDown
+            TerminalModifier.Alt -> altDown = !altDown
+            TerminalModifier.Fn -> fnDown = !fnDown
+            null -> Unit
+        }
+        shortcut.resolveSequence(terminal.applicationCursorKeysEnabled)?.let { sequence ->
+            onSendControl(sequence)
+            ctrlDown = false
+            altDown = false
+            fnDown = false
+        }
+        focusTerminal()
+    }
+    fun terminalMouseCell(
+        x: Float,
+        y: Float,
+    ): TerminalMouseCell {
+        val column = ((x - terminalContentPaddingPx) / characterWidthPx).toInt().coerceIn(0, terminal.columns - 1)
+        val row = ((y - terminalContentPaddingPx) / lineHeightPx).toInt().coerceIn(0, terminal.rows - 1)
+        return TerminalMouseCell(column = column, row = row)
+    }
+    fun terminalTextCell(
+        x: Float,
+        y: Float,
+    ): TerminalTextCell {
+        val column = ((x - terminalContentPaddingPx) / characterWidthPx)
+            .toInt()
+            .coerceAtLeast(0)
+        val row = ((y - terminalContentPaddingPx + scrollState.value) / lineHeightPx)
+            .toInt()
+            .coerceAtLeast(0)
+        return TerminalTextCell(column = column, row = row)
+    }
+    fun sendMouseEvent(
+        cell: TerminalMouseCell,
+        event: TerminalMouseEvent,
+    ) {
+        if (terminal.mouseTrackingMode == TerminalMouseTrackingMode.None) return
+        buildTerminalMouseSequence(
+            event = event,
+            column = cell.column,
+            row = cell.row,
+            protocol = terminal.mouseProtocol,
+        )?.let(onSendControl)
+    }
+    fun sendScrollRows(
+        rowsDown: Int,
+        cell: TerminalMouseCell,
+    ) {
+        if (rowsDown == 0) return
+        val up = rowsDown < 0
+        repeat(kotlin.math.abs(rowsDown).coerceAtMost(24)) {
+            if (terminal.mouseTrackingMode != TerminalMouseTrackingMode.None) {
+                sendMouseEvent(
+                    cell = cell,
+                    event = if (up) TerminalMouseEvent.WheelUp else TerminalMouseEvent.WheelDown,
+                )
+            } else if (terminal.alternateScreenEnabled) {
+                onSendControl(if (up) "\u001B[A" else "\u001B[B")
+            }
+        }
+    }
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = Color.Black,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .background(Color.Black)
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .imePadding(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TerminalIconButton(
+                    icon = Icons.AutoMirrored.Rounded.ArrowBack,
+                    contentDescription = "Back",
+                    onClick = onBack,
+                )
+                Text(
+                    text = terminal.title.ifBlank { "Alpine" },
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color(0xFFE8F5E9),
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                TerminalTextButton(label = "Clear", onClick = onClear)
+            }
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF050505))
+                    .then(
+                        if (inlineSelectionMode) {
+                            Modifier
+                        } else {
+                            Modifier.combinedClickable(
+                                onClick = ::focusTerminal,
+                                onLongClick = ::handleTerminalLongClick,
+                            )
+                        }
+                    )
+                    .pointerInput(
+                        terminal.mouseTrackingMode,
+                        terminal.mouseProtocol,
+                        terminal.alternateScreenEnabled,
+                        terminal.rows,
+                        terminal.columns,
+                        terminalDisplayText,
+                        scrollState.value,
+                        inlineSelectionMode,
+                    ) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Main)
+                                if (inlineSelectionMode) continue
+                                val change = event.changes.firstOrNull() ?: continue
+                                val cell = terminalMouseCell(change.position.x, change.position.y)
+                                when (event.type) {
+                                    PointerEventType.Press -> {
+                                        focusTerminal()
+                                        if (terminal.mouseTrackingMode != TerminalMouseTrackingMode.None) {
+                                            mouseDownCell = cell
+                                            sendMouseEvent(cell, TerminalMouseEvent.PrimaryDown)
+                                            change.consume()
+                                        } else {
+                                            transcriptTapCell = terminalTextCell(change.position.x, change.position.y)
+                                        }
+                                    }
+                                    PointerEventType.Move -> {
+                                        if (terminal.mouseTrackingMode != TerminalMouseTrackingMode.None &&
+                                            terminal.mouseTrackingMode != TerminalMouseTrackingMode.Click &&
+                                            change.pressed
+                                        ) {
+                                            if (cell != mouseDownCell ||
+                                                terminal.mouseTrackingMode == TerminalMouseTrackingMode.Any
+                                            ) {
+                                                mouseDownCell = cell
+                                                sendMouseEvent(cell, TerminalMouseEvent.PrimaryDrag)
+                                                change.consume()
+                                            }
+                                        } else if (change.pressed &&
+                                            terminalTextCell(change.position.x, change.position.y) != transcriptTapCell
+                                        ) {
+                                            transcriptTapCell = null
+                                        }
+                                    }
+                                    PointerEventType.Release -> {
+                                        if (terminal.mouseTrackingMode != TerminalMouseTrackingMode.None) {
+                                            sendMouseEvent(cell, TerminalMouseEvent.PrimaryUp)
+                                            change.consume()
+                                        } else {
+                                            val tapCell = transcriptTapCell
+                                            val releaseCell = terminalTextCell(change.position.x, change.position.y)
+                                            if (tapCell != null && tapCell == releaseCell) {
+                                                findTerminalUrlAtCell(
+                                                    text = terminalDisplayText,
+                                                    column = tapCell.column,
+                                                    row = tapCell.row,
+                                                )?.let { url ->
+                                                    openTerminalUrl(url)
+                                                    change.consume()
+                                                }
+                                            }
+                                        }
+                                        mouseDownCell = null
+                                        transcriptTapCell = null
+                                    }
+                                    PointerEventType.Scroll -> {
+                                        transcriptTapCell = null
+                                        val rowsDown = event.changes.sumOf { it.scrollDelta.y.toDouble() }
+                                            .toInt()
+                                            .coerceIn(-6, 6)
+                                        if (terminal.mouseTrackingMode != TerminalMouseTrackingMode.None ||
+                                            terminal.alternateScreenEnabled
+                                        ) {
+                                            sendScrollRows(rowsDown, cell)
+                                            change.consume()
+                                        } else {
+                                            focusRequester.requestFocus()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .onPreviewKeyEvent { event ->
+                        handleTerminalKeyEvent(
+                            event = event,
+                            ctrlDown = ctrlDown,
+                            altDown = altDown,
+                            fnDown = fnDown,
+                            applicationCursorKeysEnabled = terminal.applicationCursorKeysEnabled,
+                            applicationKeypadEnabled = terminal.applicationKeypadEnabled,
+                            onSendControl = onSendControl,
+                            onPaste = ::pasteClipboard,
+                            onShowUrls = ::showUrlSelection,
+                            onChangeFontSize = ::changeTerminalFontSize,
+                            onToggleKeyboard = ::focusTerminal,
+                            onToggleCtrl = { ctrlDown = !ctrlDown },
+                            onToggleAlt = { altDown = !altDown },
+                            onToggleFn = { fnDown = !fnDown },
+                        )
+                    }
+                    .onFocusChanged { focusState ->
+                        if (terminal.focusEventsEnabled) {
+                            onSendControl(if (focusState.hasFocus) "\u001B[I" else "\u001B[O")
+                        }
+                    }
+                    .onSizeChanged { size -> terminalViewportSize = size },
+            ) {
+                if (inlineSelectionMode) {
+                    SelectionContainer(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(scrollState)
+                            .padding(12.dp),
+                    ) {
+                        Text(
+                            text = terminalDisplayStyledText,
+                            style = terminalStyle,
+                            onTextLayout = ::updateTerminalTextMetrics,
+                        )
+                    }
+                } else {
+                    Text(
+                        text = terminalDisplayStyledText,
+                        style = terminalStyle,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(scrollState)
+                            .padding(12.dp),
+                        onTextLayout = ::updateTerminalTextMetrics,
+                    )
+                }
+                if (terminal.cursorVisible && !inlineSelectionMode) {
+                    val cursorLeftPx = terminalCursorVisualPosition?.x
+                        ?.let { terminalContentPaddingPx + it }
+                        ?: (terminalContentPaddingPx + terminal.cursorColumn * characterWidthPx)
+                    val cursorTopPx = terminalCursorVisualPosition?.y
+                        ?.let { terminalContentPaddingPx + it }
+                        ?: (terminalContentPaddingPx + terminal.cursorRow * lineHeightPx)
+                    val cursorWidth = when (terminal.cursorStyle) {
+                        TerminalCursorStyle.Block -> with(density) { characterWidthPx.toDp() }
+                        TerminalCursorStyle.Underline -> with(density) { characterWidthPx.toDp() }
+                        TerminalCursorStyle.Bar -> 2.dp
+                    }
+                    val cursorHeight = when (terminal.cursorStyle) {
+                        TerminalCursorStyle.Block -> with(density) { lineHeightPx.toDp() }
+                        TerminalCursorStyle.Underline -> 2.dp
+                        TerminalCursorStyle.Bar -> with(density) { lineHeightPx.toDp() }
+                    }
+                    val cursorYOffset = when (terminal.cursorStyle) {
+                        TerminalCursorStyle.Underline -> lineHeightPx - with(density) { cursorHeight.toPx() }
+                        else -> 0f
+                    }
+                    Box(
+                        modifier = Modifier
+                            .offset {
+                                androidx.compose.ui.unit.IntOffset(
+                                    x = cursorLeftPx.toInt(),
+                                    y = (cursorTopPx - scrollState.value + cursorYOffset).toInt(),
+                                )
+                            }
+                            .width(cursorWidth)
+                            .height(cursorHeight)
+                            .background(Color(0x55D7FFD9)),
+                    )
+                }
+                if (inlineSelectionMode) {
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xDD171717))
+                            .padding(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        TerminalTextButton(
+                            label = "Copy all",
+                            onClick = {
+                                copyOutput()
+                                inlineSelectionMode = false
+                            },
+                        )
+                        TerminalTextButton(
+                            label = "Done",
+                            onClick = {
+                                inlineSelectionMode = false
+                                focusTerminal()
+                            },
+                        )
+                    }
+                }
+                DropdownMenu(
+                    expanded = contextMenuExpanded,
+                    onDismissRequest = { contextMenuExpanded = false },
+                    modifier = Modifier.background(Color(0xFF171717)),
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Paste", color = Color(0xFFE8F5E9)) },
+                        onClick = {
+                            contextMenuExpanded = false
+                            pasteClipboard()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Copy output", color = Color(0xFFE8F5E9)) },
+                        onClick = {
+                            contextMenuExpanded = false
+                            copyOutput()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Select output", color = Color(0xFFE8F5E9)) },
+                        onClick = {
+                            contextMenuExpanded = false
+                            showTextSelection()
+                        },
+                    )
+                    if (terminalUrls.isNotEmpty()) {
+                        DropdownMenuItem(
+                            text = { Text("Open latest URL", color = Color(0xFFE8F5E9)) },
+                            onClick = {
+                                contextMenuExpanded = false
+                                openTerminalUrl(terminalUrls.first())
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Copy latest URL", color = Color(0xFFE8F5E9)) },
+                            onClick = {
+                                contextMenuExpanded = false
+                                copyTerminalUrl(terminalUrls.first())
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Select URL", color = Color(0xFFE8F5E9)) },
+                            onClick = {
+                                contextMenuExpanded = false
+                                showUrlSelection()
+                            },
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text("Clear", color = Color(0xFFE8F5E9)) },
+                        onClick = {
+                            contextMenuExpanded = false
+                            onClear()
+                            focusTerminal()
+                        },
+                    )
+                }
+                BasicTextField(
+                    value = imeCaptureValue,
+                    onValueChange = { value ->
+                        val sequence = terminalImeInputSequence(value.text)
+                        if (sequence.isNotEmpty()) {
+                            sendImeInput(sequence)
+                        }
+                        imeCaptureValue = terminalImeFieldValue()
+                    },
+                    modifier = Modifier
+                        .onPreviewKeyEvent { event ->
+                            handleTerminalKeyEvent(
+                                event = event,
+                                ctrlDown = ctrlDown,
+                                altDown = altDown,
+                                fnDown = fnDown,
+                                applicationCursorKeysEnabled = terminal.applicationCursorKeysEnabled,
+                                applicationKeypadEnabled = terminal.applicationKeypadEnabled,
+                                onSendControl = onSendControl,
+                                onPaste = ::pasteClipboard,
+                                onShowUrls = ::showUrlSelection,
+                                onChangeFontSize = ::changeTerminalFontSize,
+                                onToggleKeyboard = ::focusTerminal,
+                                onToggleCtrl = { ctrlDown = !ctrlDown },
+                                onToggleAlt = { altDown = !altDown },
+                                onToggleFn = { fnDown = !fnDown },
+                            )
+                        }
+                        .size(1.dp)
+                        .alpha(0f)
+                        .focusRequester(focusRequester)
+                        .align(Alignment.BottomStart),
+                    textStyle = androidx.compose.ui.text.TextStyle(color = Color.Transparent),
+                    cursorBrush = SolidColor(Color.Transparent),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.None),
+                    keyboardActions = KeyboardActions(),
+                    singleLine = false,
+                )
+            }
+            if (urlSelectionExpanded) {
+                TerminalUrlSelectionDialog(
+                    urls = terminalUrls,
+                    onDismiss = {
+                        urlSelectionExpanded = false
+                        focusTerminal()
+                    },
+                    onCopyUrl = { url ->
+                        urlSelectionExpanded = false
+                        copyTerminalUrl(url)
+                    },
+                    onOpenUrl = { url ->
+                        urlSelectionExpanded = false
+                        openTerminalUrl(url)
+                    },
+                )
+            }
+            if (textSelectionExpanded) {
+                TerminalTextSelectionDialog(
+                    text = terminal.output,
+                    onDismiss = {
+                        textSelectionExpanded = false
+                        focusTerminal()
+                    },
+                    onCopyAll = {
+                        textSelectionExpanded = false
+                        copyOutput()
+                    },
+                )
+            }
+
+            AlpineTerminalShortcutBar(
+                ctrlDown = ctrlDown,
+                altDown = altDown,
+                fnDown = fnDown,
+                onShortcut = ::sendShortcut,
+                onPaste = ::pasteClipboard,
+                onFocusTerminal = ::focusTerminal,
+                onChangeFontSize = ::changeTerminalFontSize,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TerminalUrlSelectionDialog(
+    urls: List<String>,
+    onDismiss: () -> Unit,
+    onCopyUrl: (String) -> Unit,
+    onOpenUrl: (String) -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp)
+                .shadow(22.dp, RoundedCornerShape(24.dp), ambientColor = AetherScrim, spotColor = AetherScrim)
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color(0xFF171717))
+                .padding(18.dp),
+        ) {
+            Text(
+                text = "Terminal URLs",
+                style = MaterialTheme.typography.titleMedium,
+                color = Color(0xFFE8F5E9),
+            )
+            Spacer(Modifier.height(10.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(260.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                urls.forEach { url ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF0B0B0B))
+                            .combinedClickable(
+                                onClick = { onCopyUrl(url) },
+                                onLongClick = { onOpenUrl(url) },
+                            )
+                            .padding(12.dp),
+                    ) {
+                        Text(
+                            text = url,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFE8F5E9),
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TerminalTextButton(label = "Close", onClick = onDismiss)
+            }
+        }
+    }
+}
+
+@Composable
+private fun TerminalTextSelectionDialog(
+    text: String,
+    onDismiss: () -> Unit,
+    onCopyAll: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp)
+                .shadow(22.dp, RoundedCornerShape(24.dp), ambientColor = AetherScrim, spotColor = AetherScrim)
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color(0xFF171717))
+                .padding(18.dp),
+        ) {
+            Text(
+                text = "Select output",
+                style = MaterialTheme.typography.titleMedium,
+                color = Color(0xFFE8F5E9),
+            )
+            Spacer(Modifier.height(10.dp))
+            SelectionContainer(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(360.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF050505))
+                    .verticalScroll(rememberScrollState())
+                    .padding(12.dp),
+            ) {
+                Text(
+                    text = text,
+                    style = androidx.compose.ui.text.TextStyle(
+                        color = Color(0xFFD7FFD9),
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    ),
+                )
+            }
+            Spacer(Modifier.height(14.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            ) {
+                TerminalTextButton(label = "Copy all", onClick = onCopyAll)
+                TerminalTextButton(label = "Close", onClick = onDismiss)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AlpineTerminalShortcutBar(
+    ctrlDown: Boolean,
+    altDown: Boolean,
+    fnDown: Boolean,
+    onShortcut: (TerminalShortcut) -> Unit,
+    onPaste: () -> Unit,
+    onFocusTerminal: () -> Unit,
+    onChangeFontSize: (Boolean) -> Unit,
+) {
+    val shortcuts = remember {
+        listOf(
+            TerminalShortcut("Keyboard"),
+            TerminalShortcut("Paste"),
+            TerminalShortcut("Ctrl", toggle = TerminalModifier.Ctrl),
+            TerminalShortcut("Alt", toggle = TerminalModifier.Alt),
+            TerminalShortcut("Fn", toggle = TerminalModifier.Fn),
+            TerminalShortcut("Esc", "\u001B"),
+            TerminalShortcut("Tab", "\t"),
+            TerminalShortcut("Enter", "\r"),
+            TerminalShortcut("↑", key = TerminalKey.ArrowUp),
+            TerminalShortcut("↓", key = TerminalKey.ArrowDown),
+            TerminalShortcut("←", key = TerminalKey.ArrowLeft),
+            TerminalShortcut("→", key = TerminalKey.ArrowRight),
+            TerminalShortcut("PgUp", "\u001B[5~"),
+            TerminalShortcut("PgDn", "\u001B[6~"),
+            TerminalShortcut("Home", "\u001B[H"),
+            TerminalShortcut("End", "\u001B[F"),
+            TerminalShortcut("Del", "\u001B[3~"),
+            TerminalShortcut("Ins", "\u001B[2~"),
+            TerminalShortcut("Ctrl+C", "\u0003"),
+            TerminalShortcut("Ctrl+D", "\u0004"),
+            TerminalShortcut("Ctrl+Z", "\u001A"),
+            TerminalShortcut("A-", role = TerminalShortcutRole.FontSmaller),
+            TerminalShortcut("A+", role = TerminalShortcutRole.FontLarger),
+            TerminalShortcut("F1", "\u001BOP"),
+            TerminalShortcut("F2", "\u001BOQ"),
+            TerminalShortcut("F3", "\u001BOR"),
+            TerminalShortcut("F4", "\u001BOS"),
+            TerminalShortcut("/", "/"),
+            TerminalShortcut("-", "-"),
+            TerminalShortcut("|", "|"),
+            TerminalShortcut("~", "~"),
+        )
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        shortcuts.forEach { shortcut ->
+            val active = when (shortcut.toggle) {
+                TerminalModifier.Ctrl -> ctrlDown
+                TerminalModifier.Alt -> altDown
+                TerminalModifier.Fn -> fnDown
+                null -> false
+            }
+            TerminalTextButton(
+                label = shortcut.label,
+                active = active,
+                onClick = {
+                    when (shortcut.role) {
+                        TerminalShortcutRole.Keyboard -> onFocusTerminal()
+                        TerminalShortcutRole.Paste -> onPaste()
+                        TerminalShortcutRole.FontSmaller -> onChangeFontSize(false)
+                        TerminalShortcutRole.FontLarger -> onChangeFontSize(true)
+                        TerminalShortcutRole.Sequence -> onShortcut(shortcut)
+                    }
+                },
+            )
+        }
+    }
+}
+
+private fun terminalImeFieldValue(): TextFieldValue =
+    TextFieldValue(
+        text = TerminalImeSentinel,
+        selection = TextRange(TerminalImeSentinel.length),
+    )
+
+internal fun terminalImeInputSequence(text: String): String = when {
+    text.isEmpty() -> TerminalBackspaceSequence
+    text == TerminalImeSentinel -> ""
+    text.startsWith(TerminalImeSentinel) -> text.removePrefix(TerminalImeSentinel)
+    else -> text.replace(TerminalImeSentinel, "")
+}
+
+private fun terminalCursorVisualPosition(
+    layoutResult: androidx.compose.ui.text.TextLayoutResult,
+    text: String,
+    row: Int,
+    column: Int,
+    characterWidthPx: Float,
+): TerminalCursorVisualPosition? {
+    if (layoutResult.lineCount <= 0) return null
+    val lineIndex = row.coerceIn(0, layoutResult.lineCount - 1)
+    val lineStart = layoutResult.getLineStart(lineIndex).coerceIn(0, text.length)
+    val lineEnd = layoutResult.getLineEnd(lineIndex, visibleEnd = false).coerceIn(lineStart, text.length)
+    val lineText = text.substring(lineStart, lineEnd)
+    val renderedCellWidth = terminalRenderedCellWidth(lineText)
+    if (column > renderedCellWidth) {
+        val lineEndX = layoutResult.getCursorRect(lineEnd).left
+        val fallbackX = lineEndX + (column - renderedCellWidth) * characterWidthPx
+        return TerminalCursorVisualPosition(
+            x = fallbackX,
+            y = layoutResult.getLineTop(lineIndex),
+        )
+    }
+    val textColumnOffset = terminalTextOffsetForCellColumn(lineText, column)
+    val offset = (lineStart + textColumnOffset).coerceIn(lineStart, lineEnd)
+    val rect = layoutResult.getCursorRect(offset)
+    val fallbackX = layoutResult.getCursorRect(lineStart).left + column.coerceAtLeast(0) * characterWidthPx
+    return TerminalCursorVisualPosition(
+        x = rect.left.takeIf { it >= 0f } ?: fallbackX,
+        y = layoutResult.getLineTop(lineIndex),
+    )
+}
+
+private fun terminalTextOffsetForCellColumn(
+    line: String,
+    column: Int,
+): Int {
+    if (column <= 0) return 0
+    var cellColumn = 0
+    var index = 0
+    while (index < line.length && cellColumn < column) {
+        val codePoint = line.codePointAt(index)
+        cellColumn += terminalCellWidthForCodePoint(codePoint)
+        index += Character.charCount(codePoint)
+    }
+    return index
+}
+
+internal fun terminalRenderedCellWidth(line: String): Int {
+    var width = 0
+    var index = 0
+    while (index < line.length) {
+        val codePoint = line.codePointAt(index)
+        width += terminalCellWidthForCodePoint(codePoint)
+        index += Character.charCount(codePoint)
+    }
+    return width
+}
+
+internal fun isTerminalTextCellOccupied(
+    text: String,
+    column: Int,
+    row: Int,
+): Boolean {
+    val line = text.lineSequence().drop(row.coerceAtLeast(0)).firstOrNull() ?: return false
+    val offset = terminalTextOffsetForCellColumn(line, column)
+    return offset < line.length && !line[offset].isWhitespace()
+}
+
+private fun terminalCellWidthForCodePoint(codePoint: Int): Int {
+    val type = Character.getType(codePoint)
+    return when {
+        codePoint == 0 ||
+            codePoint == 0x034F ||
+            codePoint in 0x200B..0x200F ||
+            codePoint == 0x2028 ||
+            codePoint == 0x2029 ||
+            codePoint in 0x202A..0x202E ||
+            codePoint in 0x2060..0x2063 ||
+            codePoint < 32 ||
+            codePoint in 0x7F until 0xA0 ||
+            type == Character.NON_SPACING_MARK.toInt() ||
+            type == Character.ENCLOSING_MARK.toInt() -> 0
+        isTerminalWideCodePoint(codePoint) -> 2
+        else -> 1
+    }
+}
+
+private fun isTerminalWideCodePoint(codePoint: Int): Boolean =
+    codePoint in 0x1100..0x115F ||
+        codePoint in 0x2329..0x232A ||
+        codePoint in 0x2E80..0xA4CF ||
+        codePoint in 0xAC00..0xD7A3 ||
+        codePoint in 0xF900..0xFAFF ||
+        codePoint in 0xFE10..0xFE19 ||
+        codePoint in 0xFE30..0xFE6F ||
+        codePoint in 0xFF00..0xFF60 ||
+        codePoint in 0xFFE0..0xFFE6 ||
+        codePoint in 0x1F300..0x1FAFF ||
+        codePoint in 0x20000..0x3FFFD
+
+private data class TerminalCursorVisualPosition(
+    val x: Float,
+    val y: Float,
+)
+
+private fun openExternalTerminalUrl(
+    context: android.content.Context,
+    url: String,
+) {
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    val launchResult = runCatching {
+        context.startActivity(intent)
+    }
+    if (launchResult.isSuccess) return
+
+    val failure = launchResult.exceptionOrNull()
+    if (failure is ActivityNotFoundException || failure is SecurityException) {
+        Toast.makeText(context, "Unable to open that link", Toast.LENGTH_SHORT).show()
+    } else {
+        Toast.makeText(context, "Unable to open that link", Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun handleTerminalKeyEvent(
+    event: KeyEvent,
+    ctrlDown: Boolean,
+    altDown: Boolean,
+    fnDown: Boolean,
+    applicationCursorKeysEnabled: Boolean,
+    applicationKeypadEnabled: Boolean,
+    onSendControl: (String) -> Unit,
+    onPaste: () -> Unit,
+    onShowUrls: () -> Unit,
+    onChangeFontSize: (Boolean) -> Unit,
+    onToggleKeyboard: () -> Unit,
+    onToggleCtrl: () -> Unit,
+    onToggleAlt: () -> Unit,
+    onToggleFn: () -> Unit,
+): Boolean {
+    if (event.type != KeyEventType.KeyDown) return false
+    if ((event.isCtrlPressed || ctrlDown) && event.isAltPressed) {
+        when (event.key) {
+            Key.K -> {
+                onToggleKeyboard()
+                return true
+            }
+            Key.V -> {
+                onPaste()
+                return true
+            }
+            Key.U -> {
+                onShowUrls()
+                return true
+            }
+            Key.Minus -> {
+                onChangeFontSize(false)
+                return true
+            }
+            else -> Unit
+        }
+        if (isTerminalFontIncreaseKey(event.key)) {
+            onChangeFontSize(true)
+            return true
+        }
+    }
+    if (event.key == Key.VolumeDown) {
+        onToggleCtrl()
+        return true
+    }
+    if (event.key == Key.VolumeUp) {
+        onToggleFn()
+        return true
+    }
+    if ((event.isCtrlPressed || ctrlDown) && event.key == Key.Spacebar) {
+        onSendControl("\u0000")
+        return true
+    }
+    if ((event.isAltPressed || altDown) && event.key == Key.DirectionLeft) {
+        onSendControl("\u001Bb")
+        return true
+    }
+    if ((event.isAltPressed || altDown) && event.key == Key.DirectionRight) {
+        onSendControl("\u001Bf")
+        return true
+    }
+    if (fnDown) {
+        terminalFnSequence(event.key)?.let { sequence ->
+            onSendControl(sequence)
+            onToggleFn()
+            return true
+        }
+    }
+    val sequence = terminalSpecialKeySequence(
+        key = event.key,
+        shift = event.isShiftPressed,
+        alt = event.isAltPressed || altDown,
+        ctrl = event.isCtrlPressed || ctrlDown,
+        applicationCursorKeysEnabled = applicationCursorKeysEnabled,
+        applicationKeypadEnabled = applicationKeypadEnabled,
+    ) ?: return false
+    onSendControl(sequence)
+    if (ctrlDown) onToggleCtrl()
+    if (altDown) onToggleAlt()
+    return true
+}
+
+internal fun terminalSpecialKeySequence(
+    key: Key,
+    shift: Boolean,
+    alt: Boolean,
+    ctrl: Boolean,
+    applicationCursorKeysEnabled: Boolean,
+    applicationKeypadEnabled: Boolean,
+): String? {
+    if (shift && key == Key.Tab) return "\u001B[Z"
+    if (ctrl && key == Key.Spacebar) return "\u0000"
+    if (alt && key == Key.DirectionLeft && !shift && !ctrl) return "\u001Bb"
+    if (alt && key == Key.DirectionRight && !shift && !ctrl) return "\u001Bf"
+    val modifier = terminalKeyModifier(shift = shift, alt = alt, ctrl = ctrl)
+    val sequence = when (key) {
+        Key.Enter -> if (alt) "\u001B\r" else "\r"
+        Key.NumPadEnter -> if (applicationKeypadEnabled) {
+            terminalApplicationKeypadSequence('M', modifier)
+        } else {
+            "\n"
+        }
+        Key.Backspace -> (if (alt) "\u001B" else "") + if (ctrl) "\b" else "\u007F"
+        Key.Tab -> "\t"
+        Key.DirectionUp -> terminalCursorKeySequence(TerminalKey.ArrowUp, applicationCursorKeysEnabled, modifier)
+        Key.DirectionDown -> terminalCursorKeySequence(TerminalKey.ArrowDown, applicationCursorKeysEnabled, modifier)
+        Key.DirectionLeft -> terminalCursorKeySequence(TerminalKey.ArrowLeft, applicationCursorKeysEnabled, modifier)
+        Key.DirectionRight -> terminalCursorKeySequence(TerminalKey.ArrowRight, applicationCursorKeysEnabled, modifier)
+        Key.Escape -> "\u001B"
+        Key.MoveHome -> terminalCursorKeySequence(TerminalKey.Home, applicationCursorKeysEnabled, modifier)
+        Key.MoveEnd -> terminalCursorKeySequence(TerminalKey.End, applicationCursorKeysEnabled, modifier)
+        Key.PageUp -> terminalTildeKeySequence(5, modifier)
+        Key.PageDown -> terminalTildeKeySequence(6, modifier)
+        Key.Delete -> terminalTildeKeySequence(3, modifier)
+        Key.Insert -> terminalTildeKeySequence(2, modifier)
+        Key.F1 -> terminalFunctionKeySequence(1, modifier)
+        Key.F2 -> terminalFunctionKeySequence(2, modifier)
+        Key.F3 -> terminalFunctionKeySequence(3, modifier)
+        Key.F4 -> terminalFunctionKeySequence(4, modifier)
+        Key.F5 -> terminalFunctionKeySequence(5, modifier)
+        Key.F6 -> terminalFunctionKeySequence(6, modifier)
+        Key.F7 -> terminalFunctionKeySequence(7, modifier)
+        Key.F8 -> terminalFunctionKeySequence(8, modifier)
+        Key.F9 -> terminalFunctionKeySequence(9, modifier)
+        Key.F10 -> terminalFunctionKeySequence(10, modifier)
+        Key.F11 -> terminalFunctionKeySequence(11, modifier)
+        Key.F12 -> terminalFunctionKeySequence(12, modifier)
+        else -> terminalKeypadSequence(key, applicationKeypadEnabled, modifier)
+    } ?: return null
+    return when {
+        ctrl -> controlSequenceForKey(key) ?: sequence
+        alt && modifier == null -> "\u001B$sequence"
+        else -> sequence
+    }
+}
+
+private const val TerminalImeSentinel = "x"
+private const val TerminalBackspaceSequence = "\u007F"
+private const val MinTerminalFontSizeSp = 10
+private const val DefaultTerminalFontSizeSp = 13
+private const val MaxTerminalFontSizeSp = 24
+private const val TerminalAutoFollowBottomThresholdPx = 24
+
+private val TerminalUrlRegex = Regex("""(?i)\b(?:https?|ftp|file)://[^\s<>"']+""")
+
+private val TerminalUrlTrailingChars = charArrayOf(
+    '.', ',', ';', ':', '!', '?', '"', '\'',
+)
+
+private val TerminalUrlTrailingPairs = mapOf(
+    ')' to '(',
+    ']' to '[',
+    '}' to '{',
+)
+
+private val TerminalFontIncreaseKeys: Set<Key> =
+    listOf("Plus", "Equals", "NumPadAdd", "NumpadAdd").mapNotNull(::composeKeyByName).toSet()
+
+private val TerminalKeypadKeys: Map<Key, Char> =
+    mapOf(
+        "NumPad0" to '0',
+        "Numpad0" to '0',
+        "NumPad1" to '1',
+        "Numpad1" to '1',
+        "NumPad2" to '2',
+        "Numpad2" to '2',
+        "NumPad3" to '3',
+        "Numpad3" to '3',
+        "NumPad4" to '4',
+        "Numpad4" to '4',
+        "NumPad5" to '5',
+        "Numpad5" to '5',
+        "NumPad6" to '6',
+        "Numpad6" to '6',
+        "NumPad7" to '7',
+        "Numpad7" to '7',
+        "NumPad8" to '8',
+        "Numpad8" to '8',
+        "NumPad9" to '9',
+        "Numpad9" to '9',
+        "NumPadAdd" to '+',
+        "NumpadAdd" to '+',
+        "NumPadSubtract" to '-',
+        "NumpadSubtract" to '-',
+        "NumPadMultiply" to '*',
+        "NumpadMultiply" to '*',
+        "NumPadDivide" to '/',
+        "NumpadDivide" to '/',
+        "NumPadDot" to '.',
+        "NumpadDot" to '.',
+        "NumPadDecimal" to '.',
+        "NumpadDecimal" to '.',
+        "NumPadEquals" to '=',
+        "NumpadEquals" to '=',
+    ).mapNotNull { (name, value) ->
+        composeKeyByName(name)?.let { key -> key to value }
+    }.toMap()
+
+private data class TerminalShortcut(
+    val label: String,
+    val sequence: String? = null,
+    val key: TerminalKey? = null,
+    val toggle: TerminalModifier? = null,
+    val role: TerminalShortcutRole = when (label) {
+        "Keyboard" -> TerminalShortcutRole.Keyboard
+        "Paste" -> TerminalShortcutRole.Paste
+        else -> TerminalShortcutRole.Sequence
+    },
+) {
+    fun resolveSequence(applicationCursorKeysEnabled: Boolean): String? =
+        sequence ?: key?.let { terminalCursorKeySequence(it, applicationCursorKeysEnabled) }
+}
+
+internal enum class TerminalKey {
+    ArrowUp,
+    ArrowDown,
+    ArrowLeft,
+    ArrowRight,
+    Home,
+    End,
+}
+
+private enum class TerminalShortcutRole {
+    Sequence,
+    Keyboard,
+    Paste,
+    FontSmaller,
+    FontLarger,
+}
+
+private enum class TerminalModifier {
+    Ctrl,
+    Alt,
+    Fn,
+}
+
+private data class TerminalMouseCell(
+    val column: Int,
+    val row: Int,
+)
+
+private data class TerminalTextCell(
+    val column: Int,
+    val row: Int,
+)
+
+internal enum class TerminalMouseEvent {
+    PrimaryDown,
+    PrimaryUp,
+    PrimaryDrag,
+    WheelUp,
+    WheelDown,
+}
+
+internal fun buildTerminalInputSequence(
+    text: String,
+    ctrlDown: Boolean,
+    altDown: Boolean,
+    fnDown: Boolean,
+): String = buildString {
+    text.codePoints().forEach { codePoint ->
+        val sequence = when {
+            fnDown -> terminalFnSequence(codePoint) ?: String(Character.toChars(codePoint))
+            ctrlDown -> controlSequenceForCodePoint(codePoint)
+                ?: String(Character.toChars(codePoint))
+            else -> String(Character.toChars(codePoint))
+        }
+        if (altDown) append('\u001B')
+        append(sequence)
+    }
+}
+
+internal fun buildTerminalPasteSequence(
+    text: String,
+    bracketedPasteEnabled: Boolean,
+): String {
+    val normalizedText = text
+        .filterNot { it == '\u001B' || it in '\u0080'..'\u009F' }
+        .replace(Regex("\r?\n"), "\r")
+    return if (bracketedPasteEnabled) {
+        "\u001B[200~$normalizedText\u001B[201~"
+    } else {
+        normalizedText
+    }
+}
+
+internal fun buildTerminalAnnotatedOutput(
+    prefix: String,
+    styledOutput: TerminalStyledText,
+    fallbackOutput: String,
+): AnnotatedString {
+    val outputText = styledOutput.text.ifEmpty { fallbackOutput }
+    return AnnotatedString.Builder().apply {
+        append(prefix)
+        val outputStart = length
+        append(outputText)
+        if (styledOutput.text.isNotEmpty()) {
+            styledOutput.ranges.forEach { range ->
+                addStyle(
+                    style = terminalSpanStyle(range.style),
+                    start = outputStart + range.start,
+                    end = outputStart + range.end,
+                )
+            }
+        }
+    }.toAnnotatedString()
+}
+
+internal fun extractTerminalUrls(text: String): List<String> {
+    val urls = LinkedHashSet<String>()
+    TerminalUrlRegex.findAll(text).forEach { match ->
+        val url = trimTerminalUrl(match.value)
+        if (url.isNotBlank()) {
+            urls += url
+        }
+    }
+    return urls.toList()
+}
+
+internal fun findTerminalUrlAtCell(
+    text: String,
+    column: Int,
+    row: Int,
+): String? {
+    val line = text.lineSequence().drop(row.coerceAtLeast(0)).firstOrNull() ?: return null
+    val normalizedColumn = column.coerceAtLeast(0)
+    TerminalUrlRegex.findAll(line).forEach { match ->
+        val url = trimTerminalUrl(match.value)
+        if (url.isEmpty()) return@forEach
+        val start = match.range.first
+        val endExclusive = start + url.length
+        if (normalizedColumn in start until endExclusive) {
+            return url
+        }
+    }
+    return null
+}
+
+internal fun nextTerminalFontSize(
+    current: Int,
+    increase: Boolean,
+): Int =
+    (current + if (increase) 1 else -1)
+        .coerceIn(MinTerminalFontSizeSp, MaxTerminalFontSizeSp)
+
+internal fun shouldFollowTerminalOutput(
+    scrollValue: Int,
+    maxScrollValue: Int,
+): Boolean =
+    maxScrollValue <= 0 || maxScrollValue - scrollValue <= TerminalAutoFollowBottomThresholdPx
+
+internal fun isTerminalFontIncreaseKey(key: Key): Boolean =
+    key in TerminalFontIncreaseKeys
+
+internal fun terminalCursorKeySequence(
+    key: TerminalKey,
+    applicationCursorKeysEnabled: Boolean,
+    modifier: Int? = null,
+): String {
+    val final = when (key) {
+        TerminalKey.ArrowUp -> 'A'
+        TerminalKey.ArrowDown -> 'B'
+        TerminalKey.ArrowRight -> 'C'
+        TerminalKey.ArrowLeft -> 'D'
+        TerminalKey.Home -> 'H'
+        TerminalKey.End -> 'F'
+    }
+    if (modifier != null) return "\u001B[1;${modifier}$final"
+    return if (applicationCursorKeysEnabled) {
+        "\u001BO$final"
+    } else {
+        "\u001B[$final"
+    }
+}
+
+internal fun terminalKeyModifier(
+    shift: Boolean,
+    alt: Boolean,
+    ctrl: Boolean,
+): Int? {
+    var modifier = 1
+    if (shift) modifier += 1
+    if (alt) modifier += 2
+    if (ctrl) modifier += 4
+    return modifier.takeIf { it > 1 }
+}
+
+internal fun terminalTildeKeySequence(
+    number: Int,
+    modifier: Int?,
+): String =
+    if (modifier == null) {
+        "\u001B[${number}~"
+    } else {
+        "\u001B[${number};${modifier}~"
+    }
+
+internal fun terminalFunctionKeySequence(
+    number: Int,
+    modifier: Int?,
+): String? {
+    val final = when (number) {
+        1 -> 'P'
+        2 -> 'Q'
+        3 -> 'R'
+        4 -> 'S'
+        else -> null
+    }
+    if (final != null) {
+        return if (modifier == null) "\u001BO$final" else "\u001B[1;${modifier}$final"
+    }
+    val tildeNumber = when (number) {
+        5 -> 15
+        6 -> 17
+        7 -> 18
+        8 -> 19
+        9 -> 20
+        10 -> 21
+        11 -> 23
+        12 -> 24
+        else -> return null
+    }
+    return terminalTildeKeySequence(tildeNumber, modifier)
+}
+
+internal fun terminalKeypadSequence(
+    character: Char,
+    applicationKeypadEnabled: Boolean,
+    modifier: Int? = null,
+): String? {
+    if (!applicationKeypadEnabled) return character.toString()
+    val final = when (character) {
+        '0' -> 'p'
+        '1' -> 'q'
+        '2' -> 'r'
+        '3' -> 's'
+        '4' -> 't'
+        '5' -> 'u'
+        '6' -> 'v'
+        '7' -> 'w'
+        '8' -> 'x'
+        '9' -> 'y'
+        '.' -> 'n'
+        '/' -> 'o'
+        '*' -> 'j'
+        '+' -> 'k'
+        '-' -> 'm'
+        '=' -> 'X'
+        else -> return character.toString()
+    }
+    return terminalApplicationKeypadSequence(final, modifier)
+}
+
+private fun terminalApplicationKeypadSequence(
+    final: Char,
+    modifier: Int?,
+): String =
+    if (modifier == null) {
+        "\u001BO$final"
+    } else {
+        "\u001BO;${modifier}$final"
+    }
+
+private fun terminalKeypadSequence(
+    key: Key,
+    applicationKeypadEnabled: Boolean,
+    modifier: Int?,
+): String? =
+    TerminalKeypadKeys[key]?.let { character ->
+        terminalKeypadSequence(character, applicationKeypadEnabled, modifier)
+    }
+
+private fun composeKeyByName(name: String): Key? =
+    runCatching {
+        Key::class.java.getField(name).get(null) as? Key
+    }.getOrNull()
+
+private fun terminalSpanStyle(style: TerminalTextStyle): SpanStyle {
+    val foreground = style.foregroundColor?.let { Color(it) }
+    val background = style.backgroundColor?.let { Color(it) }
+    val textDecoration = terminalTextDecoration(style)
+    return if (style.invisible) {
+        SpanStyle(
+            color = Color.Transparent,
+            background = background ?: Color.Unspecified,
+            fontWeight = if (style.bold) FontWeight.Bold else null,
+            fontStyle = if (style.italic) FontStyle.Italic else null,
+            textDecoration = textDecoration,
+        )
+    } else if (style.inverse) {
+        SpanStyle(
+            color = background ?: Color(0xFF050505),
+            background = foreground ?: Color(0xFFD7FFD9),
+            fontWeight = if (style.bold) FontWeight.Bold else null,
+            fontStyle = if (style.italic) FontStyle.Italic else null,
+            textDecoration = textDecoration,
+        )
+    } else {
+        SpanStyle(
+            color = foreground ?: if (style.dim) Color(0xFF7CA982) else Color.Unspecified,
+            background = background ?: Color.Unspecified,
+            fontWeight = if (style.bold) FontWeight.Bold else null,
+            fontStyle = if (style.italic) FontStyle.Italic else null,
+            textDecoration = textDecoration,
+        )
+    }
+}
+
+private fun terminalTextDecoration(style: TerminalTextStyle): TextDecoration? = when {
+    style.underline && style.strikethrough -> TextDecoration.combine(
+        listOf(TextDecoration.Underline, TextDecoration.LineThrough)
+    )
+    style.underline -> TextDecoration.Underline
+    style.strikethrough -> TextDecoration.LineThrough
+    else -> null
+}
+
+private fun trimTerminalUrl(rawUrl: String): String {
+    var url = rawUrl
+    while (url.isNotEmpty()) {
+        val last = url.last()
+        when {
+            TerminalUrlTrailingChars.contains(last) -> url = url.dropLast(1)
+            TerminalUrlTrailingPairs[last]?.let { opening ->
+                url.count { it == last } > url.count { it == opening }
+            } == true -> url = url.dropLast(1)
+            else -> return url
+        }
+    }
+    return url
+}
+
+internal fun buildTerminalMouseSequence(
+    event: TerminalMouseEvent,
+    column: Int,
+    row: Int,
+    protocol: TerminalMouseProtocol,
+): String? {
+    val buttonCode = when (event) {
+        TerminalMouseEvent.PrimaryDown,
+        TerminalMouseEvent.PrimaryUp -> 0
+        TerminalMouseEvent.PrimaryDrag -> 32
+        TerminalMouseEvent.WheelUp -> 64
+        TerminalMouseEvent.WheelDown -> 65
+    }
+    val x = column.coerceAtLeast(0) + 1
+    val y = row.coerceAtLeast(0) + 1
+    return when (protocol) {
+        TerminalMouseProtocol.Sgr -> {
+            val suffix = if (event == TerminalMouseEvent.PrimaryUp) 'm' else 'M'
+            "\u001B[<$buttonCode;$x;${y}$suffix"
+        }
+        TerminalMouseProtocol.Normal -> {
+            val normalButtonCode = if (event == TerminalMouseEvent.PrimaryUp) 3 else buttonCode
+            if (x > 255 - 32 || y > 255 - 32) return null
+            buildString {
+                append("\u001B[M")
+                append((normalButtonCode + 32).toChar())
+                append((x + 32).toChar())
+                append((y + 32).toChar())
+            }
+        }
+    }
+}
+
+private fun controlSequenceForKey(key: Key): String? = when (key) {
+    Key.A -> "\u0001"
+    Key.B -> "\u0002"
+    Key.C -> "\u0003"
+    Key.D -> "\u0004"
+    Key.E -> "\u0005"
+    Key.F -> "\u0006"
+    Key.G -> "\u0007"
+    Key.H -> "\b"
+    Key.I -> "\t"
+    Key.J -> "\n"
+    Key.K -> "\u000B"
+    Key.L -> "\u000C"
+    Key.M -> "\r"
+    Key.N -> "\u000E"
+    Key.O -> "\u000F"
+    Key.P -> "\u0010"
+    Key.Q -> "\u0011"
+    Key.R -> "\u0012"
+    Key.S -> "\u0013"
+    Key.T -> "\u0014"
+    Key.U -> "\u0015"
+    Key.V -> "\u0016"
+    Key.W -> "\u0017"
+    Key.X -> "\u0018"
+    Key.Y -> "\u0019"
+    Key.Z -> "\u001A"
+    Key.LeftBracket -> "\u001B"
+    Key.Backslash -> "\u001C"
+    Key.RightBracket -> "\u001D"
+    Key.Minus -> "\u001F"
+    else -> null
+}
+
+internal fun controlSequenceForCodePoint(codePoint: Int): String? {
+    val lower = Character.toLowerCase(codePoint)
+    return when {
+        lower in 'a'.code..'z'.code -> ((lower - 'a'.code + 1).toChar()).toString()
+        codePoint == ' '.code -> "\u0000"
+        codePoint == '['.code -> "\u001B"
+        codePoint == '\\'.code -> "\u001C"
+        codePoint == ']'.code -> "\u001D"
+        codePoint == '^'.code -> "\u001E"
+        codePoint == '_'.code || codePoint == '-'.code -> "\u001F"
+        else -> null
+    }
+}
+
+private fun terminalFnSequence(key: Key): String? = when (key) {
+    Key.W -> terminalFnSequence('w'.code)
+    Key.A -> terminalFnSequence('a'.code)
+    Key.S -> terminalFnSequence('s'.code)
+    Key.D -> terminalFnSequence('d'.code)
+    Key.P -> terminalFnSequence('p'.code)
+    Key.N -> terminalFnSequence('n'.code)
+    Key.T -> terminalFnSequence('t'.code)
+    Key.I -> terminalFnSequence('i'.code)
+    Key.H -> terminalFnSequence('h'.code)
+    Key.U -> terminalFnSequence('u'.code)
+    Key.L -> terminalFnSequence('l'.code)
+    Key.E -> terminalFnSequence('e'.code)
+    Key.B -> terminalFnSequence('b'.code)
+    Key.F -> terminalFnSequence('f'.code)
+    Key.X -> terminalFnSequence('x'.code)
+    Key.One -> terminalFnSequence('1'.code)
+    Key.Two -> terminalFnSequence('2'.code)
+    Key.Three -> terminalFnSequence('3'.code)
+    Key.Four -> terminalFnSequence('4'.code)
+    Key.Five -> terminalFnSequence('5'.code)
+    Key.Six -> terminalFnSequence('6'.code)
+    Key.Seven -> terminalFnSequence('7'.code)
+    Key.Eight -> terminalFnSequence('8'.code)
+    Key.Nine -> terminalFnSequence('9'.code)
+    Key.Zero -> terminalFnSequence('0'.code)
+    else -> null
+}
+
+internal fun terminalFnSequence(codePoint: Int): String? = when (Character.toLowerCase(codePoint)) {
+    'w'.code -> "\u001B[A"
+    'a'.code -> "\u001B[D"
+    's'.code -> "\u001B[B"
+    'd'.code -> "\u001B[C"
+    'p'.code -> "\u001B[5~"
+    'n'.code -> "\u001B[6~"
+    't'.code -> "\t"
+    'i'.code -> "\u001B[2~"
+    'h'.code -> "~"
+    'u'.code -> "_"
+    'l'.code -> "|"
+    'e'.code -> "\u001B"
+    'b'.code -> "\u001Bb"
+    'f'.code -> "\u001Bf"
+    'x'.code -> "\u001Bx"
+    '1'.code -> "\u001BOP"
+    '2'.code -> "\u001BOQ"
+    '3'.code -> "\u001BOR"
+    '4'.code -> "\u001BOS"
+    '5'.code -> "\u001B[15~"
+    '6'.code -> "\u001B[17~"
+    '7'.code -> "\u001B[18~"
+    '8'.code -> "\u001B[19~"
+    '9'.code -> "\u001B[20~"
+    '0'.code -> "\u001B[21~"
+    else -> null
+}
+
+@Composable
+private fun TerminalIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(42.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFF171717))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = contentDescription, tint = Color(0xFFE8F5E9))
+    }
+}
+
+@Composable
+private fun TerminalTextButton(
+    label: String,
+    enabled: Boolean = true,
+    active: Boolean = false,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                when {
+                    !enabled -> Color(0xFF0B0B0B)
+                    active -> Color(0xFF245A36)
+                    else -> Color(0xFF171717)
+                }
+            )
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = if (enabled) Color(0xFFE8F5E9) else Color(0xFF6B7280),
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun RuntimeDefaultsPage(
+    title: String,
+    termuxReady: Boolean,
+    alpineReady: Boolean,
+    enabledRuntimeIds: Set<LocalRuntimeId>,
+    defaultRuntimeId: LocalRuntimeId?,
+    onSetDefaultRuntime: (LocalRuntimeId) -> Unit,
+    onBack: () -> Unit,
+) {
+    val strings = rememberAetherStrings()
+    SubPageScaffold(title = title, onBack = onBack) {
+        Text(
+            text = tr(
+                strings,
+                "Choose where tools run when a request omits the environment parameter. Agent calls can still explicitly select Termux or Alpine.",
+                "选择工具未指定 environment 参数时使用的运行环境。Agent 仍然可以显式选择 Termux 或 Alpine。",
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = AetherOnSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp),
+        )
+        Spacer(Modifier.height(16.dp))
+        SettingsCardGroup {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SettingsChoiceRow(
+                    title = "Termux",
+                    subtitle = if (termuxReady) {
+                        tr(strings, "Android-side command bridge and Agent Mode workspace.", "手机侧命令桥接与 Agent Mode workspace。")
+                    } else {
+                        tr(strings, "Configure Termux before selecting it as default.", "先配置 Termux，才能设为默认运行环境。")
+                    },
+                    selected = defaultRuntimeId == LocalRuntimeId.Termux,
+                    onClick = {
+                        if (termuxReady || LocalRuntimeId.Termux in enabledRuntimeIds) {
+                            onSetDefaultRuntime(LocalRuntimeId.Termux)
+                        }
+                    },
+                )
+                SettingsChoiceRow(
+                    title = "Alpine",
+                    subtitle = if (alpineReady) {
+                        tr(strings, "Built-in app-private Linux VM for development tools.", "应用私有的内置 Linux 虚拟机，适合开发工具。")
+                    } else {
+                        tr(strings, "Initialize Alpine before selecting it as default.", "先初始化 Alpine，才能设为默认运行环境。")
+                    },
+                    selected = defaultRuntimeId == LocalRuntimeId.Alpine,
+                    onClick = {
+                        if (alpineReady || LocalRuntimeId.Alpine in enabledRuntimeIds) {
+                            onSetDefaultRuntime(LocalRuntimeId.Alpine)
+                        }
+                    },
+                )
+            }
+        }
+    }
+}
+
+private fun alpineSetupStatusText(
+    setupState: LocalRuntimeSetupState,
+    strings: AetherStrings,
+): String = when (setupState.issue) {
+    LocalRuntimeIssue.Ready -> tr(strings, "Alpine is ready.", "Alpine 已就绪。")
+    LocalRuntimeIssue.NotConfigured,
+    LocalRuntimeIssue.NotInstalled -> tr(strings, "Alpine is not installed yet.", "Alpine 尚未安装。")
+    LocalRuntimeIssue.UnsupportedAbi -> tr(strings, "This device ABI is not supported by Alpine v1.", "当前设备 ABI 不受 Alpine v1 支持。")
+    LocalRuntimeIssue.MissingAssets -> tr(strings, "This build does not include Alpine runtime assets yet.", "当前构建尚未包含 Alpine 运行环境资源。")
+    LocalRuntimeIssue.Failed -> tr(strings, "Alpine needs repair or reset.", "Alpine 需要修复或重置。")
+    LocalRuntimeIssue.PermissionMissing,
+    LocalRuntimeIssue.ExternalAppsDisabled,
+    LocalRuntimeIssue.DispatchFailed -> tr(strings, "Alpine is not ready.", "Alpine 尚未就绪。")
 }
 
 @Composable
@@ -4327,6 +6491,7 @@ private fun SubPageScaffold(
     onBack: () -> Unit,
     trailingIcon: ImageVector? = null,
     trailingEnabled: Boolean = true,
+    trailingContentDescription: String = title,
     onTrailingAction: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
@@ -4368,6 +6533,7 @@ private fun SubPageScaffold(
                 onBack = onBack,
                 trailingIcon = trailingIcon,
                 trailingEnabled = trailingEnabled,
+                trailingContentDescription = trailingContentDescription,
                 onTrailingAction = onTrailingAction,
                 onBodyHeightChanged = { topBarBodyHeightPx = it },
             )
@@ -4384,6 +6550,7 @@ private fun SettingsTopBarOverlay(
     onBack: () -> Unit,
     trailingIcon: ImageVector? = null,
     trailingEnabled: Boolean = true,
+    trailingContentDescription: String = title,
     onTrailingAction: (() -> Unit)? = null,
     onBodyHeightChanged: (Int) -> Unit,
 ) {
@@ -4401,6 +6568,7 @@ private fun SettingsTopBarOverlay(
                 onBack = onBack,
                 trailingIcon = trailingIcon,
                 trailingEnabled = trailingEnabled,
+                trailingContentDescription = trailingContentDescription,
                 onTrailingAction = onTrailingAction,
             )
         }
@@ -4419,6 +6587,7 @@ private fun SettingsTopBar(
     onBack: () -> Unit,
     trailingIcon: ImageVector? = null,
     trailingEnabled: Boolean = true,
+    trailingContentDescription: String = title,
     onTrailingAction: (() -> Unit)? = null,
 ) {
     Row(
@@ -4442,7 +6611,7 @@ private fun SettingsTopBar(
         if (trailingIcon != null && onTrailingAction != null) {
             SettingsCircleButton(
                 icon = trailingIcon,
-                contentDescription = title,
+                contentDescription = trailingContentDescription,
                 enabled = trailingEnabled,
                 onClick = onTrailingAction,
             )

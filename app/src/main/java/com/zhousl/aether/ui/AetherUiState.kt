@@ -11,6 +11,7 @@ import com.zhousl.aether.data.McpServerConfig
 import com.zhousl.aether.data.RootSetupState
 import com.zhousl.aether.data.ScheduledTask
 import com.zhousl.aether.data.SessionExecutionState
+import com.zhousl.aether.runtime.LocalRuntimeSetupState
 import com.zhousl.aether.termux.TermuxSetupState
 
 internal const val DraftSessionId = "draft"
@@ -25,6 +26,8 @@ enum class OnboardingStep {
     Landing,
     ProviderSetup,
     TermuxSetup,
+    LocalRuntimeChoice,
+    AlpineSetup,
     AgentModeAuthorization,
     TavilySetup,
     SkillsOverview,
@@ -181,6 +184,47 @@ data class AppUpdateUiState(
     val pendingInstallUri: String = "",
 )
 
+data class AlpineTerminalUiState(
+    val isOpen: Boolean = false,
+    val isStarting: Boolean = false,
+    val isRunning: Boolean = false,
+    val output: String = "",
+    val styledOutput: TerminalStyledText = TerminalStyledText(),
+    val error: String = "",
+    val rows: Int = 32,
+    val columns: Int = 96,
+    val bracketedPasteEnabled: Boolean = false,
+    val mouseTrackingMode: TerminalMouseTrackingMode = TerminalMouseTrackingMode.None,
+    val mouseProtocol: TerminalMouseProtocol = TerminalMouseProtocol.Normal,
+    val alternateScreenEnabled: Boolean = false,
+    val applicationCursorKeysEnabled: Boolean = false,
+    val applicationKeypadEnabled: Boolean = false,
+    val cursorRow: Int = 0,
+    val cursorColumn: Int = 0,
+    val cursorVisible: Boolean = true,
+    val cursorStyle: TerminalCursorStyle = TerminalCursorStyle.Bar,
+    val focusEventsEnabled: Boolean = false,
+    val title: String = "",
+)
+
+enum class TerminalMouseTrackingMode {
+    None,
+    Click,
+    Drag,
+    Any,
+}
+
+enum class TerminalMouseProtocol {
+    Normal,
+    Sgr,
+}
+
+enum class TerminalCursorStyle {
+    Block,
+    Underline,
+    Bar,
+}
+
 data class AetherUiState(
     val currentScreen: AppScreen = AppScreen.Chat,
     val isStartupRouteResolved: Boolean = false,
@@ -210,6 +254,9 @@ data class AetherUiState(
     val sessionExecutionStates: Map<String, SessionExecutionState> = emptyMap(),
     val unviewedCompletedSessionIds: Set<String> = emptySet(),
     val termuxSetupState: TermuxSetupState = TermuxSetupState(),
+    val alpineSetupState: LocalRuntimeSetupState = LocalRuntimeSetupState(
+        runtimeId = com.zhousl.aether.data.LocalRuntimeId.Alpine,
+    ),
     val developerTermuxReadyOverride: Boolean? = null,
     val rootSetupState: RootSetupState = RootSetupState(),
     val rootSetupProgressReturnPage: RootSetupProgressReturnPage? = null,
@@ -224,4 +271,5 @@ data class AetherUiState(
     val agentModeDisplayState: AgentModeDisplayState = AgentModeDisplayState(),
     val agentModeAuthorizationState: AgentModeAuthorizationState = AgentModeAuthorizationState(),
     val appUpdate: AppUpdateUiState = AppUpdateUiState(),
+    val alpineTerminal: AlpineTerminalUiState = AlpineTerminalUiState(),
 )

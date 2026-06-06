@@ -1,6 +1,9 @@
 package com.zhousl.aether.ui
 
 import android.app.Application
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.view.Surface
@@ -23,6 +26,7 @@ import com.zhousl.aether.data.InstalledSkill
 import com.zhousl.aether.data.LlmApiClient
 import com.zhousl.aether.data.LlmProvider
 import com.zhousl.aether.data.LlmProviderConfig
+import com.zhousl.aether.data.LocalRuntimeId
 import com.zhousl.aether.data.ProviderModelOption
 import com.zhousl.aether.data.availableModelOptions
 import com.zhousl.aether.data.McpClientManager
@@ -33,6 +37,7 @@ import com.zhousl.aether.data.normalizeLlmInactivityReconnectTimeoutSeconds
 import com.zhousl.aether.data.normalizeTavilyBaseUrl
 import com.zhousl.aether.data.OnboardingStarterPrompt
 import com.zhousl.aether.data.OpenAiCompatibleClient
+import com.zhousl.aether.data.PackageProfileState
 import com.zhousl.aether.data.RootSetupIssue
 import com.zhousl.aether.data.RootSetupState
 import com.zhousl.aether.data.ScheduledTask
@@ -63,6 +68,7 @@ import com.zhousl.aether.data.resolveDefaultTitleModelKey
 import com.zhousl.aether.data.resolveAutomaticModelKey
 import com.zhousl.aether.data.resolveModelSettings
 import com.zhousl.aether.data.resolveStoredOrAutomaticModelKey
+import com.zhousl.aether.runtime.AlpineInteractiveSession
 import com.zhousl.aether.termux.TermuxSetupIssue
 import com.zhousl.aether.termux.TermuxSetupState
 import kotlinx.coroutines.Dispatchers
@@ -109,22 +115,35 @@ class AetherViewModel(
     private val skillManager = runtime.skillManager
     private val scheduledTaskManager = runtime.scheduledTaskManager
     private val mcpClientManager = McpClientManager(
-        bashTool = bashTool,
+        runtimeRouter = runtime.runtimeRouter,
+        settings = AppSettings(),
         diagnosticLogger = diagnosticLogger,
     )
     private val appUpdateManager = AppUpdateManager(application.applicationContext)
+    private val clipboardManager =
+        application.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     private var didEvaluateStartupUpdateCheck = false
     private var lastTrackedTermuxDetectedIssue: TermuxSetupIssue? = null
     private var pendingTermuxSetupSource: String? = null
     private val _uiState = MutableStateFlow(AetherUiState())
     private val _transientMessages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     private var didEvaluateWorkspaceMode = false
+    private var alpineTerminalSession: AlpineInteractiveSession? = null
+    private val alpineTerminalScreenBuffer = AlpineTerminalScreenBuffer(
+        onResponse = { response ->
+            alpineTerminalSession?.send(response)
+        },
+        onClipboardText = { text ->
+            clipboardManager.setPrimaryClip(ClipData.newPlainText("Terminal selection", text))
+        },
+    )
 
     val uiState: StateFlow<AetherUiState> = _uiState.asStateFlow()
     val transientMessages = _transientMessages.asSharedFlow()
 
     init {
         refreshTermuxSetup()
+        refreshAlpineSetup()
         refreshRootSetup()
 
         viewModelScope.launch {
@@ -152,6 +171,7 @@ class AetherViewModel(
                 }
                 syncTermuxSettings()
                 bashTool.setEnvironmentVariables(settings.termuxEnvironmentVariables)
+                runtime.alpineRuntime.setEnvironmentVariables(settings.alpineEnvironmentVariables)
                 if (!didEvaluateStartupUpdateCheck && settings.privacyPolicyAccepted) {
                     didEvaluateStartupUpdateCheck = true
                     maybeCheckForUpdates(settings)
@@ -350,7 +370,7 @@ class AetherViewModel(
             )
             if (rootState.isReady) {
                 val settings = _uiState.value.settings
-                val updatedSettings = settings.copy(
+                val updatedSettings = settings.withRuntimeEnabled(LocalRuntimeId.Termux).copy(
                     agentModeAuthorizationEnabled = true,
                     agentModeAuthorizationMethod = AgentModeAuthorizationMethod.Root,
                     termuxSetupCompleted = true,
@@ -405,7 +425,7 @@ class AetherViewModel(
     private suspend fun rememberTermuxSetupCompleted(setupState: TermuxSetupState): TermuxSetupState {
         val settings = _uiState.value.settings
         if (setupState.isReady && !settings.termuxSetupCompleted) {
-            settingsRepository.updateSettings(settings.copy(termuxSetupCompleted = true))
+            settingsRepository.updateSettings(settings.withRuntimeEnabled(LocalRuntimeId.Termux))
         }
         return setupState.copy(
             previouslyConfigured = setupState.previouslyConfigured ||
@@ -437,6 +457,331 @@ class AetherViewModel(
                     ),
         )
         bashTool.setEnvironmentVariables(snapshot.settings.termuxEnvironmentVariables)
+    }
+
+    fun refreshAlpineSetup() {
+        viewModelScope.launch {
+            val setupState = withContext(Dispatchers.IO) {
+                runtime.alpineRuntime.inspectSetup()
+            }
+            _uiState.update { current -> current.copy(alpineSetupState = setupState) }
+        }
+    }
+
+    fun initializeAlpineRuntime(makeDefault: Boolean = true) {
+        viewModelScope.launch {
+            val setupState = withContext(Dispatchers.IO) {
+                runtime.alpineRuntime.initialize()
+            }
+            if (setupState.isReady) {
+                settingsRepository.updateSettings(
+                    _uiState.value.settings.withRuntimeEnabled(
+                        runtimeId = LocalRuntimeId.Alpine,
+                        makeDefault = makeDefault,
+                    )
+                )
+            }
+            _uiState.update { current -> current.copy(alpineSetupState = setupState) }
+            emitTransientMessage(setupState.detail.ifBlank { "Alpine runtime status refreshed." })
+        }
+    }
+
+    fun resetAlpineRuntime() {
+        viewModelScope.launch {
+            val setupState = withContext(Dispatchers.IO) {
+                runtime.alpineRuntime.reset()
+            }
+            val settings = _uiState.value.settings
+            settingsRepository.updateSettings(
+                settings.copy(
+                    enabledRuntimeIds = settings.enabledRuntimeIds - LocalRuntimeId.Alpine,
+                    defaultRuntimeId = if (settings.defaultRuntimeId == LocalRuntimeId.Alpine) {
+                        (settings.enabledRuntimeIds - LocalRuntimeId.Alpine).firstOrNull()
+                    } else {
+                        settings.defaultRuntimeId
+                    },
+                    alpineSetupCompleted = false,
+                    alpinePackageProfiles = emptyMap(),
+                )
+            )
+            _uiState.update { current -> current.copy(alpineSetupState = setupState) }
+        }
+    }
+
+    fun installAlpinePackageProfile(profileId: String) {
+        viewModelScope.launch {
+            val installingSettings = _uiState.value.settings.copy(
+                alpinePackageProfiles = _uiState.value.settings.alpinePackageProfiles +
+                    (
+                        profileId to PackageProfileState(
+                            profileId = profileId,
+                            installed = false,
+                            installedAtMillis = 0L,
+                            lastError = "Installing...",
+                        )
+                        ),
+            )
+            settingsRepository.updateSettings(installingSettings)
+            val setupState = withContext(Dispatchers.IO) {
+                runtime.alpineRuntime.installPackageProfile(profileId)
+            }
+            val profileState = if (setupState.isReady) {
+                PackageProfileState(
+                    profileId = profileId,
+                    installed = true,
+                    installedAtMillis = System.currentTimeMillis(),
+                    lastError = "",
+                )
+            } else {
+                PackageProfileState(
+                    profileId = profileId,
+                    installed = false,
+                    installedAtMillis = 0L,
+                    lastError = setupState.detail.ifBlank { "Install failed." },
+                )
+            }
+            val settings = _uiState.value.settings
+            settingsRepository.updateSettings(
+                settings.copy(
+                    alpinePackageProfiles = settings.alpinePackageProfiles + (profileId to profileState),
+                )
+            )
+            _uiState.update { current -> current.copy(alpineSetupState = setupState) }
+            emitTransientMessage(setupState.detail.ifBlank { "Alpine package profile updated." })
+        }
+    }
+
+    fun openAlpineTerminal() {
+        _uiState.update { current ->
+            current.copy(
+                alpineTerminal = current.alpineTerminal.copy(
+                    isOpen = true,
+                    error = "",
+                )
+            )
+        }
+        ensureAlpineTerminalSession()
+    }
+
+    fun closeAlpineTerminal() {
+        alpineTerminalSession?.stop()
+        alpineTerminalSession = null
+        alpineTerminalScreenBuffer.clear()
+        _uiState.update { current ->
+            current.copy(
+                alpineTerminal = current.alpineTerminal.copy(
+                    isOpen = false,
+                    isStarting = false,
+                    isRunning = false,
+                    output = "",
+                    styledOutput = alpineTerminalScreenBuffer.styledText,
+                    bracketedPasteEnabled = alpineTerminalScreenBuffer.isBracketedPasteEnabled,
+                    mouseTrackingMode = alpineTerminalScreenBuffer.currentMouseTrackingMode,
+                    mouseProtocol = alpineTerminalScreenBuffer.currentMouseProtocol,
+                    alternateScreenEnabled = alpineTerminalScreenBuffer.isAlternateScreenEnabled,
+                    applicationCursorKeysEnabled = alpineTerminalScreenBuffer.isApplicationCursorKeysEnabled,
+                    applicationKeypadEnabled = alpineTerminalScreenBuffer.isApplicationKeypadEnabled,
+                    cursorRow = alpineTerminalScreenBuffer.cursorRow,
+                    cursorColumn = alpineTerminalScreenBuffer.cursorColumn,
+                    cursorVisible = alpineTerminalScreenBuffer.isCursorVisible,
+                    cursorStyle = alpineTerminalScreenBuffer.currentCursorStyle,
+                    focusEventsEnabled = alpineTerminalScreenBuffer.isFocusEventsEnabled,
+                    title = alpineTerminalScreenBuffer.currentTitle,
+                )
+            )
+        }
+    }
+
+    fun sendAlpineTerminalControl(sequence: String) {
+        ensureAlpineTerminalSession()
+        alpineTerminalSession?.send(sequence)
+    }
+
+    fun resizeAlpineTerminal(
+        rows: Int,
+        columns: Int,
+    ) {
+        val normalizedRows = rows.coerceAtLeast(1)
+        val normalizedColumns = columns.coerceAtLeast(1)
+        val current = _uiState.value.alpineTerminal
+        if (current.rows == normalizedRows && current.columns == normalizedColumns) return
+        _uiState.update { state ->
+            state.copy(
+                alpineTerminal = state.alpineTerminal.copy(
+                    rows = normalizedRows,
+                    columns = normalizedColumns,
+                )
+            )
+        }
+        alpineTerminalScreenBuffer.resize(normalizedRows, normalizedColumns)
+        alpineTerminalSession?.resize(normalizedRows, normalizedColumns)
+    }
+
+    fun clearAlpineTerminalOutput() {
+        alpineTerminalScreenBuffer.clear()
+        _uiState.update { current ->
+            current.copy(
+                alpineTerminal = current.alpineTerminal.copy(
+                    output = "",
+                    styledOutput = alpineTerminalScreenBuffer.styledText,
+                    bracketedPasteEnabled = alpineTerminalScreenBuffer.isBracketedPasteEnabled,
+                    mouseTrackingMode = alpineTerminalScreenBuffer.currentMouseTrackingMode,
+                    mouseProtocol = alpineTerminalScreenBuffer.currentMouseProtocol,
+                    alternateScreenEnabled = alpineTerminalScreenBuffer.isAlternateScreenEnabled,
+                    applicationCursorKeysEnabled = alpineTerminalScreenBuffer.isApplicationCursorKeysEnabled,
+                    applicationKeypadEnabled = alpineTerminalScreenBuffer.isApplicationKeypadEnabled,
+                    cursorRow = alpineTerminalScreenBuffer.cursorRow,
+                    cursorColumn = alpineTerminalScreenBuffer.cursorColumn,
+                    cursorVisible = alpineTerminalScreenBuffer.isCursorVisible,
+                    cursorStyle = alpineTerminalScreenBuffer.currentCursorStyle,
+                    focusEventsEnabled = alpineTerminalScreenBuffer.isFocusEventsEnabled,
+                    title = alpineTerminalScreenBuffer.currentTitle,
+                )
+            )
+        }
+    }
+
+    fun installAlpinePackageProfileInTerminal(profileId: String) {
+        openAlpineTerminal()
+        val command = runtime.alpineRuntime.packageProfileInstallCommand(profileId)
+        if (command == null) {
+            emitTransientMessage("Unknown Alpine package profile: $profileId")
+            return
+        }
+        viewModelScope.launch {
+            updateAlpinePackageProfileInstalling(profileId)
+            appendAlpineTerminalOutput("\n[Aether] Installing Alpine profile: $profileId\n$command\n")
+            val setupState = withContext(Dispatchers.IO) {
+                runtime.alpineRuntime.installPackageProfileWithOutput(profileId) { chunk ->
+                    appendAlpineTerminalOutput(chunk)
+                }
+            }
+            val profileState = if (setupState.isReady) {
+                PackageProfileState(
+                    profileId = profileId,
+                    installed = true,
+                    installedAtMillis = System.currentTimeMillis(),
+                    lastError = "",
+                )
+            } else {
+                PackageProfileState(
+                    profileId = profileId,
+                    installed = false,
+                    installedAtMillis = 0L,
+                    lastError = setupState.detail.ifBlank { "Install failed." },
+                )
+            }
+            val settings = _uiState.value.settings
+            settingsRepository.updateSettings(
+                settings.copy(
+                    alpinePackageProfiles = settings.alpinePackageProfiles + (profileId to profileState),
+                )
+            )
+            _uiState.update { current -> current.copy(alpineSetupState = setupState) }
+            appendAlpineTerminalOutput(
+                if (setupState.isReady) {
+                    "\n[Aether] Alpine profile '$profileId' is ready.\n"
+                } else {
+                    "\n[Aether] Alpine profile '$profileId' failed: ${setupState.detail}\n"
+                }
+            )
+            emitTransientMessage(setupState.detail.ifBlank { "Alpine package profile updated." })
+        }
+    }
+
+    private fun ensureAlpineTerminalSession() {
+        val currentSession = alpineTerminalSession
+        if (currentSession?.isAlive == true || _uiState.value.alpineTerminal.isStarting) return
+        _uiState.update { current ->
+            current.copy(
+                alpineTerminal = current.alpineTerminal.copy(
+                    isStarting = true,
+                    isRunning = false,
+                    error = "",
+                )
+            )
+        }
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    runtime.alpineRuntime.startInteractiveSession { chunk ->
+                        appendAlpineTerminalOutput(chunk)
+                    }
+                }
+            }.onSuccess { session ->
+                alpineTerminalSession = session
+                _uiState.update { current ->
+                    current.copy(
+                        alpineTerminal = current.alpineTerminal.copy(
+                            isStarting = false,
+                            isRunning = true,
+                            error = "",
+                        )
+                    )
+                }
+            }.onFailure { throwable ->
+                alpineTerminalSession = null
+                _uiState.update { current ->
+                    current.copy(
+                        alpineTerminal = current.alpineTerminal.copy(
+                            isStarting = false,
+                            isRunning = false,
+                            error = throwable.message ?: "Failed to start Alpine terminal.",
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    private fun appendAlpineTerminalOutput(chunk: String) {
+        _uiState.update { current ->
+            current.copy(
+                alpineTerminal = current.alpineTerminal.copy(
+                    output = alpineTerminalScreenBuffer.append(chunk).takeLast(80_000),
+                    styledOutput = alpineTerminalScreenBuffer.styledText.takeLast(80_000),
+                    bracketedPasteEnabled = alpineTerminalScreenBuffer.isBracketedPasteEnabled,
+                    mouseTrackingMode = alpineTerminalScreenBuffer.currentMouseTrackingMode,
+                    mouseProtocol = alpineTerminalScreenBuffer.currentMouseProtocol,
+                    alternateScreenEnabled = alpineTerminalScreenBuffer.isAlternateScreenEnabled,
+                    applicationCursorKeysEnabled = alpineTerminalScreenBuffer.isApplicationCursorKeysEnabled,
+                    applicationKeypadEnabled = alpineTerminalScreenBuffer.isApplicationKeypadEnabled,
+                    cursorRow = alpineTerminalScreenBuffer.cursorRow,
+                    cursorColumn = alpineTerminalScreenBuffer.cursorColumn,
+                    cursorVisible = alpineTerminalScreenBuffer.isCursorVisible,
+                    cursorStyle = alpineTerminalScreenBuffer.currentCursorStyle,
+                    focusEventsEnabled = alpineTerminalScreenBuffer.isFocusEventsEnabled,
+                    title = alpineTerminalScreenBuffer.currentTitle,
+                )
+            )
+        }
+    }
+
+    private suspend fun updateAlpinePackageProfileInstalling(profileId: String) {
+        val installingSettings = _uiState.value.settings.copy(
+            alpinePackageProfiles = _uiState.value.settings.alpinePackageProfiles +
+                (
+                    profileId to PackageProfileState(
+                        profileId = profileId,
+                        installed = false,
+                        installedAtMillis = 0L,
+                        lastError = "Installing...",
+                    )
+                )
+        )
+        settingsRepository.updateSettings(installingSettings)
+    }
+
+    fun setDefaultRuntime(runtimeId: LocalRuntimeId) {
+        viewModelScope.launch {
+            val settings = _uiState.value.settings
+            settingsRepository.updateSettings(
+                settings.copy(
+                    enabledRuntimeIds = settings.enabledRuntimeIds + runtimeId,
+                    defaultRuntimeId = runtimeId,
+                )
+            )
+        }
     }
 
     fun refreshAgentModeAuthorization() {
@@ -1765,6 +2110,7 @@ class AetherViewModel(
         argumentsRaw: String,
         workingDirectory: String,
         environmentRaw: String,
+        runtimeEnvironment: LocalRuntimeId?,
     ) {
         val trimmedName = displayName.trim()
         val trimmedCommand = command.trim()
@@ -1785,6 +2131,7 @@ class AetherViewModel(
                         arguments = parseNonBlankLines(argumentsRaw),
                         workingDirectory = workingDirectory.trim(),
                         environment = parseKeyValueLines(environmentRaw),
+                        runtimeEnvironment = runtimeEnvironment,
                     ),
                     isEnabled = existingServer?.isEnabled ?: true,
                     connectTimeoutMillis = existingServer?.connectTimeoutMillis ?: 15_000L,
@@ -1881,6 +2228,7 @@ class AetherViewModel(
                 server = server,
                 workspaceDirectory = workspaceDirectory,
                 operation = operation,
+                settings = _uiState.value.settings,
             )
             onComplete(
                 result.fold(
@@ -3929,6 +4277,24 @@ class AetherViewModel(
             },
         )
         put("termuxLiveOutputEnabled", termuxLiveOutputEnabled)
+        put("enabledRuntimeIds", JSONArray().apply { enabledRuntimeIds.forEach { put(it.storageValue) } })
+        put("defaultRuntimeId", defaultRuntimeId?.storageValue ?: JSONObject.NULL)
+        put("alpineSetupCompleted", alpineSetupCompleted)
+        put(
+            "alpinePackageProfiles",
+            JSONArray().apply {
+                alpinePackageProfiles.values.forEach { profile ->
+                    put(
+                        JSONObject().apply {
+                            put("profileId", profile.profileId)
+                            put("installed", profile.installed)
+                            put("installedAtMillis", profile.installedAtMillis)
+                            put("lastError", profile.lastError)
+                        }
+                    )
+                }
+            },
+        )
         put("agentModeAuthorizationEnabled", agentModeAuthorizationEnabled)
         put("agentModeAuthorizationMethod", agentModeAuthorizationMethod.storageValue)
         put("language", language.storageValue)
@@ -3992,6 +4358,15 @@ class AetherViewModel(
             termuxLiveOutputEnabled = json.optBoolean(
                 "termuxLiveOutputEnabled",
                 defaults.termuxLiveOutputEnabled,
+            ),
+            enabledRuntimeIds = parseImportedRuntimeIds(json.optJSONArray("enabledRuntimeIds")),
+            defaultRuntimeId = LocalRuntimeId.fromStorage(json.optString("defaultRuntimeId")),
+            alpineSetupCompleted = json.optBoolean(
+                "alpineSetupCompleted",
+                defaults.alpineSetupCompleted,
+            ),
+            alpinePackageProfiles = parseImportedPackageProfileStates(
+                json.optJSONArray("alpinePackageProfiles")
             ),
             agentModeAuthorizationEnabled = json.optBoolean(
                 "agentModeAuthorizationEnabled",
@@ -4067,6 +4442,37 @@ class AetherViewModel(
         )
     }
 
+    private fun parseImportedRuntimeIds(array: JSONArray?): Set<LocalRuntimeId> {
+        if (array == null) return emptySet()
+        return buildSet {
+            for (index in 0 until array.length()) {
+                LocalRuntimeId.fromStorage(array.optString(index))?.let(::add)
+            }
+        }
+    }
+
+    private fun parseImportedPackageProfileStates(
+        array: JSONArray?,
+    ): Map<String, PackageProfileState> {
+        if (array == null) return emptyMap()
+        return buildMap {
+            for (index in 0 until array.length()) {
+                val item = array.optJSONObject(index) ?: continue
+                val profileId = item.optString("profileId").trim()
+                if (profileId.isBlank()) continue
+                put(
+                    profileId,
+                    PackageProfileState(
+                        profileId = profileId,
+                        installed = item.optBoolean("installed", false),
+                        installedAtMillis = item.optLong("installedAtMillis", 0L),
+                        lastError = item.optString("lastError"),
+                    )
+                )
+            }
+        }
+    }
+
     private fun emitTransientMessage(message: String) {
         _transientMessages.tryEmit(message)
     }
@@ -4132,3 +4538,16 @@ private fun AetherUiState.isAgentModeReady(): Boolean =
     settings.agentModeAuthorizationEnabled &&
         agentModeAuthorizationState.isReady &&
         isTermuxReadyForAgentMode()
+
+private fun AppSettings.withRuntimeEnabled(
+    runtimeId: LocalRuntimeId,
+    makeDefault: Boolean = defaultRuntimeId == null,
+): AppSettings {
+    val enabled = enabledRuntimeIds + runtimeId
+    return copy(
+        termuxSetupCompleted = termuxSetupCompleted || runtimeId == LocalRuntimeId.Termux,
+        alpineSetupCompleted = alpineSetupCompleted || runtimeId == LocalRuntimeId.Alpine,
+        enabledRuntimeIds = enabled,
+        defaultRuntimeId = if (makeDefault) runtimeId else defaultRuntimeId,
+    )
+}

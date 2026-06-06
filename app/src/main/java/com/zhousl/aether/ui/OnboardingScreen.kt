@@ -41,6 +41,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.SmartToy
 import androidx.compose.material.icons.rounded.Search
@@ -93,6 +94,8 @@ import com.zhousl.aether.data.resolveAutomaticModelKey
 import com.zhousl.aether.data.RootSetupIssue
 import com.zhousl.aether.data.RootSetupState
 import com.zhousl.aether.data.usesOfficialVertexEndpoint
+import com.zhousl.aether.runtime.LocalRuntimeIssue
+import com.zhousl.aether.runtime.LocalRuntimeSetupState
 import com.zhousl.aether.termux.TermuxSetupIssue
 import com.zhousl.aether.termux.TermuxSetupState
 import com.zhousl.aether.termux.TermuxContract
@@ -120,7 +123,9 @@ private const val MessageMaxDurationMillis = 3_300L
 private val TourEasing = CubicBezierEasing(0.22f, 0.84f, 0.18f, 1f)
 private val InitialOnboardingSteps = listOf(OnboardingStep.Landing, OnboardingStep.ProviderSetup)
 private val FollowUpOnboardingSteps = listOf(
+    OnboardingStep.LocalRuntimeChoice,
     OnboardingStep.TermuxSetup,
+    OnboardingStep.AlpineSetup,
     OnboardingStep.AgentModeAuthorization,
     OnboardingStep.TavilySetup,
     OnboardingStep.SkillsOverview,
@@ -163,7 +168,9 @@ private fun OnboardingStep.flowSteps(): List<OnboardingStep> = when (this) {
     OnboardingStep.Landing,
     OnboardingStep.ProviderSetup -> InitialOnboardingSteps
 
+    OnboardingStep.LocalRuntimeChoice,
     OnboardingStep.TermuxSetup,
+    OnboardingStep.AlpineSetup,
     OnboardingStep.AgentModeAuthorization,
     OnboardingStep.TavilySetup,
     OnboardingStep.SkillsOverview,
@@ -177,6 +184,7 @@ fun OnboardingScreen(
     existingProviderConfig: LlmProviderConfig?,
     isFetchingModels: Boolean,
     termuxSetupState: TermuxSetupState,
+    alpineSetupState: LocalRuntimeSetupState,
     rootSetupState: RootSetupState,
     agentModeAuthorizationMethod: AgentModeAuthorizationMethod,
     tavilyApiKey: String,
@@ -193,6 +201,8 @@ fun OnboardingScreen(
     onOpenTermux: () -> Unit,
     onInstallTermux: () -> Unit,
     onRefreshTermuxSetup: () -> Unit,
+    onInitializeAlpineRuntime: () -> Unit,
+    onRefreshAlpineSetup: () -> Unit,
     onRefreshRootSetup: () -> Unit,
     onConfigureWithRoot: () -> Unit,
     onSaveAgentModeAuthorization: (Boolean, AgentModeAuthorizationMethod) -> Unit,
@@ -209,6 +219,9 @@ fun OnboardingScreen(
     val formState = rememberProviderFormState(existingProviderConfig)
     var selectedProvider by rememberSaveable(initialStep, replayMode, existingProviderConfig?.id) {
         mutableStateOf(existingProviderConfig?.providerType)
+    }
+    var selectedRuntimePath by rememberSaveable(initialStep, replayMode) {
+        mutableStateOf<OnboardingStep?>(null)
     }
     val steps = remember(initialStep) { initialStep.flowSteps() }
 
@@ -270,12 +283,38 @@ fun OnboardingScreen(
                 onComplete = { onCompleteProviderSetup(formState.buildConfig()) },
             )
 
+            OnboardingStep.LocalRuntimeChoice -> LocalRuntimeChoiceStep(
+                stepIndex = stepIndex,
+                stepCount = steps.size,
+                onClose = onClose,
+                onChooseAlpine = {
+                    selectedRuntimePath = OnboardingStep.AlpineSetup
+                    currentStep = OnboardingStep.AlpineSetup
+                },
+                onChooseTermux = {
+                    selectedRuntimePath = OnboardingStep.TermuxSetup
+                    currentStep = OnboardingStep.TermuxSetup
+                },
+            )
+
+            OnboardingStep.AlpineSetup -> AlpineRuntimeStep(
+                stepIndex = stepIndex,
+                stepCount = steps.size,
+                setupState = alpineSetupState,
+                onBack = { currentStep = OnboardingStep.LocalRuntimeChoice },
+                onClose = onClose,
+                onInitialize = onInitializeAlpineRuntime,
+                onRefresh = onRefreshAlpineSetup,
+                onContinue = { currentStep = OnboardingStep.TavilySetup },
+            )
+
             OnboardingStep.TermuxSetup -> TermuxStep(
                 stepIndex = stepIndex,
                 stepCount = steps.size,
                 setupState = termuxSetupState,
                 rootSetupState = rootSetupState,
                 onClose = onClose,
+                onBack = { currentStep = OnboardingStep.LocalRuntimeChoice },
                 onContinue = ::continueAfterTermuxStep,
                 onRootConfigured = ::continueAfterLocalAccessSetup,
                 onRequestPermission = onRequestTermuxPermission,
@@ -306,7 +345,9 @@ fun OnboardingScreen(
                 value = tavilyApiKeyValue,
                 onValueChange = { tavilyApiKeyValue = it },
                 onBack = {
-                    currentStep = if (termuxSetupState.isReady) {
+                    currentStep = if (selectedRuntimePath == OnboardingStep.AlpineSetup) {
+                        OnboardingStep.AlpineSetup
+                    } else if (termuxSetupState.isReady) {
                         OnboardingStep.AgentModeAuthorization
                     } else {
                         OnboardingStep.TermuxSetup
@@ -841,12 +882,204 @@ private fun ProviderSetupStep(
 }
 
 @Composable
+private fun LocalRuntimeChoiceStep(
+    stepIndex: Int,
+    stepCount: Int,
+    onClose: () -> Unit,
+    onChooseAlpine: () -> Unit,
+    onChooseTermux: () -> Unit,
+) {
+    val strings = rememberAetherStrings()
+    ConversationStepPage(
+        stepIndex = stepIndex,
+        stepCount = stepCount,
+        message = tr(
+            strings,
+            "Choose one local capability path for the tour. You can configure the other one later in Settings.",
+            "为引导选择一条本地能力路径。另一条路线之后可以在设置里单独配置。",
+        ),
+        onBack = null,
+        topRightLabel = strings.close,
+        onTopRight = onClose,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            LocalRuntimePathButton(
+                icon = Icons.Rounded.Code,
+                accent = TourBlue,
+                title = tr(strings, "Alpine virtual machine", "Alpine 虚拟机"),
+                subtitle = tr(
+                    strings,
+                    "Built-in app-private Linux environment for scripts, development tools, and stdio MCP.",
+                    "内置应用私有 Linux 环境，适合脚本、开发工具和 stdio MCP。",
+                ),
+                onClick = onChooseAlpine,
+            )
+            LocalRuntimePathButton(
+                icon = Icons.Rounded.Terminal,
+                accent = TourGreen,
+                title = tr(strings, "Termux + Agent Mode", "Termux + Agent Mode"),
+                subtitle = tr(
+                    strings,
+                    "External Android-side bridge for phone operations, permissions, and Agent Mode.",
+                    "外部手机侧桥接，适合操作 Android、权限配置和 Agent Mode。",
+                ),
+                onClick = onChooseTermux,
+            )
+        }
+    }
+}
+
+@Composable
+private fun LocalRuntimePathButton(
+    icon: ImageVector,
+    accent: Color,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(98.dp),
+        shape = RoundedCornerShape(26.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = TourSurface,
+            contentColor = TourTextPrimary,
+        ),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(accent.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(icon, contentDescription = null, tint = accent)
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(title, style = MaterialTheme.typography.titleSmall, color = TourTextPrimary)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TourTextSecondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AlpineRuntimeStep(
+    stepIndex: Int,
+    stepCount: Int,
+    setupState: LocalRuntimeSetupState,
+    onBack: () -> Unit,
+    onClose: () -> Unit,
+    onInitialize: () -> Unit,
+    onRefresh: () -> Unit,
+    onContinue: () -> Unit,
+) {
+    val strings = rememberAetherStrings()
+    LaunchedEffect(Unit) {
+        onRefresh()
+    }
+    ConversationStepPage(
+        stepIndex = stepIndex,
+        stepCount = stepCount,
+        message = tr(
+            strings,
+            "Set up the built-in Alpine Linux environment. It stays inside Aether's private app storage.",
+            "配置内置 Alpine Linux 环境。它会保存在 Aether 的应用私有目录中。",
+        ),
+        onBack = onBack,
+        topRightLabel = strings.close,
+        onTopRight = onClose,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            StepLead(
+                icon = Icons.Rounded.Code,
+                accent = when (setupState.issue) {
+                    LocalRuntimeIssue.Ready -> TourGreen
+                    LocalRuntimeIssue.UnsupportedAbi,
+                    LocalRuntimeIssue.MissingAssets,
+                    LocalRuntimeIssue.Failed -> TourGold
+                    else -> TourBlue
+                },
+                title = "Alpine",
+                body = alpineTourStatusText(setupState, strings),
+            )
+            if (setupState.detail.isNotBlank()) {
+                Text(
+                    text = setupState.detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TourTextSecondary,
+                )
+            }
+            when (setupState.issue) {
+                LocalRuntimeIssue.Ready -> TourActionRow(
+                    primaryLabel = strings.continueLabel,
+                    onPrimary = onContinue,
+                    secondaryLabel = strings.refresh,
+                    onSecondary = onRefresh,
+                )
+
+                LocalRuntimeIssue.UnsupportedAbi,
+                LocalRuntimeIssue.MissingAssets,
+                LocalRuntimeIssue.Failed -> TourActionRow(
+                    primaryLabel = strings.refresh,
+                    onPrimary = onRefresh,
+                    secondaryLabel = strings.skip,
+                    onSecondary = onContinue,
+                )
+
+                else -> TourActionRow(
+                    primaryLabel = tr(strings, "Initialize", "初始化"),
+                    onPrimary = onInitialize,
+                    secondaryLabel = strings.skip,
+                    onSecondary = onContinue,
+                )
+            }
+        }
+    }
+}
+
+private fun alpineTourStatusText(
+    setupState: LocalRuntimeSetupState,
+    strings: AetherStrings,
+): String = when (setupState.issue) {
+    LocalRuntimeIssue.Ready -> tr(strings, "Alpine is ready and will be used as the default local runtime.", "Alpine 已就绪，并会作为默认本地运行环境。")
+    LocalRuntimeIssue.NotConfigured,
+    LocalRuntimeIssue.NotInstalled -> tr(strings, "Initialize Alpine to use Aether's built-in Linux VM.", "初始化 Alpine 以使用 Aether 的内置 Linux 虚拟机。")
+    LocalRuntimeIssue.UnsupportedAbi -> tr(strings, "Alpine v1 currently supports arm64-v8a only.", "Alpine v1 目前仅支持 arm64-v8a。")
+    LocalRuntimeIssue.MissingAssets -> tr(strings, "This build does not include the Alpine runtime assets yet.", "当前构建尚未包含 Alpine 运行环境资源。")
+    LocalRuntimeIssue.Failed -> tr(strings, "Alpine could not start. You can retry later from Settings.", "Alpine 未能启动。之后可以在设置里重试。")
+    LocalRuntimeIssue.PermissionMissing,
+    LocalRuntimeIssue.ExternalAppsDisabled,
+    LocalRuntimeIssue.DispatchFailed -> tr(strings, "Alpine is not ready yet.", "Alpine 尚未就绪。")
+}
+
+@Composable
 private fun TermuxStep(
     stepIndex: Int,
     stepCount: Int,
     setupState: TermuxSetupState,
     rootSetupState: RootSetupState,
     onClose: () -> Unit,
+    onBack: () -> Unit,
     onContinue: () -> Unit,
     onRootConfigured: () -> Unit,
     onRequestPermission: () -> Unit,
@@ -897,7 +1130,7 @@ private fun TermuxStep(
         stepIndex = stepIndex,
         stepCount = stepCount,
         message = "Great. Now let’s give Aether access to your device so tools can run locally.",
-        onBack = null,
+        onBack = onBack,
         topRightLabel = strings.close,
         onTopRight = onClose,
     ) {
