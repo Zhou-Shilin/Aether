@@ -179,6 +179,13 @@
     <string name="onboarding_termux_status_dispatch_failed_configured">Open Termux once, then refresh here.</string>
     <string name="onboarding_termux_status_dispatch_failed">Copy the setup command, paste it in Termux, then return and refresh.</string>
     <!-- Markdown -->
+    <string name="attachment_file_preview_unavailable">Preview unavailable for this file type.</string>
+    <string name="attachment_preview_truncated">Preview truncated for readability.</string>
+    <string name="attachment_type_photo">Photo</string>
+    <string name="attachment_type_file">File</string>
+    <string name="attachment_copying_to_workspace">Copying to workspace</string>
+    <string name="attachment_workspace_copy_failed">Workspace copy failed</string>
+    <string name="attachment_remove">Remove attachment</string>
     <string name="attachment_close_preview">Close preview</string>
     <string name="markdown_open_original">Open original</string>
 

@@ -2793,7 +2793,7 @@ fun AttachmentPreviewDialog(
     onDismiss: () -> Unit,
     onSave: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
+    val attachmentKindLabel = attachmentTypeLabel(attachment.kind)
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -2835,7 +2835,7 @@ fun AttachmentPreviewDialog(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                    text = formatAttachmentMetaLabel(strings, attachment),
+                        text = formatAttachmentMetaLabel(attachmentKindLabel, attachment),
                         style = MaterialTheme.typography.bodySmall,
                         color = AetherOnSurfaceVariant,
                     )
@@ -2899,7 +2899,6 @@ private fun AttachmentImagePreview(
 private fun AttachmentFilePreview(
     attachment: ChatAttachment,
 ) {
-    val strings = rememberAetherStrings()
     val preview = rememberAttachmentTextPreview(attachment)
 
     Column(
@@ -2912,7 +2911,7 @@ private fun AttachmentFilePreview(
     ) {
         if (preview == null) {
             Text(
-                text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "此文件类型无法预览。" else "Preview unavailable for this file type.",
+                text = stringResource(R.string.attachment_file_preview_unavailable),
                 style = MaterialTheme.typography.bodyMedium,
                 color = AetherOnSurfaceVariant,
             )
@@ -2933,7 +2932,7 @@ private fun AttachmentFilePreview(
             }
             if (preview.isTruncated) {
                 Text(
-                    text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "为了便于阅读，预览内容已截断。" else "Preview truncated for readability.",
+                    text = stringResource(R.string.attachment_preview_truncated),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                 )
@@ -2988,7 +2987,7 @@ private fun UserFileAttachmentCard(
     attachment: ChatAttachment,
     onClick: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
+    val attachmentKindLabel = attachmentTypeLabel(attachment.kind)
     Row(
         modifier = Modifier
             .widthIn(max = 300.dp)
@@ -3018,7 +3017,7 @@ private fun UserFileAttachmentCard(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                    text = formatAttachmentMetaLabel(strings, attachment),
+                text = formatAttachmentMetaLabel(attachmentKindLabel, attachment),
                 style = MaterialTheme.typography.bodySmall,
                 color = AetherOnSurfaceVariant,
                 maxLines = 1,
@@ -3039,7 +3038,9 @@ private fun ComposerImageAttachmentCard(
     attachment: ChatAttachment,
     onRemove: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
+    val attachmentKindLabel = attachmentTypeLabel(attachment.kind)
+    val copyingToWorkspaceLabel = stringResource(R.string.attachment_copying_to_workspace)
+    val workspaceCopyFailedLabel = stringResource(R.string.attachment_workspace_copy_failed)
     val bitmap = rememberAttachmentBitmap(attachment.uri, maxSize = 600)
     Row(
         modifier = Modifier
@@ -3077,14 +3078,19 @@ private fun ComposerImageAttachmentCard(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                    text = formatComposerAttachmentMetaLabel(strings, attachment),
+                text = formatComposerAttachmentMetaLabel(
+                    attachmentKindLabel = attachmentKindLabel,
+                    copyingToWorkspaceLabel = copyingToWorkspaceLabel,
+                    workspaceCopyFailedLabel = workspaceCopyFailedLabel,
+                    attachment = attachment,
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = AetherOnSurfaceVariant,
             )
         }
         IconOnlyAction(
             icon = Icons.Rounded.Close,
-            contentDescription = "Remove attachment",
+            contentDescription = stringResource(R.string.attachment_remove),
             onClick = onRemove,
         )
     }
@@ -3095,7 +3101,9 @@ private fun ComposerFileAttachmentCard(
     attachment: ChatAttachment,
     onRemove: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
+    val attachmentKindLabel = attachmentTypeLabel(attachment.kind)
+    val copyingToWorkspaceLabel = stringResource(R.string.attachment_copying_to_workspace)
+    val workspaceCopyFailedLabel = stringResource(R.string.attachment_workspace_copy_failed)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -3123,14 +3131,19 @@ private fun ComposerFileAttachmentCard(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                    text = formatComposerAttachmentMetaLabel(strings, attachment),
+                text = formatComposerAttachmentMetaLabel(
+                    attachmentKindLabel = attachmentKindLabel,
+                    copyingToWorkspaceLabel = copyingToWorkspaceLabel,
+                    workspaceCopyFailedLabel = workspaceCopyFailedLabel,
+                    attachment = attachment,
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = AetherOnSurfaceVariant,
             )
         }
         IconOnlyAction(
             icon = Icons.Rounded.Close,
-            contentDescription = "Remove attachment",
+            contentDescription = stringResource(R.string.attachment_remove),
             onClick = onRemove,
         )
     }
@@ -3505,29 +3518,38 @@ private fun formatReasoningTraceDoneChunkTitle(trace: ReasoningTrace): String {
     return "Thought for $duration"
 }
 
-private fun formatAttachmentMetaLabel(strings: AetherStrings, attachment: ChatAttachment): String {
-    val typeLabel = strings.attachmentTypeLabel(attachment.kind == AttachmentKind.Image)
+@Composable
+private fun attachmentTypeLabel(kind: AttachmentKind): String = stringResource(
+    if (kind == AttachmentKind.Image) R.string.attachment_type_photo else R.string.attachment_type_file,
+)
+
+private fun formatAttachmentMetaLabel(attachmentKindLabel: String, attachment: ChatAttachment): String {
     val sizeLabel = attachment.sizeBytes?.let(::formatAttachmentSize)
-    return listOfNotNull(typeLabel, sizeLabel).joinToString(" | ")
+    return listOfNotNull(attachmentKindLabel, sizeLabel).joinToString(" | ")
 }
 
-private fun formatComposerAttachmentMetaLabel(strings: AetherStrings, attachment: ChatAttachment): String {
+private fun formatComposerAttachmentMetaLabel(
+    attachmentKindLabel: String,
+    copyingToWorkspaceLabel: String,
+    workspaceCopyFailedLabel: String,
+    attachment: ChatAttachment,
+): String {
     val statusLabel = when (attachment.workspaceState) {
-        AttachmentWorkspaceState.Pending -> if (strings.appLanguage == AppLanguage.SimplifiedChinese) "正在复制到工作区" else "Copying to workspace"
-        AttachmentWorkspaceState.Failed -> if (strings.appLanguage == AppLanguage.SimplifiedChinese) "工作区复制失败" else "Workspace copy failed"
+        AttachmentWorkspaceState.Pending -> copyingToWorkspaceLabel
+        AttachmentWorkspaceState.Failed -> workspaceCopyFailedLabel
         AttachmentWorkspaceState.Ready -> null
     }
     return listOfNotNull(
-        formatAttachmentMetaLabel(strings, attachment).ifBlank { null },
+        formatAttachmentMetaLabel(attachmentKindLabel, attachment).ifBlank { null },
         if (attachment.workspaceState == AttachmentWorkspaceState.Pending) {
-            formatWorkspaceCopyProgress(strings, attachment)
+            formatWorkspaceCopyProgress(copyingToWorkspaceLabel, attachment)
         } else {
             statusLabel
         },
     ).joinToString(" | ")
 }
 
-private fun formatWorkspaceCopyProgress(strings: AetherStrings, attachment: ChatAttachment): String {
+private fun formatWorkspaceCopyProgress(copyingToWorkspaceLabel: String, attachment: ChatAttachment): String {
     val copiedLabel = attachment.workspaceBytesCopied
         .takeIf { it > 0L }
         ?.let(::formatAttachmentSize)
@@ -3540,12 +3562,7 @@ private fun formatWorkspaceCopyProgress(strings: AetherStrings, attachment: Chat
         copiedLabel != null -> copiedLabel
         else -> null
     }
-    val prefix = if (strings.appLanguage == AppLanguage.SimplifiedChinese) {
-        "正在复制到工作区"
-    } else {
-        "Copying to workspace"
-    }
-    return listOfNotNull(prefix, progressLabel, speedLabel).joinToString(" · ")
+    return listOfNotNull(copyingToWorkspaceLabel, progressLabel, speedLabel).joinToString(" · ")
 }
 
 private fun formatToolInvocationTitleLabel(toolInvocation: ChatToolInvocation): String {

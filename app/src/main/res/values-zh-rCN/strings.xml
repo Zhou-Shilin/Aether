@@ -140,6 +140,13 @@
     <string name="onboarding_termux_status_dispatch_failed_configured">先打开一次 Termux，然后回到这里刷新。</string>
     <string name="onboarding_termux_status_dispatch_failed">复制配置命令，在 Termux 中粘贴运行后再回来刷新。</string>
     <!-- Markdown -->
+    <string name="attachment_file_preview_unavailable">此文件类型无法预览。</string>
+    <string name="attachment_preview_truncated">为了便于阅读，预览内容已截断。</string>
+    <string name="attachment_type_photo">照片</string>
+    <string name="attachment_type_file">文件</string>
+    <string name="attachment_copying_to_workspace">正在复制到工作区</string>
+    <string name="attachment_workspace_copy_failed">工作区复制失败</string>
+    <string name="attachment_remove">移除附件</string>
     <string name="attachment_close_preview">关闭预览</string>
     <string name="markdown_open_original">打开原图</string>
 
