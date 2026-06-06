@@ -99,6 +99,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
@@ -274,6 +275,48 @@ private val SettingsTopFadeHeight = 40.dp
 
 private fun tr(strings: AetherStrings, english: String, chinese: String): String =
     if (strings.appLanguage == AppLanguage.SimplifiedChinese) chinese else english
+
+@Composable
+private fun settingsLanguageDisplayName(language: AppLanguage): String = when (language) {
+    AppLanguage.English -> stringResource(R.string.language_english)
+    AppLanguage.SimplifiedChinese -> stringResource(R.string.language_simplified_chinese)
+}
+
+@Composable
+private fun settingsLanguageSubtitle(language: AppLanguage): String = when (language) {
+    AppLanguage.English -> stringResource(R.string.settings_language_english_interface)
+    AppLanguage.SimplifiedChinese -> stringResource(R.string.settings_language_simplified_chinese_interface)
+}
+
+@Composable
+private fun settingsThemeDisplayName(themeMode: AppThemeMode): String = when (themeMode) {
+    AppThemeMode.System -> stringResource(R.string.theme_system)
+    AppThemeMode.Light -> stringResource(R.string.theme_light)
+    AppThemeMode.Dark -> stringResource(R.string.theme_dark)
+}
+
+@Composable
+private fun settingsThemeSubtitle(themeMode: AppThemeMode): String = when (themeMode) {
+    AppThemeMode.System -> stringResource(R.string.settings_system_theme_subtitle)
+    AppThemeMode.Light -> stringResource(R.string.settings_light_theme_subtitle)
+    AppThemeMode.Dark -> stringResource(R.string.settings_dark_theme_subtitle)
+}
+
+@Composable
+private fun settingsGeneralSummary(language: AppLanguage, themeMode: AppThemeMode): String =
+    stringResource(
+        R.string.settings_general_summary,
+        settingsLanguageDisplayName(language),
+        settingsThemeDisplayName(themeMode),
+    )
+
+@Composable
+private fun settingsEnabledProvidersSummary(enabledCount: Int): String =
+    stringResource(R.string.settings_enabled_providers_count, enabledCount)
+
+@Composable
+private fun settingsReleaseSummary(versionName: String): String =
+    stringResource(R.string.settings_release_summary, versionName)
 
 private fun settingsTopOverlayBodyGradient(): Brush = Brush.verticalGradient(
     colorStops = arrayOf(
@@ -621,13 +664,13 @@ fun SettingsScreen(
         when (targetPage) {
             SettingsPage.Hub -> SettingsHub(
                 strings = strings,
-                generalSettingsSummary = strings.generalSettingsSummary(
+                generalSettingsSummary = settingsGeneralSummary(
                     language = languageValue,
                     themeMode = themeModeValue,
                 ),
                 activeProviderName = providerConfigs.count { it.isEnabled }.let { enabledCount ->
                     when {
-                        enabledCount > 1 -> tr(strings, "$enabledCount providers enabled", "已启用 $enabledCount 个 Provider")
+                        enabledCount > 1 -> settingsEnabledProvidersSummary(enabledCount)
                         enabledCount == 1 -> providerConfigs.firstOrNull { it.isEnabled }?.name.orEmpty()
                         enabledModelOptions.isNotEmpty() -> enabledModelOptions.first().fullLabel
                         else -> provider.displayName
@@ -672,7 +715,6 @@ fun SettingsScreen(
             )
 
             SettingsPage.General -> GeneralSettingsPageV2(
-                strings = strings,
                 selectedLanguage = languageValue,
                 onLanguageSelected = {
                     languageValue = it
@@ -1056,8 +1098,8 @@ private fun SettingsHub(
                 SettingsCardGroup {
                     SettingsNavRow(
                         icon = Icons.Rounded.AutoAwesome,
-                        title = strings.generalSettings,
-                        subtitle = generalSettingsSummary.ifBlank { strings.generalSettingsHubHint },
+                        title = stringResource(R.string.settings_general),
+                        subtitle = generalSettingsSummary.ifBlank { stringResource(R.string.settings_general_hint) },
                         onClick = { onNavigate(SettingsPage.General) },
                     )
                 }
@@ -1068,32 +1110,32 @@ private fun SettingsHub(
             SettingsCardGroup {
                 SettingsNavRow(
                     icon = Icons.Rounded.Cloud,
-                    title = strings.modelProviders,
+                    title = stringResource(R.string.settings_model_providers),
                     subtitle = activeProviderName,
                     onClick = { onNavigate(SettingsPage.Providers) },
                 )
                 CardDivider()
                 SettingsNavRow(
                     icon = Icons.Rounded.Person,
-                    title = strings.personalization,
-                    subtitle = systemPromptSnippet.ifBlank { strings.customInstructions },
+                    title = stringResource(R.string.settings_personalization),
+                    subtitle = systemPromptSnippet.ifBlank { stringResource(R.string.settings_custom_instructions) },
                     onClick = { onNavigate(SettingsPage.Personalization) },
                 )
                 CardDivider()
                 SettingsNavRow(
                     icon = Icons.Rounded.Link,
-                    title = strings.webTools,
+                    title = stringResource(R.string.settings_web_tools),
                     subtitle = if (tavilyConfigured) {
-                        strings.tavilyConfigured
+                        stringResource(R.string.settings_tavily_configured)
                     } else {
-                        strings.tavilyNotConfigured
+                        stringResource(R.string.settings_tavily_not_configured)
                     },
                     onClick = { onNavigate(SettingsPage.WebTools) },
                 )
                 CardDivider()
                 SettingsNavRow(
                     icon = Icons.Rounded.Refresh,
-                    title = strings.reliability,
+                    title = stringResource(R.string.settings_reliability),
                     subtitle = reliabilitySummary,
                     onClick = { onNavigate(SettingsPage.Reliability) },
                 )
@@ -1105,14 +1147,14 @@ private fun SettingsHub(
             SettingsCardGroup {
                 SettingsNavRow(
                     icon = Icons.Rounded.Extension,
-                    title = strings.agentSkills,
+                    title = stringResource(R.string.settings_agent_skills),
                     subtitle = strings.skillCountSummary(skillCount),
                     onClick = { onNavigate(SettingsPage.Skills) },
                 )
                 CardDivider()
                 SettingsNavRow(
                     icon = Icons.Rounded.Code,
-                    title = strings.mcpServers,
+                    title = stringResource(R.string.settings_mcp_servers),
                     subtitle = strings.serverCountSummary(mcpServerCount),
                     onClick = { onNavigate(SettingsPage.McpServers) },
                 )
@@ -1130,16 +1172,16 @@ private fun SettingsHub(
                 CardDivider()
                 SettingsNavRow(
                     icon = Icons.Rounded.Terminal,
-                    title = strings.termux,
-                    subtitle = if (termuxReady) strings.connected else strings.setupRequired,
+                    title = stringResource(R.string.settings_termux),
+                    subtitle = if (termuxReady) stringResource(R.string.settings_connected) else stringResource(R.string.settings_setup_required),
                     onClick = { onNavigate(SettingsPage.Termux) },
                 )
                 CardDivider()
                 SettingsNavRow(
                     icon = LucideIcons.MousePointer2,
-                    title = strings.agentMode,
+                    title = stringResource(R.string.settings_agent_mode),
                     subtitle = if (termuxReady) {
-                        strings.agentModeSubtitle
+                        stringResource(R.string.settings_agent_mode_subtitle)
                     } else {
                         tr(strings, "Requires Termux setup", "Requires Termux setup")
                     },
@@ -1154,15 +1196,15 @@ private fun SettingsHub(
             SettingsCardGroup {
                 SettingsNavRow(
                     icon = Icons.Rounded.AutoAwesome,
-                    title = strings.getStartedTour,
-                    subtitle = strings.getStartedTourSubtitle,
+                    title = stringResource(R.string.settings_get_started_tour),
+                    subtitle = stringResource(R.string.settings_get_started_tour_subtitle),
                     onClick = onReplayOnboarding,
                 )
                 CardDivider()
                 SettingsNavRow(
                     icon = Icons.Rounded.Code,
-                    title = strings.developerSettings,
-                    subtitle = strings.developerSettingsSubtitle,
+                    title = stringResource(R.string.settings_developer),
+                    subtitle = stringResource(R.string.settings_developer_subtitle),
                     onClick = { onNavigate(SettingsPage.Developer) },
                 )
             }
@@ -1172,8 +1214,8 @@ private fun SettingsHub(
             SettingsCardGroup {
                 SettingsNavRow(
                     icon = Icons.Rounded.Info,
-                    title = strings.about,
-                    subtitle = "Release ${BuildConfig.VERSION_NAME}",
+                    title = stringResource(R.string.settings_about),
+                    subtitle = settingsReleaseSummary(BuildConfig.VERSION_NAME),
                     onClick = { onNavigate(SettingsPage.About) },
                 )
             }
@@ -1183,7 +1225,7 @@ private fun SettingsHub(
 
             SettingsTopBarOverlay(
                 modifier = Modifier.align(Alignment.TopCenter),
-                title = strings.settings,
+                title = stringResource(R.string.settings_title),
                 onBack = onBack,
                 onBodyHeightChanged = { topBarBodyHeightPx = it },
             )
@@ -1269,28 +1311,23 @@ private fun GeneralSettingsPage(
 
 @Composable
 private fun GeneralSettingsPageV2(
-    strings: AetherStrings,
     selectedLanguage: AppLanguage,
     onLanguageSelected: (AppLanguage) -> Unit,
     selectedThemeMode: AppThemeMode,
     onThemeModeSelected: (AppThemeMode) -> Unit,
     onBack: () -> Unit,
 ) {
-    SubPageScaffold(title = strings.generalSettings, onBack = onBack) {
+    SubPageScaffold(title = stringResource(R.string.settings_general), onBack = onBack) {
         SettingsCardGroup {
             SelectionDropdownField(
-                label = strings.language,
-                supportingText = strings.languageDescription,
-                selectedLabel = strings.languageDisplayName(selectedLanguage),
+                label = stringResource(R.string.settings_language),
+                supportingText = stringResource(R.string.settings_language_description),
+                selectedLabel = settingsLanguageDisplayName(selectedLanguage),
                 options = AppLanguage.entries.map { option ->
                     SelectionOption(
                         key = option.storageValue,
-                        title = strings.languageDisplayName(option),
-                        subtitle = if (option == AppLanguage.English) {
-                            "English interface"
-                        } else {
-                            "Simplified Chinese interface"
-                        },
+                        title = settingsLanguageDisplayName(option),
+                        subtitle = settingsLanguageSubtitle(option),
                         selected = option == selectedLanguage,
                         onClick = { onLanguageSelected(option) },
                     )
@@ -1302,14 +1339,14 @@ private fun GeneralSettingsPageV2(
 
         SettingsCardGroup {
             SelectionDropdownField(
-                label = strings.theme,
-                supportingText = strings.themeDescription,
-                selectedLabel = strings.themeDisplayName(selectedThemeMode),
+                label = stringResource(R.string.settings_theme),
+                supportingText = stringResource(R.string.settings_theme_description),
+                selectedLabel = settingsThemeDisplayName(selectedThemeMode),
                 options = AppThemeMode.entries.map { option ->
                     SelectionOption(
                         key = option.storageValue,
-                        title = strings.themeDisplayName(option),
-                        subtitle = strings.themeSubtitle(option),
+                        title = settingsThemeDisplayName(option),
+                        subtitle = settingsThemeSubtitle(option),
                         selected = option == selectedThemeMode,
                         onClick = { onThemeModeSelected(option) },
                     )

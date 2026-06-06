@@ -126,8 +126,16 @@
     <string name="settings_general">通用设置</string>
     <string name="settings_language">语言</string>
     <string name="settings_language_description">选择应用界面语言。</string>
+    <string name="language_english">英语</string>
+    <string name="language_simplified_chinese">简体中文</string>
+    <string name="settings_language_english_interface">英文界面</string>
+    <string name="settings_language_simplified_chinese_interface">简体中文界面</string>
     <string name="settings_theme">主题</string>
     <string name="settings_theme_description">选择应用界面外观。</string>
+    <string name="theme_system">跟随系统</string>
+    <string name="theme_light">浅色</string>
+    <string name="theme_dark">深色</string>
+    <string name="settings_system_theme_subtitle">跟随系统浅色或深色外观。</string>
     <string name="settings_light_theme_subtitle">保持当前明亮外观。</string>
     <string name="settings_dark_theme_subtitle">在整个应用中使用深色界面。</string>
     <string name="settings_workspace_mode">工作区模式</string>
@@ -144,6 +152,8 @@
     <string name="settings_about">关于</string>
     <string name="settings_get_started_tour">新手引导</string>
     <string name="settings_general_hint">应用语言与外观</string>
+    <string name="settings_general_summary">%1$s / %2$s</string>
+    <string name="settings_enabled_providers_count">已启用 %1$d 个 Provider</string>
     <string name="settings_custom_instructions">自定义指令</string>
     <string name="settings_tavily_configured">已配置 Tavily 搜索</string>
     <string name="settings_tavily_not_configured">URL 抓取可用，Tavily 未配置</string>
@@ -154,6 +164,7 @@
     <string name="settings_agent_mode_subtitle">授权与虚拟显示</string>
     <string name="settings_get_started_tour_subtitle">重新播放首次启动和设置流程</string>
     <string name="settings_developer_subtitle">重新播放后续引导流程</string>
+    <string name="settings_release_summary">版本 %1$s</string>
 
     <string name="onboarding_root_body_unknown">如果这台手机有 Root，Aether 可以自动配置 Termux 和 Agent Mode。</string>
     <string name="onboarding_root_body_available">已检测到 Root。授予 Aether su 后，可以跳过后续 Termux 和 Agent Mode 手动步骤。</string>

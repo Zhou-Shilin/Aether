@@ -135,8 +135,16 @@
     <string name="settings_general">General Settings</string>
     <string name="settings_language">Language</string>
     <string name="settings_language_description">Choose the app language.</string>
+    <string name="language_english">English</string>
+    <string name="language_simplified_chinese">Simplified Chinese</string>
+    <string name="settings_language_english_interface">English interface</string>
+    <string name="settings_language_simplified_chinese_interface">Simplified Chinese interface</string>
     <string name="settings_theme">Theme</string>
     <string name="settings_theme_description">Choose the app appearance.</string>
+    <string name="theme_system">System</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="settings_system_theme_subtitle">Follow the system light or dark appearance.</string>
     <string name="settings_light_theme_subtitle">Keep the current bright appearance.</string>
     <string name="settings_dark_theme_subtitle">Use a darker interface across the app.</string>
     <string name="settings_workspace_mode">Workspace mode</string>
@@ -153,6 +161,8 @@
     <string name="settings_about">About</string>
     <string name="settings_get_started_tour">Get Started Tour</string>
     <string name="settings_general_hint">App language and appearance</string>
+    <string name="settings_general_summary">%1$s / %2$s</string>
+    <string name="settings_enabled_providers_count">%1$d providers enabled</string>
     <string name="settings_custom_instructions">Custom instructions</string>
     <string name="settings_tavily_configured">Tavily search configured</string>
     <string name="settings_tavily_not_configured">URL fetch ready, Tavily not configured</string>
@@ -163,6 +173,7 @@
     <string name="settings_agent_mode_subtitle">Authorization and virtual display</string>
     <string name="settings_get_started_tour_subtitle">Replay the first-run landing and setup flow</string>
     <string name="settings_developer_subtitle">Replay the follow-up onboarding flow</string>
+    <string name="settings_release_summary">Release %1$s</string>
 
     <!-- Provider configuration -->
     <string name="provider_form_provider_name">Provider name</string>
