@@ -119,6 +119,15 @@
     <string name="onboarding_finish_setup_title">完成设置</string>
     <string name="onboarding_finish_setup_subtitle">连接模型后再回到聊天。</string>
     <string name="onboarding_resume_setup">继续设置</string>
+    <string name="onboarding_aether_icon">Aether 图标</string>
+    <string name="onboarding_get_started">开始使用</string>
+    <string name="onboarding_api_key">API 密钥</string>
+    <string name="onboarding_required_for_this_format">此格式需要</string>
+    <string name="onboarding_optional">可选</string>
+    <string name="onboarding_base_url">基础 URL</string>
+    <string name="onboarding_loading_models">正在加载模型...</string>
+    <string name="onboarding_model">模型</string>
+    <string name="onboarding_or_type_your_own_model">或者输入你自己的模型</string>
     <string name="onboarding_first_prompt_ready_title">首条消息已就绪</string>
     <string name="onboarding_first_prompt_ready_subtitle">点击发送来测试 Aether。</string>
     <string name="onboarding_editing_earlier_message_title">正在编辑较早的消息</string>

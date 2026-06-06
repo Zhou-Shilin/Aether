@@ -398,7 +398,7 @@ private fun LandingStep(
                 stepIndex = stepIndex,
                 stepCount = stepCount,
                 onBack = null,
-                topRightLabel = if (replayMode) if (strings.appLanguage == AppLanguage.SimplifiedChinese) "关闭" else "Close" else if (strings.appLanguage == AppLanguage.SimplifiedChinese) "跳过" else "Skip",
+                topRightLabel = if (replayMode) stringResource(R.string.common_close) else stringResource(R.string.common_skip),
                 onTopRight = onSecondary,
             )
             Column(
@@ -423,7 +423,7 @@ private fun LandingStep(
                     ) {
                         Image(
                             painter = painterResource(id = R.drawable.aether_mark),
-                            contentDescription = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "Aether 图标" else "Aether icon",
+                            contentDescription = stringResource(R.string.onboarding_aether_icon),
                             modifier = Modifier
                                 .size(104.dp),
                         )
@@ -466,7 +466,7 @@ private fun LandingStep(
                             contentColor = Color.White,
                         ),
                     ) {
-                        Text(if (strings.appLanguage == AppLanguage.SimplifiedChinese) "开始使用" else "Get started")
+                        Text(stringResource(R.string.onboarding_get_started))
                     }
                 }
             }
@@ -646,7 +646,7 @@ private fun ProviderSetupStep(
         stepCount = stepCount,
         message = message,
         onBack = backAction,
-        topRightLabel = if (replayMode) if (strings.appLanguage == AppLanguage.SimplifiedChinese) "关闭" else "Close" else if (strings.appLanguage == AppLanguage.SimplifiedChinese) "跳过" else "Skip",
+        topRightLabel = if (replayMode) stringResource(R.string.common_close) else stringResource(R.string.common_skip),
         onTopRight = if (replayMode) onClose else onExit,
         isExiting = isFinishing,
     ) {
@@ -739,24 +739,24 @@ private fun ProviderSetupStep(
                             },
                         )
                         MinimalInputField(
-                            label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "API 密钥" else "API key",
+                            label = stringResource(R.string.onboarding_api_key),
                             value = formState.apiKey,
                             placeholder = if (provider?.requiresApiKey(formState.baseUrl) == true) {
-                                if (strings.appLanguage == AppLanguage.SimplifiedChinese) "此格式需要" else "Required for this format"
+                                stringResource(R.string.onboarding_required_for_this_format)
                             } else {
-                                if (strings.appLanguage == AppLanguage.SimplifiedChinese) "可选" else "Optional"
+                                stringResource(R.string.onboarding_optional)
                             },
                             onValueChange = { formState.apiKey = it },
                         )
                         MinimalInputField(
-                            label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "基础 URL" else "Base URL",
+                            label = stringResource(R.string.onboarding_base_url),
                             value = formState.baseUrl,
                             placeholder = "https://...",
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                             onValueChange = { formState.baseUrl = it },
                         )
                         PrimaryActionButton(
-                            label = if (isLoadingModels) if (strings.appLanguage == AppLanguage.SimplifiedChinese) "正在加载模型..." else "Loading models..." else if (strings.appLanguage == AppLanguage.SimplifiedChinese) "下一步" else "Next",
+                            label = if (isLoadingModels) stringResource(R.string.onboarding_loading_models) else stringResource(R.string.common_next),
                             enabled = canContinueFromCredentials && !isLoadingModels,
                             onClick = {
                                 formState.isFetchingModelsLocally = true
@@ -809,13 +809,13 @@ private fun ProviderSetupStep(
                             }
                         }
                         MinimalInputField(
-                            label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "模型" else "Model",
+                            label = stringResource(R.string.onboarding_model),
                             value = if (modelChoices.any { it.equals(formState.modelId.trim(), ignoreCase = true) }) {
                                 ""
                             } else {
                                 formState.modelId
                             },
-                            placeholder = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "或者输入你自己的模型" else "Or type your own model",
+                            placeholder = stringResource(R.string.onboarding_or_type_your_own_model),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                             onValueChange = { value ->
                                 formState.modelId = value
@@ -829,7 +829,7 @@ private fun ProviderSetupStep(
                             },
                         )
                         PrimaryActionButton(
-                            label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "开始聊天" else "Start chat",
+                            label = stringResource(R.string.common_start_chat),
                             enabled = provider != null && formState.isValid(emptySet()),
                             onClick = { isFinishing = true },
                         )
@@ -1310,7 +1310,7 @@ private fun StepTopBar(
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                    contentDescription = "Back",
+                    contentDescription = stringResource(R.string.common_back),
                     tint = TourTextPrimary,
                 )
             }
