@@ -1357,21 +1357,16 @@ private fun TermuxEnvironmentVariablesSection(
     variables: List<TermuxEnvironmentVariable>,
     onVariablesChanged: (List<TermuxEnvironmentVariable>) -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     SettingsCardGroup {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = tr(strings, "Environment variables", "环境变量"),
+                text = stringResource(R.string.settings_environment_variables),
                 style = MaterialTheme.typography.titleMedium,
                 color = AetherOnSurface,
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                text = tr(
-                    strings,
-                    "Injected into every Termux bash command, for example HTTP_PROXY or HTTPS_PROXY.",
-                    "每次运行 Termux bash 命令时都会注入，例如 HTTP_PROXY 或 HTTPS_PROXY。",
-                ),
+                text = stringResource(R.string.settings_environment_variables_description),
                 style = MaterialTheme.typography.bodySmall,
                 color = AetherOnSurfaceVariant,
             )
@@ -1401,7 +1396,7 @@ private fun TermuxEnvironmentVariablesSection(
                 }
 
                 ChatGptTextField(
-                    label = tr(strings, "Name", "名称"),
+                    label = stringResource(R.string.settings_variable_name),
                     value = nameValue,
                     onValueChange = {
                         nameValue = it
@@ -1409,7 +1404,7 @@ private fun TermuxEnvironmentVariablesSection(
                     },
                 )
                 ChatGptTextField(
-                    label = tr(strings, "Value", "值"),
+                    label = stringResource(R.string.settings_variable_value),
                     value = valueValue,
                     onValueChange = {
                         valueValue = it
@@ -1419,7 +1414,7 @@ private fun TermuxEnvironmentVariablesSection(
                 if (variable.name.isNotBlank() || variable.value.isNotBlank()) {
                     Spacer(Modifier.height(8.dp))
                     SettingsSubtleActionButton(
-                        label = tr(strings, "Remove variable", "删除变量"),
+                        label = stringResource(R.string.settings_remove_variable),
                         onClick = {
                             commitRows(rows.filterIndexed { rowIndex, _ -> rowIndex != index })
                         },
@@ -1429,7 +1424,7 @@ private fun TermuxEnvironmentVariablesSection(
                 Spacer(Modifier.height(12.dp))
             }
             SettingsSubtleActionButton(
-                label = tr(strings, "Add variable", "添加变量"),
+                label = stringResource(R.string.settings_add_variable),
                 onClick = { onVariablesChanged(variables + TermuxEnvironmentVariable("", "")) },
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -3016,7 +3011,6 @@ private fun TermuxSettingsPage(
     onConfigureWithRoot: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     var showAlreadyConfiguredDialog by rememberSaveable { mutableStateOf(false) }
 
     fun requestRootSetup() {
@@ -3029,12 +3023,8 @@ private fun TermuxSettingsPage(
 
     if (showAlreadyConfiguredDialog) {
         RootSetupAlreadyConfiguredDialog(
-            title = tr(strings, "Termux is already configured", "Termux 已配置完成"),
-            body = tr(
-                strings,
-                "Termux command access is already working. You do not need to run Root automatic setup again.",
-                "Termux 命令访问已经正常，不需要再次执行 Root 自动配置。",
-            ),
+            title = stringResource(R.string.settings_termux_already_configured_title),
+            body = stringResource(R.string.settings_termux_already_configured_body),
             onDismiss = { showAlreadyConfiguredDialog = false },
             onContinue = {
                 showAlreadyConfiguredDialog = false
@@ -3058,7 +3048,7 @@ private fun TermuxSettingsPage(
         onTrailingAction = onRefreshTermuxSetup,
     ) {
         Text(
-            text = tr(strings, "Aether runs bash through Termux. Finish setup here so tool calls work for every user without manual adb steps.", "Aether runs bash through Termux. Finish setup here so tool calls work for every user without manual adb steps."),
+            text = stringResource(R.string.settings_termux_description),
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -3067,7 +3057,6 @@ private fun TermuxSettingsPage(
         Spacer(Modifier.height(16.dp))
 
         WorkspaceModeSettingsSection(
-            strings = strings,
             selectedWorkspaceMode = selectedWorkspaceMode,
             onWorkspaceModeSelected = onWorkspaceModeSelected,
         )
@@ -3083,9 +3072,9 @@ private fun TermuxSettingsPage(
 
         SettingsCardGroup {
             RootSetupSettingsSection(
-                title = tr(strings, "Root automatic setup", "Root 自动配置"),
+                title = stringResource(R.string.settings_root_automatic_setup),
                 rootSetupState = rootSetupState,
-                body = rootSetupSettingsBody(rootSetupState, strings),
+                body = rootSetupSettingsBody(rootSetupState),
                 onConfigureWithRoot = ::requestRootSetup,
             )
         }
@@ -3095,10 +3084,10 @@ private fun TermuxSettingsPage(
         if (termuxSetupState.isReady) {
             SettingsCardGroup {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(tr(strings, "Termux is connected", "Termux is connected"), style = MaterialTheme.typography.labelLarge, color = AetherOnSurface)
+                    Text(stringResource(R.string.settings_termux_connected), style = MaterialTheme.typography.labelLarge, color = AetherOnSurface)
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        tr(strings, "Permission is granted and the setup probe succeeded.", "Permission is granted and the setup probe succeeded."),
+                        stringResource(R.string.settings_termux_connected_description),
                         style = MaterialTheme.typography.bodySmall,
                         color = AetherOnSurfaceVariant,
                     )
@@ -3121,42 +3110,33 @@ private fun TermuxSettingsPage(
 
 @Composable
 private fun WorkspaceModeSettingsSection(
-    strings: AetherStrings,
     selectedWorkspaceMode: AgentWorkspaceMode,
     onWorkspaceModeSelected: (AgentWorkspaceMode) -> Unit,
 ) {
     SettingsCardGroup {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = strings.workspaceMode,
+                text = stringResource(R.string.settings_workspace_mode),
                 style = MaterialTheme.typography.titleMedium,
                 color = AetherOnSurface,
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                text = strings.workspaceModeDescription,
+                text = stringResource(R.string.settings_workspace_mode_description),
                 style = MaterialTheme.typography.bodySmall,
                 color = AetherOnSurfaceVariant,
             )
             Spacer(Modifier.height(14.dp))
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 SettingsChoiceRow(
-                    title = tr(strings, "Single Workspace", "单一 Workspace"),
-                    subtitle = tr(
-                        strings,
-                        "All sessions start in ~/.aether/workspace and uploads are kept under uploads/.",
-                        "所有 Session 默认从 ~/.aether/workspace 开始，上传文件保存在 uploads/ 下。",
-                    ),
+                    title = stringResource(R.string.settings_single_workspace),
+                    subtitle = stringResource(R.string.settings_single_workspace_description),
                     selected = selectedWorkspaceMode == AgentWorkspaceMode.Shared,
                     onClick = { onWorkspaceModeSelected(AgentWorkspaceMode.Shared) },
                 )
                 SettingsChoiceRow(
-                    title = tr(strings, "Independent Workspaces", "独立 Workspace"),
-                    subtitle = tr(
-                        strings,
-                        "Each session keeps using its own directory under ~/.aether/workspaces/.",
-                        "每个 Session 继续使用 ~/.aether/workspaces/ 下的独立目录。",
-                    ),
+                    title = stringResource(R.string.settings_independent_workspaces),
+                    subtitle = stringResource(R.string.settings_independent_workspaces_description),
                     selected = selectedWorkspaceMode == AgentWorkspaceMode.PerSession,
                     onClick = { onWorkspaceModeSelected(AgentWorkspaceMode.PerSession) },
                 )
@@ -3817,7 +3797,6 @@ private fun RootSetupSettingsSection(
     body: String,
     onConfigureWithRoot: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     Column(
         modifier = Modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -3857,10 +3836,10 @@ private fun RootSetupSettingsSection(
         }
         SettingsSubtleActionButton(
             label = when (rootSetupState.issue) {
-                RootSetupIssue.Running -> tr(strings, "Configuring...", "正在配置...")
-                RootSetupIssue.Ready -> tr(strings, "Run Root setup again", "重新执行 Root 配置")
-                RootSetupIssue.Unavailable -> tr(strings, "Try Root setup", "尝试 Root 配置")
-                else -> tr(strings, "Configure with Root", "使用 Root 配置")
+                RootSetupIssue.Running -> stringResource(R.string.settings_configuring)
+                RootSetupIssue.Ready -> stringResource(R.string.settings_run_root_setup_again)
+                RootSetupIssue.Unavailable -> stringResource(R.string.settings_try_root_setup)
+                else -> stringResource(R.string.settings_configure_with_root)
             },
             onClick = onConfigureWithRoot,
             modifier = Modifier.fillMaxWidth(),
@@ -3869,37 +3848,21 @@ private fun RootSetupSettingsSection(
     }
 }
 
+@Composable
 private fun rootSetupSettingsBody(
     rootSetupState: RootSetupState,
-    strings: AetherStrings,
 ): String = when (rootSetupState.issue) {
-    RootSetupIssue.Ready -> tr(
-        strings,
-        "Aether can silently wake Termux in the background with Root when Termux is not already running.",
-        "Termux \u672a\u8fd0\u884c\u65f6\uff0cAether \u53ef\u4ee5\u901a\u8fc7 Root \u5728\u540e\u53f0\u9759\u9ed8\u5524\u8d77 Termux\u3002",
-    )
+    RootSetupIssue.Ready -> stringResource(R.string.settings_root_setup_body_ready)
 
     RootSetupIssue.Available,
-    RootSetupIssue.Running -> tr(
-        strings,
-        "Aether can use su to enable Termux command access and background wake-up.",
-        "Aether \u53ef\u4ee5\u901a\u8fc7 su \u542f\u7528 Termux \u547d\u4ee4\u8bbf\u95ee\u548c\u540e\u53f0\u5524\u8d77\u80fd\u529b\u3002",
-    )
+    RootSetupIssue.Running -> stringResource(R.string.settings_root_setup_body_available)
 
     RootSetupIssue.Unavailable,
-    RootSetupIssue.Unknown -> tr(
-        strings,
-        "On rooted devices, this avoids the manual Termux permission and settings flow.",
-        "在已 Root 设备上，这可以避免手动配置 Termux 权限和设置。",
-    )
+    RootSetupIssue.Unknown -> stringResource(R.string.settings_root_setup_body_unavailable)
 
     RootSetupIssue.PermissionDenied,
     RootSetupIssue.TermuxNotInstalled,
-    RootSetupIssue.Failed -> tr(
-        strings,
-        "Retry after granting su to Aether, or continue with the manual setup actions below.",
-        "授予 Aether su 后重试，或继续使用下方的手动配置操作。",
-    )
+    RootSetupIssue.Failed -> stringResource(R.string.settings_root_setup_body_failed)
 }
 
 @Composable
