@@ -259,15 +259,15 @@ fun TermuxSetupNotice(
     onDismiss: (() -> Unit)? = null,
 ) {
     if (setupState.isReady) return
-    val strings = rememberAetherStrings()
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
+    val setupCommandCopiedLabel = stringResource(R.string.termux_setup_command_copied)
 
     fun copyTermuxSetupCommand() {
         clipboardManager.setText(AnnotatedString(TermuxContract.ExternalAppsSetupCommand))
         Toast.makeText(
             context,
-            if (strings.appLanguage == AppLanguage.SimplifiedChinese) "已复制 Termux 配置命令" else "Termux setup command copied",
+            setupCommandCopiedLabel,
             Toast.LENGTH_SHORT,
         ).show()
     }
@@ -284,50 +284,33 @@ fun TermuxSetupNotice(
 
     when (setupState.issue) {
         TermuxSetupIssue.NotInstalled -> {
-            title = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "安装 Termux 以启用 bash" else "Install Termux to enable bash"
-            subtitle = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "Aether 使用 Termux 在设备上运行 shell 命令。" else "Aether uses Termux to run shell commands on-device."
+            title = stringResource(R.string.termux_install_to_enable_bash)
+            subtitle = stringResource(R.string.termux_runs_shell_commands_on_device)
         }
 
         TermuxSetupIssue.PermissionMissing -> {
-            title = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "授予 Termux 命令访问权限" else "Grant Termux command access"
-            subtitle = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "在系统权限中允许 Aether“在 Termux 环境中运行命令”。" else "Allow Aether to use the \"Run commands in Termux environment\" Android permission."
+            title = stringResource(R.string.termux_grant_command_access)
+            subtitle = stringResource(R.string.termux_allow_run_commands_permission)
         }
 
         TermuxSetupIssue.ExternalAppsDisabled -> {
             if (showInactiveTermuxPrompt) {
-                title = if (strings.appLanguage == AppLanguage.SimplifiedChinese) {
-                    "Termux \u4f3c\u4e4e\u4e0d\u5728\u540e\u53f0\u8fd0\u884c"
-                } else {
-                    "Termux seems to be not running in the background"
-                }
-                subtitle = if (strings.appLanguage == AppLanguage.SimplifiedChinese) {
-                    "\u6253\u5f00 Termux \u5e76\u4fdd\u6301\u5b83\u5728\u540e\u53f0\u8fd0\u884c\uff0c\u7136\u540e\u56de\u5230 Aether \u5237\u65b0\u72b6\u6001\u3002"
-                } else {
-                    "Open Termux and keep it running in the background, then return to Aether and refresh."
-                }
+                title = stringResource(R.string.termux_not_running_background)
+                subtitle = stringResource(R.string.termux_keep_running_and_refresh)
             } else {
-                title = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "在 Termux 中启用外部应用" else "Enable external apps in Termux"
-                subtitle = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "打开 Termux，粘贴 Aether 配置命令，然后返回刷新状态。" else "Open Termux, paste the Aether setup command, then return and refresh."
+                title = stringResource(R.string.termux_enable_external_apps)
+                subtitle = stringResource(R.string.termux_paste_setup_command_and_refresh)
             }
         }
 
         TermuxSetupIssue.DispatchFailed -> {
             if (showInactiveTermuxPrompt) {
-                title = if (strings.appLanguage == AppLanguage.SimplifiedChinese) {
-                    "Termux \u4f3c\u4e4e\u4e0d\u5728\u540e\u53f0\u8fd0\u884c"
-                } else {
-                    "Termux seems to be not running in the background"
-                }
-                subtitle = if (strings.appLanguage == AppLanguage.SimplifiedChinese) {
-                    "\u6253\u5f00 Termux \u5e76\u4fdd\u6301\u5b83\u5728\u540e\u53f0\u8fd0\u884c\uff0c\u7136\u540e\u56de\u5230 Aether \u5237\u65b0\u72b6\u6001\u3002"
-                } else {
-                    "Open Termux and keep it running in the background, then return to Aether and refresh."
-                }
+                title = stringResource(R.string.termux_not_running_background)
+                subtitle = stringResource(R.string.termux_keep_running_and_refresh)
             } else {
-                title = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "完成 Termux 设置" else "Finish Termux setup"
-                subtitle = setupState.detail.ifBlank {
-                    if (strings.appLanguage == AppLanguage.SimplifiedChinese) "打开一次 Termux，并确认其集成设置。" else "Open Termux once and verify its integration settings."
-                }
+                title = stringResource(R.string.termux_finish_setup)
+                val fallbackSubtitle = stringResource(R.string.termux_open_once_verify_settings)
+                subtitle = setupState.detail.ifBlank { fallbackSubtitle }
             }
         }
 
@@ -368,7 +351,7 @@ fun TermuxSetupNotice(
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Close,
-                        contentDescription = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "关闭" else "Close",
+                        contentDescription = stringResource(R.string.common_close),
                         tint = AetherOnSurfaceVariant,
                         modifier = Modifier.size(18.dp),
                     )
@@ -386,14 +369,14 @@ fun TermuxSetupNotice(
                 TermuxSetupIssue.NotInstalled -> {
                     ActionIconLabel(
                         icon = Icons.AutoMirrored.Rounded.OpenInNew,
-                        label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "安装 Termux" else "Install Termux",
+                        label = stringResource(R.string.termux_install_termux),
                         enabled = true,
                         onClick = onInstallTermux,
                     )
                     if (showRefreshAction) {
                         ActionIconLabel(
                             icon = Icons.Rounded.Refresh,
-                            label = strings.refresh,
+                            label = stringResource(R.string.common_refresh),
                             enabled = true,
                             onClick = onRefresh,
                         )
@@ -403,13 +386,13 @@ fun TermuxSetupNotice(
                 TermuxSetupIssue.PermissionMissing -> {
                     ActionIconLabel(
                         icon = Icons.Rounded.Settings,
-                        label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "授予访问权限" else "Grant access",
+                        label = stringResource(R.string.termux_grant_access),
                         enabled = true,
                         onClick = onRequestPermission,
                     )
                     ActionIconLabel(
                         icon = Icons.AutoMirrored.Rounded.OpenInNew,
-                        label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "应用设置" else "App settings",
+                        label = stringResource(R.string.termux_app_settings),
                         enabled = true,
                         onClick = onOpenAppPermissions,
                     )
@@ -419,14 +402,14 @@ fun TermuxSetupNotice(
                     if (showInactiveTermuxPrompt) {
                         ActionIconLabel(
                             icon = Icons.AutoMirrored.Rounded.OpenInNew,
-                            label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "\u6253\u5f00" else "Open",
+                            label = stringResource(R.string.common_open),
                             enabled = true,
                             onClick = onOpenTermux,
                         )
                     } else {
                         ActionIconLabel(
                             icon = Icons.AutoMirrored.Rounded.OpenInNew,
-                            label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "复制并打开 Termux" else "Copy and Open Termux",
+                            label = stringResource(R.string.termux_copy_and_open_termux),
                             enabled = true,
                             onClick = ::copyTermuxSetupCommandAndOpenTermux,
                         )
@@ -434,7 +417,7 @@ fun TermuxSetupNotice(
                     if (showRefreshAction) {
                         ActionIconLabel(
                             icon = Icons.Rounded.Refresh,
-                            label = strings.refresh,
+                            label = stringResource(R.string.common_refresh),
                             enabled = true,
                             onClick = onRefresh,
                         )
@@ -445,26 +428,26 @@ fun TermuxSetupNotice(
                     if (showInactiveTermuxPrompt) {
                         ActionIconLabel(
                             icon = Icons.AutoMirrored.Rounded.OpenInNew,
-                            label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "\u6253\u5f00" else "Open",
+                            label = stringResource(R.string.common_open),
                             enabled = true,
                             onClick = onOpenTermux,
                         )
                     } else {
                         ActionIconLabel(
                             icon = Icons.Rounded.ContentCopy,
-                            label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "复制配置命令" else "Copy setup command",
+                            label = stringResource(R.string.termux_copy_setup_command),
                             enabled = true,
                             onClick = ::copyTermuxSetupCommand,
                         )
                         ActionIconLabel(
                             icon = Icons.AutoMirrored.Rounded.OpenInNew,
-                            label = strings.openTermux,
+                            label = stringResource(R.string.termux_open_termux),
                             enabled = true,
                             onClick = onOpenTermux,
                         )
                         ActionIconLabel(
                             icon = Icons.Rounded.Settings,
-                            label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "Termux 设置" else "Termux settings",
+                            label = stringResource(R.string.termux_settings),
                             enabled = true,
                             onClick = onOpenTermuxSettings,
                         )
@@ -472,7 +455,7 @@ fun TermuxSetupNotice(
                     if (showRefreshAction) {
                         ActionIconLabel(
                             icon = Icons.Rounded.Refresh,
-                            label = strings.refresh,
+                            label = stringResource(R.string.common_refresh),
                             enabled = true,
                             onClick = onRefresh,
                         )
@@ -490,7 +473,6 @@ fun ComposerAttachmentTray(
     attachments: List<ChatAttachment>,
     onRemoveAttachment: (String) -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -590,7 +572,6 @@ private fun UserMessageActionDialog(
     onEdit: () -> Unit,
     onRetry: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val menuVisibility = remember { MutableTransitionState(false) }
     menuVisibility.targetState = expanded
     if (!menuVisibility.currentState && !menuVisibility.targetState) return
@@ -758,7 +739,6 @@ private fun SelectUserMessageTextDialog(
     text: String,
     onDismissRequest: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     if (!expanded) return
 
     Dialog(
@@ -843,7 +823,6 @@ private fun AssistantMessageBlock(
     onRedo: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val shouldFoldWorkBeforeFinalText = message.text.isNotBlank() &&
         (message.reasoningTrace != null ||
             message.thoughtDurationMillis != null ||
@@ -885,11 +864,7 @@ private fun AssistantMessageBlock(
         } else {
             message.thoughtDurationMillis?.let { duration ->
                 Text(
-                    text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) {
-                        "鎬濊€冧簡 ${formatThoughtDuration(duration)}"
-                    } else {
-                        "Thought for ${formatThoughtDuration(duration)}"
-                    },
+                    text = stringResource(R.string.chat_thought_for_duration, formatThoughtDuration(duration)),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                 )
@@ -955,7 +930,6 @@ private fun AssistantMessageWorkContent(
     onOpenAttachment: (ChatAttachment) -> Unit,
     onOpenLink: (String) -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     if (message.reasoningTrace != null) {
         ReasoningTraceStatus(
             trace = message.reasoningTrace,
@@ -964,11 +938,7 @@ private fun AssistantMessageWorkContent(
     } else {
         message.thoughtDurationMillis?.let { duration ->
             Text(
-                text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) {
-                    "思考了 ${formatThoughtDuration(duration)}"
-                } else {
-                    "Thought for ${formatThoughtDuration(duration)}"
-                },
+                text = stringResource(R.string.chat_thought_for_duration, formatThoughtDuration(duration)),
                 style = MaterialTheme.typography.bodySmall,
                 color = AetherOnSurfaceVariant,
             )
@@ -1007,7 +977,6 @@ fun ConversationAssistantGroupBubble(
     onDelete: () -> Unit,
 ) {
     if (messages.isEmpty()) return
-    val strings = rememberAetherStrings()
     val thoughtDurationMillis = messages.lastOrNull()?.thoughtDurationMillis
     val hasReasoningTrace = messages.any { it.reasoningTrace != null }
     val showActions = messages.none { it.assistantActionsHidden }
@@ -1037,11 +1006,7 @@ fun ConversationAssistantGroupBubble(
     ) {
         if (!shouldFoldWorkBeforeFinalText && !hasReasoningTrace) thoughtDurationMillis?.let { duration ->
             Text(
-                text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) {
-                    "思考了 ${formatThoughtDuration(duration)}"
-                } else {
-                    "Thought for ${formatThoughtDuration(duration)}"
-                },
+                text = stringResource(R.string.chat_thought_for_duration, formatThoughtDuration(duration)),
                 style = MaterialTheme.typography.bodySmall,
                 color = AetherOnSurfaceVariant,
             )
@@ -1205,7 +1170,6 @@ private fun AgentModeReplayPanel(
     allowRootImageRead: Boolean = false,
     onOpenLink: (String) -> Unit = {},
 ) {
-    val strings = rememberAetherStrings()
     var selectedIndex by rememberSaveable(stateKey, frames.size) {
         mutableStateOf((frames.size - 1).coerceAtLeast(0))
     }
@@ -1265,7 +1229,7 @@ private fun AgentModeReplayPanel(
             if (bitmap != null) {
                 Image(
                     bitmap = bitmap.asImageBitmap(),
-                    contentDescription = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "Agent 模式回放帧" else "Agent Mode replay frame",
+                    contentDescription = stringResource(R.string.agent_mode_replay_frame),
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(10.dp)
@@ -1274,7 +1238,7 @@ private fun AgentModeReplayPanel(
                 )
             } else {
                 Text(
-                    text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "预览不可用" else "Preview unavailable",
+                    text = stringResource(R.string.agent_mode_replay_preview_unavailable),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                 )
@@ -1508,7 +1472,6 @@ fun ToolInvocationList(
     stateKey: String,
     autoExpand: Boolean = false,
 ) {
-    val strings = rememberAetherStrings()
     if (toolInvocations.isEmpty()) return
 
     if (toolInvocations.size < ToolInvocationCollapseThreshold) {
@@ -1580,14 +1543,14 @@ fun ToolInvocationList(
             ) {
                 if (isRunning) {
                     ShimmerStatusText(
-                        text = strings.toolInvocationGroupTitle(toolInvocations.size, isRunning = true),
+                        text = stringResource(R.string.tool_invocation_group_executing, toolInvocations.size),
                         modifier = Modifier.weight(1f),
                         travelDurationMillis = 2600,
                         pauseDurationMillis = 1000,
                     )
                 } else {
                     Text(
-                        text = strings.toolInvocationGroupTitle(toolInvocations.size, isRunning = false),
+                        text = stringResource(R.string.tool_invocation_group_executed, toolInvocations.size),
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.bodyMedium,
                         color = AetherOnSurfaceVariant,
@@ -1596,9 +1559,9 @@ fun ToolInvocationList(
                 Icon(
                     imageVector = Icons.AutoMirrored.Rounded.ArrowForwardIos,
                     contentDescription = if (expanded) {
-                        if (strings.appLanguage == AppLanguage.SimplifiedChinese) "折叠工具" else "Collapse tools"
+                        stringResource(R.string.tool_invocation_collapse_tools)
                     } else {
-                        if (strings.appLanguage == AppLanguage.SimplifiedChinese) "展开工具" else "Expand tools"
+                        stringResource(R.string.tool_invocation_expand_tools)
                     },
                     tint = AetherOnSurfaceVariant,
                     modifier = Modifier
@@ -1672,7 +1635,7 @@ fun AgentWorkSummaryDisclosure(
             )
             Icon(
                 imageVector = Icons.AutoMirrored.Rounded.ArrowForwardIos,
-                contentDescription = if (expanded) "Collapse work" else "Expand work",
+                contentDescription = if (expanded) stringResource(R.string.agent_work_collapse) else stringResource(R.string.agent_work_expand),
                 tint = AetherOnSurfaceVariant,
                 modifier = Modifier
                     .size(14.dp)
@@ -2015,7 +1978,6 @@ fun ReasoningTraceStatus(
     modifier: Modifier = Modifier,
     onOpenLink: (String) -> Unit = {},
 ) {
-    val strings = rememberAetherStrings()
     var sheetVisible by remember(trace.id) { mutableStateOf(false) }
     val latestDetail = remember(trace.latestStatusText, trace.chunks) {
         trace.latestStatusText.ifBlank {
@@ -2026,7 +1988,7 @@ fun ReasoningTraceStatus(
     }
     val completed = trace.completedAtMillis != null
     val statusText = if (completed) {
-        formatReasoningTraceDoneLabel(strings, trace)
+        formatReasoningTraceDoneLabel(trace)
     } else {
         latestDetail
     }
@@ -2051,7 +2013,7 @@ fun ReasoningTraceStatus(
             )
 
             else -> ShimmerStatusText(
-                text = "Thinking",
+                text = stringResource(R.string.chat_thinking),
             )
         }
     }
@@ -2135,14 +2097,15 @@ private fun ReasoningTraceSheetContent(
 private fun RawReasoningPanel(
     rawText: String,
 ) {
-    val displayText = remember(rawText) {
-        rawText.ifBlank { "Waiting for reasoning..." }.let { text ->
+    val waitingForReasoning = stringResource(R.string.chat_waiting_for_reasoning)
+    val displayText = remember(rawText, waitingForReasoning) {
+        rawText.ifBlank { waitingForReasoning }.let { text ->
             if (text.length <= 12_000) text else text.take(12_000).trimEnd() + "\n..."
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            text = "Raw reasoning",
+            text = stringResource(R.string.chat_raw_reasoning),
             style = MaterialTheme.typography.labelMedium,
             color = AetherOnSurfaceVariant,
         )
@@ -2170,15 +2133,17 @@ private fun ReasoningTimeline(
         reasoningTimelineItems(trace)
     }
     val hasDoneChunk = trace.completedAtMillis != null
+    val summarizingReasoningTitle = stringResource(R.string.chat_summarizing_reasoning)
+    val preparingReasoningSummary = stringResource(R.string.chat_preparing_reasoning_summary)
     Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
         timelineItems.forEachIndexed { index, item ->
             val isLast = !hasDoneChunk && index == timelineItems.lastIndex
             when (item) {
                 is ReasoningTimelineItem.Summary -> ReasoningTimelineRow(
-                    title = item.chunk.title.ifBlank { "Summarizing reasoning" },
+                    title = item.chunk.title.ifBlank { summarizingReasoningTitle },
                     detail = when {
                         item.chunk.detail.isNotBlank() -> item.chunk.detail
-                        else -> "Preparing a short visible summary."
+                        else -> preparingReasoningSummary
                     },
                     isLast = isLast,
                 )
@@ -2291,12 +2256,9 @@ private fun ReasoningTimelineToolRow(
     isLast: Boolean,
     onOpenLink: (String) -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val arguments = remember(toolInvocation.argumentsJson) { parseJsonObject(toolInvocation.argumentsJson) }
     val output = remember(toolInvocation.outputJson) { parseJsonObject(toolInvocation.outputJson) }
-    val title = remember(toolInvocation, strings.appLanguage) {
-        strings.toolInvocationTitleLabel(toolInvocation.toolName, toolInvocation.isRunning, arguments)
-    }
+    val title = remember(toolInvocation) { formatToolInvocationTitleLabel(toolInvocation) }
     val webSourceMetadata = remember(toolInvocation.toolName, toolInvocation.argumentsJson, toolInvocation.outputJson) {
         webSourceMetadata(toolInvocation.toolName, arguments, output)
     }
@@ -2364,7 +2326,7 @@ private fun ReasoningTimelineDoneRow(
                 color = AetherOnSurface,
             )
             Text(
-                text = "Done",
+                text = stringResource(R.string.common_done),
                 style = MaterialTheme.typography.bodyMedium,
                 color = AetherOnSurfaceVariant,
             )
@@ -2596,7 +2558,6 @@ fun ReconnectingStatusCard(
     detail: String,
     modifier: Modifier = Modifier,
 ) {
-    val strings = rememberAetherStrings()
     var expanded by rememberSaveable(text, detail) { mutableStateOf(false) }
     LaunchedEffect(detail) {
         if (detail.isBlank()) {
@@ -2635,7 +2596,7 @@ fun ReconnectingStatusCard(
             ),
         ) {
             SyntaxHighlightedCodeBlock(
-                label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "错误" else "Error",
+                label = stringResource(R.string.common_error),
                 content = remember(detail) { highlightToolResult(detail) },
             )
         }
@@ -2647,9 +2608,21 @@ fun ToolInvocationCard(
     toolInvocation: ChatToolInvocation,
     topPadding: Dp = 6.dp,
 ) {
-    val strings = rememberAetherStrings()
     val arguments = remember(toolInvocation.argumentsJson) { parseJsonObject(toolInvocation.argumentsJson) }
-    val detail = remember(toolInvocation, strings.appLanguage) { formatToolInvocationDetail(strings, toolInvocation) }
+    val noOutputLabel = stringResource(R.string.chat_no_output)
+    val contentTruncatedLabel = stringResource(R.string.chat_content_truncated)
+    val context = LocalContext.current
+    val exitCodeLabel = remember(context) {
+        { exitCode: Int -> context.getString(R.string.tool_invocation_exit_code, exitCode) }
+    }
+    val detail = remember(toolInvocation, noOutputLabel, contentTruncatedLabel, exitCodeLabel) {
+        formatToolInvocationDetail(
+            toolInvocation = toolInvocation,
+            noOutputLabel = noOutputLabel,
+            contentTruncatedLabel = contentTruncatedLabel,
+            exitCodeLabel = exitCodeLabel,
+        )
+    }
     var expanded by rememberSaveable(toolInvocation.id) { mutableStateOf(false) }
     LaunchedEffect(
         toolInvocation.id,
@@ -2685,13 +2658,13 @@ fun ToolInvocationCard(
     ) {
         if (toolInvocation.isRunning) {
             ShimmerStatusText(
-                text = strings.toolInvocationTitleLabel(toolInvocation.toolName, true, arguments),
+                text = formatToolInvocationTitleLabel(toolInvocation.copy(isRunning = true)),
                 travelDurationMillis = 3200,
                 pauseDurationMillis = 1000,
             )
         } else {
             Text(
-                text = strings.toolInvocationTitleLabel(toolInvocation.toolName, false, arguments),
+                text = formatToolInvocationTitleLabel(toolInvocation.copy(isRunning = false)),
                 style = MaterialTheme.typography.bodyMedium,
                 color = AetherOnSurfaceVariant,
             )
@@ -2717,12 +2690,12 @@ fun ToolInvocationCard(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SyntaxHighlightedCodeBlock(
-                    label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "命令" else "Command",
+                    label = stringResource(R.string.tool_invocation_command),
                     content = remember(detail.command) { highlightBashCommand(detail.command) },
                 )
                 detail.result?.let { result ->
                     SyntaxHighlightedCodeBlock(
-                        label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "结果" else "Result",
+                        label = stringResource(R.string.tool_invocation_result),
                         content = remember(result) { highlightToolResult(result) },
                     )
                 }
@@ -3487,27 +3460,16 @@ fun workDurationMillisForToolInvocations(
         .coerceAtLeast(1_000L)
 }
 
-private fun formatReasoningTraceDoneLabel(
-    strings: AetherStrings,
-    trace: ReasoningTrace,
-): String {
+@Composable
+private fun formatReasoningTraceDoneLabel(trace: ReasoningTrace): String {
     val startedAt = trace.startedAtMillis.takeIf { it > 0L }
     val endedAt = trace.completedAtMillis ?: System.currentTimeMillis()
     val duration = startedAt?.let { formatThoughtDuration((endedAt - it).coerceAtLeast(1L)) } ?: "0s"
     val toolCount = trace.toolInvocations.size
     return if (toolCount > 0) {
-        val toolLabel = if (toolCount == 1) "tool" else "tools"
-        if (strings.appLanguage == AppLanguage.SimplifiedChinese) {
-            "Thought for $duration and executed $toolCount $toolLabel"
-        } else {
-            "Thought for $duration and executed $toolCount $toolLabel"
-        }
+        stringResource(R.string.chat_thought_for_duration_and_tools, duration, toolCount)
     } else {
-        if (strings.appLanguage == AppLanguage.SimplifiedChinese) {
-            "Thought for $duration"
-        } else {
-            "Thought for $duration"
-        }
+        stringResource(R.string.chat_thought_for_duration, duration)
     }
 }
 
@@ -3696,13 +3658,18 @@ private fun formatToolInvocationGroupTitle(
     "Executed $count tools"
 }
 
-private fun formatToolInvocationDetail(strings: AetherStrings, toolInvocation: ChatToolInvocation): ToolInvocationDetail {
+private fun formatToolInvocationDetail(
+    toolInvocation: ChatToolInvocation,
+    noOutputLabel: String,
+    contentTruncatedLabel: String,
+    exitCodeLabel: (Int) -> String,
+): ToolInvocationDetail {
     val arguments = parseJsonObject(toolInvocation.argumentsJson)
     val output = parseJsonObject(toolInvocation.outputJson)
     val command = output?.optString("command")
         .orEmpty()
         .trim()
-        .ifBlank { strings.toolInvocationCommandLabel(toolInvocation.toolName, arguments) }
+        .ifBlank { summarizeToolInvocationCommandLabel(toolInvocation.toolName, arguments) }
         .ifBlank { toolInvocation.toolName }
 
     if (toolInvocation.isRunning) {
@@ -3713,12 +3680,12 @@ private fun formatToolInvocationDetail(strings: AetherStrings, toolInvocation: C
     }
 
     val result = when {
-        output == null -> toolInvocation.outputJson.trim().ifBlank { strings.noOutput }
+        output == null -> toolInvocation.outputJson.trim().ifBlank { noOutputLabel }
         toolInvocation.toolName.startsWith("aether_", ignoreCase = true) -> {
-            toolInvocation.outputJson.trim().ifBlank { strings.noOutput }
+            toolInvocation.outputJson.trim().ifBlank { noOutputLabel }
         }
         toolInvocation.toolName.equals("fetch_web_url", ignoreCase = true) -> {
-            formatFetchWebUrlResult(strings, output)
+            formatFetchWebUrlResult(output, noOutputLabel, contentTruncatedLabel)
         }
         output.optString("stdout").trim().isNotBlank() &&
             output.optString("stderr").trim().isNotBlank() -> {
@@ -3733,8 +3700,8 @@ private fun formatToolInvocationDetail(strings: AetherStrings, toolInvocation: C
         output.optString("stderr").trim().isNotBlank() -> output.optString("stderr").trim()
         output.optString("errmsg").trim().isNotBlank() -> output.optString("errmsg").trim()
         output.optString("hint").trim().isNotBlank() -> output.optString("hint").trim()
-        output.has("exit_code") && output.optInt("exit_code") != 0 -> if (strings.appLanguage == AppLanguage.SimplifiedChinese) "退出代码：${output.optInt("exit_code")}" else "Exit code: ${output.optInt("exit_code")}"
-        else -> strings.noOutput
+        output.has("exit_code") && output.optInt("exit_code") != 0 -> exitCodeLabel(output.optInt("exit_code"))
+        else -> noOutputLabel
     }
 
     return ToolInvocationDetail(
@@ -3743,7 +3710,11 @@ private fun formatToolInvocationDetail(strings: AetherStrings, toolInvocation: C
     )
 }
 
-private fun formatFetchWebUrlResult(strings: AetherStrings, output: JSONObject): String {
+private fun formatFetchWebUrlResult(
+    output: JSONObject,
+    noOutputLabel: String,
+    contentTruncatedLabel: String,
+): String {
     val markdown = output.optString("markdown").trim()
     if (markdown.isNotBlank()) {
         return buildString {
@@ -3752,12 +3723,12 @@ private fun formatFetchWebUrlResult(strings: AetherStrings, output: JSONObject):
             if (output.optBoolean("truncated")) {
                 appendLine()
                 appendLine()
-                append(strings.contentTruncated)
+                append(contentTruncatedLabel)
             }
         }.trim()
     }
 
-    return output.optString("stdout").trim().ifBlank { strings.noOutput }
+    return output.optString("stdout").trim().ifBlank { noOutputLabel }
 }
 
 private fun summarizeToolInvocationCommand(

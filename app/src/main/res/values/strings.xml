@@ -99,6 +99,37 @@
     <string name="chat_no_output">No output</string>
     <string name="chat_content_truncated">Content truncated for readability.</string>
 
+    <string name="termux_install_to_enable_bash">Install Termux to enable bash</string>
+    <string name="termux_grant_command_access">Grant Termux command access</string>
+    <string name="termux_enable_external_apps">Enable external apps in Termux</string>
+    <string name="termux_finish_setup">Finish Termux setup</string>
+    <string name="termux_install_termux">Install Termux</string>
+    <string name="termux_grant_access">Grant access</string>
+    <string name="termux_app_settings">App settings</string>
+    <string name="termux_copy_and_open_termux">Copy and Open Termux</string>
+    <string name="termux_copy_setup_command">Copy setup command</string>
+    <string name="termux_open_termux">Open Termux</string>
+    <string name="termux_settings">Termux settings</string>
+    <string name="common_open">Open</string>
+    <string name="common_error">Error</string>
+    <string name="chat_thought_for_duration">Thought for %1$s</string>
+    <string name="chat_waiting_for_reasoning">Waiting for reasoning...</string>
+    <string name="chat_raw_reasoning">Raw reasoning</string>
+    <string name="chat_summarizing_reasoning">Summarizing reasoning</string>
+    <string name="chat_preparing_reasoning_summary">Preparing a short visible summary.</string>
+    <string name="agent_work_collapse">Collapse work</string>
+    <string name="agent_work_expand">Expand work</string>
+    <string name="tool_invocation_command">Command</string>
+    <string name="tool_invocation_result">Result</string>
+    <string name="termux_setup_command_copied">Termux setup command copied</string>
+    <string name="termux_runs_shell_commands_on_device">Aether uses Termux to run shell commands on-device.</string>
+    <string name="termux_allow_run_commands_permission">Allow Aether to use the &quot;Run commands in Termux environment&quot; Android permission.</string>
+    <string name="termux_not_running_background">Termux seems to be not running in the background</string>
+    <string name="termux_keep_running_and_refresh">Open Termux and keep it running in the background, then return to Aether and refresh.</string>
+    <string name="termux_paste_setup_command_and_refresh">Open Termux, paste the Aether setup command, then return and refresh.</string>
+    <string name="termux_open_once_verify_settings">Open Termux once and verify its integration settings.</string>
+    <string name="chat_thought_for_duration_and_tools">Thought for %1$s and executed %2$d tools</string>
+    <string name="tool_invocation_exit_code">Exit code: %1$d</string>
     <!-- Settings -->
     <string name="settings_title">Settings</string>
     <string name="settings_general">General Settings</string>
@@ -279,4 +310,10 @@
     <!-- Conversation -->
     <string name="branch_steer_current_run">Steer current run</string>
     <string name="branch_queue_next_turn">Queue next turn</string>
+    <string name="tool_invocation_group_executing">Executing %1$d tools</string>
+    <string name="tool_invocation_group_executed">Executed %1$d tools</string>
+    <string name="tool_invocation_collapse_tools">Collapse tools</string>
+    <string name="tool_invocation_expand_tools">Expand tools</string>
+    <string name="agent_mode_replay_frame">Agent Mode replay frame</string>
+    <string name="agent_mode_replay_preview_unavailable">Preview unavailable</string>
 </resources>

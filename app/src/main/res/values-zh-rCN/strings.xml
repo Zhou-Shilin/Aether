@@ -90,6 +90,37 @@
     <string name="chat_no_output">无输出</string>
     <string name="chat_content_truncated">内容已截断，便于阅读。</string>
 
+    <string name="termux_install_to_enable_bash">安装 Termux 以启用 bash</string>
+    <string name="termux_grant_command_access">授予 Termux 命令访问权限</string>
+    <string name="termux_enable_external_apps">在 Termux 中启用外部应用</string>
+    <string name="termux_finish_setup">完成 Termux 设置</string>
+    <string name="termux_install_termux">安装 Termux</string>
+    <string name="termux_grant_access">授予访问权限</string>
+    <string name="termux_app_settings">应用设置</string>
+    <string name="termux_copy_and_open_termux">复制并打开 Termux</string>
+    <string name="termux_copy_setup_command">复制配置命令</string>
+    <string name="termux_open_termux">打开 Termux</string>
+    <string name="termux_settings">Termux 设置</string>
+    <string name="common_open">打开</string>
+    <string name="common_error">错误</string>
+    <string name="chat_thought_for_duration">思考了 %1$s</string>
+    <string name="chat_waiting_for_reasoning">正在等待推理...</string>
+    <string name="chat_raw_reasoning">原始推理</string>
+    <string name="chat_summarizing_reasoning">正在总结推理</string>
+    <string name="chat_preparing_reasoning_summary">正在准备简短的可见摘要。</string>
+    <string name="agent_work_collapse">折叠工作</string>
+    <string name="agent_work_expand">展开工作</string>
+    <string name="tool_invocation_command">命令</string>
+    <string name="tool_invocation_result">结果</string>
+    <string name="termux_setup_command_copied">已复制 Termux 配置命令</string>
+    <string name="termux_runs_shell_commands_on_device">Aether 使用 Termux 在设备上运行 shell 命令。</string>
+    <string name="termux_allow_run_commands_permission">在系统权限中允许 Aether“在 Termux 环境中运行命令”。</string>
+    <string name="termux_not_running_background">Termux 似乎不在后台运行</string>
+    <string name="termux_keep_running_and_refresh">打开 Termux 并保持它在后台运行，然后回到 Aether 刷新状态。</string>
+    <string name="termux_paste_setup_command_and_refresh">打开 Termux，粘贴 Aether 配置命令，然后返回刷新状态。</string>
+    <string name="termux_open_once_verify_settings">打开一次 Termux，并确认其集成设置。</string>
+    <string name="chat_thought_for_duration_and_tools">思考了 %1$s，并执行了 %2$d 个工具</string>
+    <string name="tool_invocation_exit_code">退出代码：%1$d</string>
     <!-- Settings -->
     <string name="settings_title">设置</string>
     <string name="settings_general">通用设置</string>
@@ -236,4 +267,10 @@
     <!-- Conversation -->
     <string name="branch_steer_current_run">引导当前运行</string>
     <string name="branch_queue_next_turn">排队下一轮</string>
+    <string name="tool_invocation_group_executing">正在执行 %1$d 个工具</string>
+    <string name="tool_invocation_group_executed">已执行 %1$d 个工具</string>
+    <string name="tool_invocation_collapse_tools">折叠工具</string>
+    <string name="tool_invocation_expand_tools">展开工具</string>
+    <string name="agent_mode_replay_frame">Agent 模式回放帧</string>
+    <string name="agent_mode_replay_preview_unavailable">预览不可用</string>
 </resources>
