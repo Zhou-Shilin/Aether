@@ -179,6 +179,7 @@
     <string name="onboarding_termux_status_dispatch_failed_configured">Open Termux once, then refresh here.</string>
     <string name="onboarding_termux_status_dispatch_failed">Copy the setup command, paste it in Termux, then return and refresh.</string>
     <!-- Markdown -->
+    <string name="attachment_close_preview">Close preview</string>
     <string name="markdown_open_original">Open original</string>
 
     <!-- Search -->

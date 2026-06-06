@@ -648,22 +648,22 @@ private fun UserMessageActionDialog(
                 }
                 UserMessageActionRow(
                     icon = Icons.Rounded.ContentCopy,
-                    label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "复制" else "Copy",
+                    label = stringResource(R.string.common_copy),
                     onClick = onCopy,
                 )
                 UserMessageActionRow(
                     icon = Icons.Rounded.Description,
-                    label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "选择文本" else "Select Text",
+                    label = stringResource(R.string.common_select_text),
                     onClick = onSelectText,
                 )
                 UserMessageActionRow(
                     icon = Icons.Rounded.Edit,
-                    label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "编辑消息" else "Edit Message",
+                    label = stringResource(R.string.common_edit_message),
                     onClick = onEdit,
                 )
                 UserMessageActionRow(
                     icon = Icons.Rounded.Refresh,
-                    label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "重试" else "Retry",
+                    label = stringResource(R.string.common_retry),
                     onClick = onRetry,
                 )
             }
@@ -776,7 +776,7 @@ private fun SelectUserMessageTextDialog(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "选择文本" else "Select Text",
+                text = stringResource(R.string.common_select_text),
                 style = MaterialTheme.typography.titleMedium,
                 color = AetherOnSurface,
             )
@@ -926,18 +926,18 @@ private fun AssistantMessageBlock(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AssistantMessageAction(
                 icon = LucideIcons.Copy,
-                contentDescription = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "复制回复" else "Copy reply",
+                contentDescription = stringResource(R.string.common_copy_reply),
                 onClick = onCopy,
             )
             AssistantMessageAction(
                 icon = LucideIcons.RotateCcw,
-                contentDescription = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "重新执行回复" else "Redo reply",
+                contentDescription = stringResource(R.string.common_redo_reply),
                 enabled = actionsEnabled,
                 onClick = onRedo,
             )
             AssistantMessageAction(
                 icon = LucideIcons.Trash2,
-                contentDescription = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "删除回复" else "Delete reply",
+                contentDescription = stringResource(R.string.common_delete_reply),
                 enabled = actionsEnabled,
                 onClick = onDelete,
             )
@@ -1126,18 +1126,18 @@ fun ConversationAssistantGroupBubble(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AssistantMessageAction(
                 icon = LucideIcons.Copy,
-                contentDescription = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "复制回复" else "Copy reply",
+                contentDescription = stringResource(R.string.common_copy_reply),
                 onClick = onCopy,
             )
             AssistantMessageAction(
                 icon = LucideIcons.RotateCcw,
-                contentDescription = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "重新执行回复" else "Redo reply",
+                contentDescription = stringResource(R.string.common_redo_reply),
                 enabled = actionsEnabled,
                 onClick = onRedo,
             )
             AssistantMessageAction(
                 icon = LucideIcons.Trash2,
-                contentDescription = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "删除回复" else "Delete reply",
+                contentDescription = stringResource(R.string.common_delete_reply),
                 enabled = actionsEnabled,
                 onClick = onDelete,
             )
@@ -2842,7 +2842,7 @@ fun AttachmentPreviewDialog(
                 }
                 IconOnlyAction(
                     icon = Icons.Rounded.Close,
-                    contentDescription = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "关闭预览" else "Close preview",
+                    contentDescription = stringResource(R.string.attachment_close_preview),
                     onClick = onDismiss,
                 )
             }
@@ -2855,7 +2855,7 @@ fun AttachmentPreviewDialog(
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ActionIconLabel(
                     icon = Icons.Rounded.Download,
-                    label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "保存" else "Save",
+                    label = stringResource(R.string.common_save),
                     enabled = true,
                     onClick = onSave,
                 )

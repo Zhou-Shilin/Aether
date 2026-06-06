@@ -140,6 +140,7 @@
     <string name="onboarding_termux_status_dispatch_failed_configured">先打开一次 Termux，然后回到这里刷新。</string>
     <string name="onboarding_termux_status_dispatch_failed">复制配置命令，在 Termux 中粘贴运行后再回来刷新。</string>
     <!-- Markdown -->
+    <string name="attachment_close_preview">关闭预览</string>
     <string name="markdown_open_original">打开原图</string>
 
     <!-- Search -->
