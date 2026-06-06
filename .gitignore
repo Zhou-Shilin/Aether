@@ -2,6 +2,7 @@
 .gradle/
 build/
 **/build/
+**/.cxx/
 
 # Local Android/IDE state
 local.properties
