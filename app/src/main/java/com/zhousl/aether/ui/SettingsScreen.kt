@@ -755,60 +755,60 @@ fun SettingsScreen(
             )
 
             SettingsPage.DefaultChatModel -> ModelSelectionListPage(
-                title = tr(strings, "Default Chat Model", "默认聊天模型"),
-                subtitle = tr(strings, "Used for new chats and when a conversation has not selected a model yet.", "用于新建聊天，以及当前会话尚未单独选择模型时。"),
+                title = stringResource(R.string.settings_default_chat_model),
+                subtitle = stringResource(R.string.settings_default_chat_model_subtitle),
                 selectedKey = defaultChatModelKeyValue,
                 options = enabledModelOptions,
                 automaticLabel = enabledModelOptions.findModelOption(
                     enabledModelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Chat)
-                )?.fullLabel?.let { tr(strings, "Automatic · $it", "自动选择 · $it") }
-                    ?: tr(strings, "Automatic", "自动选择"),
-                automaticSubtitle = tr(strings, "Prioritize the SOTA models", "优先选择前沿模型"),
+                )?.fullLabel?.let { stringResource(R.string.settings_automatic_model_with_name, it) }
+                    ?: stringResource(R.string.settings_automatic_model),
+                automaticSubtitle = stringResource(R.string.settings_prioritize_sota_models),
                 onSelected = { defaultChatModelKeyValue = it },
                 onBack = { currentPage = SettingsPage.DefaultModels.name },
             )
 
             SettingsPage.DefaultTitleModel -> ModelSelectionListPage(
-                title = tr(strings, "Default Title Model", "默认标题模型"),
-                subtitle = tr(strings, "Used when Aether automatically generates conversation titles.", "用于 Aether 自动生成会话标题。"),
+                title = stringResource(R.string.settings_default_title_model),
+                subtitle = stringResource(R.string.settings_default_title_model_subtitle),
                 selectedKey = defaultTitleModelKeyValue,
                 options = enabledModelOptions,
                 automaticLabel = enabledModelOptions.findModelOption(
                     enabledModelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Title)
                         .ifBlank { enabledModelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Chat) }
-                )?.fullLabel?.let { tr(strings, "Automatic · $it", "自动选择 · $it") }
-                    ?: tr(strings, "Automatic", "自动选择"),
-                automaticSubtitle = tr(strings, "Prioritize the SOTA models", "优先选择前沿模型"),
+                )?.fullLabel?.let { stringResource(R.string.settings_automatic_model_with_name, it) }
+                    ?: stringResource(R.string.settings_automatic_model),
+                automaticSubtitle = stringResource(R.string.settings_prioritize_sota_models),
                 onSelected = { defaultTitleModelKeyValue = it },
                 onBack = { currentPage = SettingsPage.DefaultModels.name },
             )
 
             SettingsPage.DefaultNamingModel -> ModelSelectionListPage(
-                title = tr(strings, "Default Naming Model", "默认命名模型"),
-                subtitle = tr(strings, "Used for automatic naming flows such as Agent Skills and MCP labels.", "用于 Agent Skills、MCP 等自动命名流程。"),
+                title = stringResource(R.string.settings_default_naming_model),
+                subtitle = stringResource(R.string.settings_default_naming_model_subtitle),
                 selectedKey = defaultNamingModelKeyValue,
                 options = enabledModelOptions,
                 automaticLabel = enabledModelOptions.findModelOption(
                     enabledModelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Naming)
                         .ifBlank { enabledModelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Chat) }
-                )?.fullLabel?.let { tr(strings, "Automatic · $it", "自动选择 · $it") }
-                    ?: tr(strings, "Automatic", "自动选择"),
-                automaticSubtitle = tr(strings, "Prioritize the SOTA models", "优先选择前沿模型"),
+                )?.fullLabel?.let { stringResource(R.string.settings_automatic_model_with_name, it) }
+                    ?: stringResource(R.string.settings_automatic_model),
+                automaticSubtitle = stringResource(R.string.settings_prioritize_sota_models),
                 onSelected = { defaultNamingModelKeyValue = it },
                 onBack = { currentPage = SettingsPage.DefaultModels.name },
             )
 
             SettingsPage.DefaultCompactingModel -> ModelSelectionListPage(
-                title = tr(strings, "Default Compacting Model", "默认压缩模型"),
-                subtitle = tr(strings, "Used when /compact summarizes the current conversation.", "用于 /compact 总结当前会话。"),
+                title = stringResource(R.string.settings_default_compacting_model),
+                subtitle = stringResource(R.string.settings_default_compacting_model_subtitle),
                 selectedKey = defaultCompactingModelKeyValue,
                 options = enabledModelOptions,
                 automaticLabel = enabledModelOptions.findModelOption(
                     enabledModelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Compacting)
                         .ifBlank { enabledModelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Chat) }
-                )?.fullLabel?.let { tr(strings, "Automatic · $it", "自动选择 · $it") }
-                    ?: tr(strings, "Automatic", "自动选择"),
-                automaticSubtitle = tr(strings, "Prioritize efficient summary models", "优先选择高效总结模型"),
+                )?.fullLabel?.let { stringResource(R.string.settings_automatic_model_with_name, it) }
+                    ?: stringResource(R.string.settings_automatic_model),
+                automaticSubtitle = stringResource(R.string.settings_prioritize_efficient_summary_models),
                 onSelected = { defaultCompactingModelKeyValue = it },
                 onBack = { currentPage = SettingsPage.DefaultModels.name },
             )
@@ -848,7 +848,7 @@ fun SettingsScreen(
             )
 
             SettingsPage.WebTools -> WebToolsPage(
-                title = strings.webTools,
+                title = stringResource(R.string.settings_web_tools),
                 tavilyApiKeyValue = tavilyApiKeyValue,
                 onTavilyApiKeyChanged = { tavilyApiKeyValue = it },
                 tavilyBaseUrlValue = tavilyBaseUrlValue,
@@ -857,7 +857,7 @@ fun SettingsScreen(
             )
 
             SettingsPage.Reliability -> ReliabilityPage(
-                title = strings.reliability,
+                title = stringResource(R.string.settings_reliability),
                 llmInactivityReconnectTimeoutValue = llmInactivityReconnectTimeoutValue,
                 onLlmInactivityReconnectTimeoutChanged = { llmInactivityReconnectTimeoutValue = it },
                 keepTasksRunningInBackground = keepTasksRunningInBackgroundValue,
@@ -1451,9 +1451,8 @@ private fun ProvidersListPage(
     onAddNew: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     SubPageScaffold(
-        title = strings.modelProviders,
+        title = stringResource(R.string.settings_model_providers),
         onBack = onBack,
         trailingIcon = Icons.Rounded.Add,
         onTrailingAction = onAddNew,
@@ -1467,19 +1466,19 @@ private fun ProvidersListPage(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        tr(strings, "No providers configured", "未配置模型提供方"),
+                        stringResource(R.string.settings_no_providers_configured),
                         style = MaterialTheme.typography.titleMedium,
                         color = AetherOnSurface,
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        tr(strings, "Add a provider to connect to an LLM API.", "Add a provider to connect to an LLM API."),
+                        stringResource(R.string.settings_add_provider_description),
                         style = MaterialTheme.typography.bodyMedium,
                         color = AetherOnSurfaceVariant,
                     )
                     Spacer(Modifier.height(16.dp))
                     SettingsActionButton(
-                        label = tr(strings, "Add Provider", "Add Provider"),
+                        label = stringResource(R.string.settings_add_provider),
                         onClick = onAddNew,
                     )
                 }
@@ -1500,8 +1499,8 @@ private fun ProvidersListPage(
         SettingsCardGroup {
             SettingsNavRow(
                 icon = Icons.Rounded.AutoAwesome,
-                title = tr(strings, "Default Models", "默认模型"),
-                subtitle = tr(strings, "Choose dedicated defaults for chat, titles, naming, and compaction.", "为聊天、标题、命名和压缩分别设置默认模型。"),
+                title = stringResource(R.string.settings_default_models),
+                subtitle = stringResource(R.string.settings_default_models_subtitle),
                 onClick = onOpenDefaultModels,
             )
         }
@@ -1521,7 +1520,6 @@ private fun DefaultModelsPage(
     onOpenDefaultCompactingModel: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val automaticChatLabel = modelOptions.findModelOption(
         modelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Chat)
     )?.fullLabel
@@ -1538,16 +1536,16 @@ private fun DefaultModelsPage(
             .ifBlank { modelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Chat) }
     )?.fullLabel
     SubPageScaffold(
-        title = tr(strings, "Default Models", "默认模型"),
+        title = stringResource(R.string.settings_default_models),
         onBack = onBack,
     ) {
         SettingsCardGroup {
             SettingsNavRow(
                 icon = Icons.Rounded.AutoAwesome,
-                title = tr(strings, "Default Chat Model", "默认聊天模型"),
+                title = stringResource(R.string.settings_default_chat_model),
                 subtitle = if (defaultChatModelKey.isBlank()) {
-                    automaticChatLabel?.let { tr(strings, "Automatic · $it", "自动选择 · $it") }
-                        ?: tr(strings, "Automatic", "自动选择")
+                    automaticChatLabel?.let { stringResource(R.string.settings_automatic_model_with_name, it) }
+                        ?: stringResource(R.string.settings_automatic_model)
                 } else {
                     modelOptions.findModelOption(defaultChatModelKey)?.fullLabel.orEmpty()
                 },
@@ -1556,10 +1554,10 @@ private fun DefaultModelsPage(
             CardDivider()
             SettingsNavRow(
                 icon = Icons.Rounded.Edit,
-                title = tr(strings, "Default Title Model", "默认标题模型"),
+                title = stringResource(R.string.settings_default_title_model),
                 subtitle = if (defaultTitleModelKey.isBlank()) {
-                    automaticTitleLabel?.let { tr(strings, "Automatic · $it", "自动选择 · $it") }
-                        ?: tr(strings, "Automatic", "自动选择")
+                    automaticTitleLabel?.let { stringResource(R.string.settings_automatic_model_with_name, it) }
+                        ?: stringResource(R.string.settings_automatic_model)
                 } else {
                     modelOptions.findModelOption(defaultTitleModelKey)?.fullLabel.orEmpty()
                 },
@@ -1568,10 +1566,10 @@ private fun DefaultModelsPage(
             CardDivider()
             SettingsNavRow(
                 icon = Icons.Rounded.Person,
-                title = tr(strings, "Default Naming Model", "默认命名模型"),
+                title = stringResource(R.string.settings_default_naming_model),
                 subtitle = if (defaultNamingModelKey.isBlank()) {
-                    automaticNamingLabel?.let { tr(strings, "Automatic · $it", "自动选择 · $it") }
-                        ?: tr(strings, "Automatic", "自动选择")
+                    automaticNamingLabel?.let { stringResource(R.string.settings_automatic_model_with_name, it) }
+                        ?: stringResource(R.string.settings_automatic_model)
                 } else {
                     modelOptions.findModelOption(defaultNamingModelKey)?.fullLabel.orEmpty()
                 },
@@ -1580,10 +1578,10 @@ private fun DefaultModelsPage(
             CardDivider()
             SettingsNavRow(
                 icon = Icons.Rounded.AutoAwesome,
-                title = tr(strings, "Default Compacting Model", "默认压缩模型"),
+                title = stringResource(R.string.settings_default_compacting_model),
                 subtitle = if (defaultCompactingModelKey.isBlank()) {
-                    automaticCompactingLabel?.let { tr(strings, "Automatic · $it", "自动选择 · $it") }
-                        ?: tr(strings, "Automatic", "自动选择")
+                    automaticCompactingLabel?.let { stringResource(R.string.settings_automatic_model_with_name, it) }
+                        ?: stringResource(R.string.settings_automatic_model)
                 } else {
                     modelOptions.findModelOption(defaultCompactingModelKey)?.fullLabel.orEmpty()
                 },
@@ -1600,7 +1598,6 @@ private fun ProviderCard(
     onEdit: () -> Unit,
     onRemove: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val availableModels = config.availableModels()
     val enabledModels = config.enabledModels()
 
@@ -1638,11 +1635,7 @@ private fun ProviderCard(
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                text = tr(
-                    strings,
-                    "${enabledModels.size} of ${availableModels.size} models enabled",
-                    "已启用 ${enabledModels.size}/${availableModels.size} 个模型",
-                ),
+                text = stringResource(R.string.settings_provider_models_enabled_count, enabledModels.size, availableModels.size),
                 style = MaterialTheme.typography.bodySmall,
                 color = AetherOnSurfaceVariant,
                 maxLines = 1,
@@ -1653,7 +1646,7 @@ private fun ProviderCard(
         IconButton(onClick = onEdit) {
             Icon(
                 Icons.Rounded.Edit,
-                contentDescription = tr(strings, "Edit", "编辑"),
+                contentDescription = stringResource(R.string.action_edit),
                 tint = AetherOnSurfaceVariant,
             )
         }
@@ -1661,7 +1654,7 @@ private fun ProviderCard(
         IconButton(onClick = onRemove) {
             Icon(
                 Icons.Rounded.Delete,
-                contentDescription = tr(strings, "Remove", "移除"),
+                contentDescription = stringResource(R.string.action_remove),
                 tint = Color(0xFFD25757),
             )
         }
@@ -1679,7 +1672,6 @@ private fun ModelSelectionListPage(
     onSelected: (String) -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val selectedOption = options.findModelOption(selectedKey)
 
     SubPageScaffold(
@@ -1700,12 +1692,12 @@ private fun ModelSelectionListPage(
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Text(
-                        text = tr(strings, "No enabled models available", "没有可用的已启用模型"),
+                        text = stringResource(R.string.settings_no_enabled_models_available),
                         style = MaterialTheme.typography.titleMedium,
                         color = AetherOnSurface,
                     )
                     Text(
-                        text = tr(strings, "Enable at least one provider model first, then return here to choose a default.", "请先启用至少一个 Provider 模型，然后再回来选择默认模型。"),
+                        text = stringResource(R.string.settings_enable_provider_model_first),
                         style = MaterialTheme.typography.bodyMedium,
                         color = AetherOnSurfaceVariant,
                     )
@@ -1793,12 +1785,11 @@ private fun ProviderEditPage(
     onFetchModels: (LlmProviderConfig, (List<String>) -> Unit) -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val isNew = existingConfig == null
     val formState = rememberProviderFormState(existingConfig)
 
     SubPageScaffold(
-        title = if (isNew) tr(strings, "Add Provider", "添加 Provider") else tr(strings, "Edit Provider", "编辑 Provider"),
+        title = if (isNew) stringResource(R.string.settings_add_provider) else stringResource(R.string.settings_edit_provider),
         onBack = onBack,
         trailingIcon = Icons.Rounded.Check,
         trailingEnabled = formState.isValid(existingProviderIds),
@@ -1871,7 +1862,6 @@ private fun ReliabilityPage(
     onNotifyOnTaskCompletionChanged: (Boolean) -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     SubPageScaffold(
         title = title,
         onBack = onBack,
@@ -1879,7 +1869,7 @@ private fun ReliabilityPage(
         onTrailingAction = onBack,
     ) {
         Text(
-            text = tr(strings, "Multitasking", "后台运行"),
+            text = stringResource(R.string.settings_multitasking),
             style = MaterialTheme.typography.labelLarge,
             color = AetherOnSurface,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -1892,15 +1882,15 @@ private fun ReliabilityPage(
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 SettingsToggleRow(
-                    title = tr(strings, "Keep tasks running in background", "Keep tasks running in background"),
-                    subtitle = tr(strings, "Uses an Android foreground service so active chats can keep working after you leave Aether.", "Uses an Android foreground service so active chats can keep working after you leave Aether."),
+                    title = stringResource(R.string.settings_keep_tasks_running_background),
+                    subtitle = stringResource(R.string.settings_keep_tasks_running_background_subtitle),
                     checked = keepTasksRunningInBackground,
                     onCheckedChange = onKeepTasksRunningInBackgroundChanged,
                 )
                 Spacer(Modifier.height(4.dp))
                 SettingsToggleRow(
-                    title = tr(strings, "Notify when background tasks finish", "后台任务结束时通知"),
-                    subtitle = tr(strings, "Shows a completion alert when a run ends while Aether is not on screen.", "Shows a completion alert when a run ends while Aether is not on screen."),
+                    title = stringResource(R.string.settings_notify_background_tasks_finish),
+                    subtitle = stringResource(R.string.settings_notify_background_tasks_finish_subtitle),
                     checked = notifyOnTaskCompletion,
                     onCheckedChange = onNotifyOnTaskCompletionChanged,
                 )
@@ -1909,7 +1899,7 @@ private fun ReliabilityPage(
 
         Spacer(Modifier.height(16.dp))
         Text(
-            text = tr(strings, "Reconnect", "重连"),
+            text = stringResource(R.string.settings_reconnect),
             style = MaterialTheme.typography.labelLarge,
             color = AetherOnSurface,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -1918,7 +1908,7 @@ private fun ReliabilityPage(
 
         SettingsCardGroup {
             ChatGptTextField(
-                label = tr(strings, "Reconnect after idle seconds", "空闲多少秒后重连"),
+                label = stringResource(R.string.settings_reconnect_after_idle_seconds),
                 value = llmInactivityReconnectTimeoutValue,
                 onValueChange = {
                     val digitsOnly = it.text.filter(Char::isDigit)
@@ -1935,7 +1925,7 @@ private fun ReliabilityPage(
 
         Spacer(Modifier.height(8.dp))
         Text(
-            text = tr(strings, "If a request produces no response activity at all for this many seconds, Aether cancels that attempt and reconnects with backoff. Range: 30-3600 seconds.", "If a request produces no response activity at all for this many seconds, Aether cancels that attempt and reconnects with backoff. Range: 30-3600 seconds."),
+            text = stringResource(R.string.settings_reconnect_after_idle_description),
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -1952,7 +1942,6 @@ private fun WebToolsPage(
     onTavilyBaseUrlChanged: (TextFieldValue) -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     SubPageScaffold(
         title = title,
         onBack = onBack,
@@ -1961,13 +1950,13 @@ private fun WebToolsPage(
     ) {
         SettingsCardGroup {
             ChatGptTextField(
-                label = tr(strings, "Tavily API Key", "Tavily API 密钥"),
+                label = stringResource(R.string.settings_tavily_api_key),
                 value = tavilyApiKeyValue,
                 onValueChange = onTavilyApiKeyChanged,
             )
             CardDivider()
             ChatGptTextField(
-                label = tr(strings, "Tavily Base URL", "Tavily Base URL"),
+                label = stringResource(R.string.settings_tavily_base_url),
                 value = tavilyBaseUrlValue,
                 onValueChange = onTavilyBaseUrlChanged,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
@@ -1976,7 +1965,7 @@ private fun WebToolsPage(
 
         Spacer(Modifier.height(8.dp))
         Text(
-            text = tr(strings, "fetch_web_url works without extra setup. tavily_search uses this API key and Base URL; leave the URL blank to use the official Tavily endpoint.", "fetch_web_url 无需额外配置。tavily_search 使用这里的 API Key 和 Base URL；留空则使用 Tavily 官方端点。"),
+            text = stringResource(R.string.settings_web_tools_description),
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -2099,7 +2088,7 @@ private fun SkillCard(
             IconButton(onClick = onRemove, modifier = Modifier.size(36.dp)) {
                 Icon(
                     Icons.Rounded.Delete,
-                    contentDescription = tr(strings, "Remove", "移除"),
+                    contentDescription = stringResource(R.string.action_remove),
                     tint = Color(0xFFD25757),
                     modifier = Modifier.size(20.dp),
                 )
@@ -2443,7 +2432,7 @@ private fun McpServerCard(
             IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
                 Icon(
                     Icons.Rounded.Edit,
-                    contentDescription = tr(strings, "Edit", "编辑"),
+                    contentDescription = stringResource(R.string.action_edit),
                     tint = AetherOnSurface,
                     modifier = Modifier.size(18.dp),
                 )
@@ -2451,7 +2440,7 @@ private fun McpServerCard(
             IconButton(onClick = onRemove, modifier = Modifier.size(36.dp)) {
                 Icon(
                     Icons.Rounded.Delete,
-                    contentDescription = tr(strings, "Remove", "移除"),
+                    contentDescription = stringResource(R.string.action_remove),
                     tint = Color(0xFFD25757),
                     modifier = Modifier.size(20.dp),
                 )
