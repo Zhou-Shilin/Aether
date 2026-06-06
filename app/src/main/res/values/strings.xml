@@ -179,6 +179,10 @@
     <!-- File / Termux -->
     <string name="file_saved">File saved</string>
     <string name="file_could_not_save">Couldn\'t save file</string>
+    <string name="app_unable_to_open_link">Unable to open that link</string>
+    <string name="app_unable_to_open_file">Unable to open that file</string>
+    <string name="app_unable_to_open_apk_installer">Unable to open the APK installer</string>
+    <string name="app_unable_to_open_screen">Unable to open that screen</string>
     <string name="file_reply_copied">Reply copied</string>
     <string name="termux_access_granted">Termux access granted</string>
     <string name="termux_access_not_granted">Termux access not granted</string>

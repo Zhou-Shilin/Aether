@@ -8,6 +8,7 @@ import android.provider.Settings
 import android.util.Patterns
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import com.zhousl.aether.R
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -91,6 +92,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -347,7 +349,7 @@ private fun AetherAppContent(
                 }
                 Toast.makeText(
                     context,
-                    if (didSave) strings.fileSaved else strings.couldNotSaveFile,
+                    if (didSave) stringResource(R.string.file_saved) else stringResource(R.string.file_could_not_save),
                     Toast.LENGTH_SHORT,
                 ).show()
             }
@@ -406,7 +408,7 @@ private fun AetherAppContent(
             viewModel.refreshTermuxSetup()
             Toast.makeText(
                 context,
-                if (granted) strings.termuxAccessGranted else strings.termuxAccessNotGranted,
+                if (granted) stringResource(R.string.termux_access_granted) else stringResource(R.string.termux_access_not_granted),
                 Toast.LENGTH_SHORT,
             ).show()
         },
@@ -635,7 +637,7 @@ private fun AetherAppContent(
                     },
                     onCopyMessage = { message ->
                         clipboardManager.setText(AnnotatedString(message.text))
-                        Toast.makeText(context, strings.replyCopied, Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, stringResource(R.string.common_reply_copied), Toast.LENGTH_SHORT).show()
                     },
                     onRequestTermuxPermission = { requestTermuxPermission("chat_termux_permission") },
                     onOpenAppPermissions = {
@@ -982,7 +984,7 @@ private suspend fun handleAssistantLink(
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
     launchIntentSafely(context, intent) {
-        Toast.makeText(context, "Unable to open that link", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, context.getString(R.string.app_unable_to_open_link), Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -1014,7 +1016,7 @@ private suspend fun openAssistantLocalFile(
             }
         }
     }.getOrElse {
-        Toast.makeText(context, "Unable to open that file", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, context.getString(R.string.app_unable_to_open_file), Toast.LENGTH_SHORT).show()
         return
     }
     val contentUri = FileProvider.getUriForFile(
@@ -1028,7 +1030,7 @@ private suspend fun openAssistantLocalFile(
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
     launchIntentSafely(context, intent) {
-        Toast.makeText(context, "Unable to open that file", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, context.getString(R.string.app_unable_to_open_file), Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -1043,7 +1045,7 @@ private fun requestApkInstall(
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
     launchIntentSafely(context, intent) {
-        Toast.makeText(context, "Unable to open the APK installer", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, context.getString(R.string.app_unable_to_open_apk_installer), Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -1207,7 +1209,7 @@ private fun openExternalUrl(
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
     launchIntentSafely(context, intent) {
-        Toast.makeText(context, "Unable to open that link", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, context.getString(R.string.app_unable_to_open_link), Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -1228,12 +1230,12 @@ private fun launchIntentSafely(
         if (fallback != null) {
             fallback()
         } else {
-            Toast.makeText(context, "Unable to open that screen", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.app_unable_to_open_screen), Toast.LENGTH_SHORT).show()
         }
     } else if (fallback != null) {
         fallback()
     } else {
-        Toast.makeText(context, "Unable to open that screen", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, context.getString(R.string.app_unable_to_open_screen), Toast.LENGTH_SHORT).show()
     }
 }
 
