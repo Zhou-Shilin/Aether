@@ -1517,16 +1517,15 @@ private fun isLegacyAssistantGroupStart(
 private fun PendingSessionInputBubble(
     pendingInput: PendingSessionInput,
 ) {
-    val strings = rememberAetherStrings()
     val modeLabel = when (pendingInput.mode) {
-        SessionFollowUpMode.Queue -> strings.pendingInputModeLabel(true)
-        SessionFollowUpMode.Steer -> strings.pendingInputModeLabel(false)
+        SessionFollowUpMode.Queue -> stringResource(R.string.chat_pending_input_queued)
+        SessionFollowUpMode.Steer -> stringResource(R.string.chat_pending_input_steering)
     }
     val attachmentLabel = when (pendingInput.attachmentCount) {
         0 -> null
-        else -> strings.attachmentCountLabel(pendingInput.attachmentCount)
+        1 -> stringResource(R.string.chat_attachment_count_one)
+        else -> stringResource(R.string.chat_attachment_count_other, pendingInput.attachmentCount)
     }
-
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.End,

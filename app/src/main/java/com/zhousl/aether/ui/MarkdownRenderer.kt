@@ -55,6 +55,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -69,7 +70,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.ViewCompat
-import com.zhousl.aether.data.AppLanguage
+import com.zhousl.aether.R
 import com.zhousl.aether.data.WorkspaceFileBridge
 import com.zhousl.aether.termux.TermuxContract
 import com.zhousl.aether.ui.theme.AetherOnSurface
@@ -602,9 +603,8 @@ private fun MarkdownImageBlock(
             )
         }
         if (!originalLinkTarget.isNullOrBlank()) {
-            val strings = rememberAetherStrings()
             Text(
-                text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "打开原图" else "Open original",
+                text = stringResource(R.string.markdown_open_original),
                 style = MaterialTheme.typography.bodySmall,
                 color = AetherPrimary,
                 modifier = Modifier.clickable { onLinkClick(originalLinkTarget) },

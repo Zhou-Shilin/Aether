@@ -64,6 +64,10 @@
     <string name="chat_add_note">添加备注</string>
     <string name="chat_ask_agent_mode">询问 Agent 模式</string>
     <string name="chat_ask_with_selected_tools">使用所选工具提问</string>
+    <string name="chat_pending_input_queued">已排队</string>
+    <string name="chat_pending_input_steering">正在引导</string>
+    <string name="chat_attachment_count_one">1 个附件</string>
+    <string name="chat_attachment_count_other">%1$d 个附件</string>
     <string name="chat_select_model">选择模型</string>
     <string name="chat_first_prompt_ready_title">你的第一条提示已准备好</string>
     <string name="chat_first_prompt_ready_subtitle">点击发送来测试 Aether。</string>
@@ -125,6 +129,9 @@
     <string name="onboarding_termux_status_external_apps_disabled">复制配置命令，在 Termux 中粘贴运行后再回来刷新。</string>
     <string name="onboarding_termux_status_dispatch_failed_configured">先打开一次 Termux，然后回到这里刷新。</string>
     <string name="onboarding_termux_status_dispatch_failed">复制配置命令，在 Termux 中粘贴运行后再回来刷新。</string>
+    <!-- Markdown -->
+    <string name="markdown_open_original">打开原图</string>
+
     <!-- Search -->
     <string name="search_chats">搜索对话</string>
     <string name="search_no_chats_match">没有匹配的对话</string>
