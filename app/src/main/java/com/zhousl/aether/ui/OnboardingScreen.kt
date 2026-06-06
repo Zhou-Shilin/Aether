@@ -337,7 +337,7 @@ fun OnboardingScreen(
                 },
                 lineTwo = stringResource(R.string.onboarding_skills_line_two),
                 chips = listOf(stringResource(R.string.onboarding_skill_chip_prompts), stringResource(R.string.onboarding_skill_chip_checks), stringResource(R.string.onboarding_skill_chip_templates)),
-                primaryLabel = strings.continueLabel,
+                primaryLabel = stringResource(R.string.common_continue),
                 onPrimary = { currentStep = OnboardingStep.McpOverview },
                 secondaryLabel = strings.back,
                 onSecondary = { currentStep = OnboardingStep.TavilySetup },
@@ -897,9 +897,9 @@ private fun TermuxStep(
     ConversationStepPage(
         stepIndex = stepIndex,
         stepCount = stepCount,
-        message = "Great. Now let’s give Aether access to your device so tools can run locally.",
+        message = stringResource(R.string.onboarding_termux_message),
         onBack = null,
-        topRightLabel = strings.close,
+        topRightLabel = stringResource(R.string.common_close),
         onTopRight = onClose,
     ) {
         Column(
@@ -923,7 +923,7 @@ private fun TermuxStep(
                 )
                 when (setupState.issue) {
                     TermuxSetupIssue.Ready -> TourActionRow(
-                        primaryLabel = strings.continueLabel,
+                        primaryLabel = stringResource(R.string.common_continue),
                         onPrimary = onContinue,
                         secondaryLabel = strings.refresh,
                         onSecondary = onRefresh,
@@ -932,7 +932,7 @@ private fun TermuxStep(
                     TermuxSetupIssue.NotInstalled -> TourActionRow(
                         primaryLabel = strings.install,
                         onPrimary = onInstallTermux,
-                        secondaryLabel = strings.skip,
+                        secondaryLabel = stringResource(R.string.common_skip),
                         onSecondary = onContinue,
                     )
 
@@ -940,31 +940,31 @@ private fun TermuxStep(
                         TourActionRow(
                             primaryLabel = strings.grantAccess,
                             onPrimary = onRequestPermission,
-                            secondaryLabel = strings.skip,
+                            secondaryLabel = stringResource(R.string.common_skip),
                             onSecondary = onContinue,
                         )
-                        SecondaryTextAction(label = tr(strings, "App settings", "应用设置"), onClick = onOpenAppPermissions)
+                        SecondaryTextAction(label = stringResource(R.string.onboarding_app_settings), onClick = onOpenAppPermissions)
                     }
 
                     TermuxSetupIssue.ExternalAppsDisabled -> {
                         TourActionRow(
-                            primaryLabel = if (setupState.previouslyConfigured) tr(strings, "Open", "\u6253\u5f00") else tr(strings, "Copy and Open Termux", "复制并打开 Termux"),
+                            primaryLabel = if (setupState.previouslyConfigured) stringResource(R.string.common_open) else stringResource(R.string.onboarding_copy_and_open_termux),
                             onPrimary = if (setupState.previouslyConfigured) onOpenTermux else ::copyTermuxSetupCommandAndOpenTermux,
-                            secondaryLabel = strings.skip,
+                            secondaryLabel = stringResource(R.string.common_skip),
                             onSecondary = onContinue,
                         )
                     }
 
                     TermuxSetupIssue.DispatchFailed -> {
                         TourActionRow(
-                            primaryLabel = if (setupState.previouslyConfigured) tr(strings, "Open", "\u6253\u5f00") else strings.openTermux,
+                            primaryLabel = if (setupState.previouslyConfigured) stringResource(R.string.common_open) else strings.openTermux,
                             onPrimary = onOpenTermux,
-                            secondaryLabel = strings.skip,
+                            secondaryLabel = stringResource(R.string.common_skip),
                             onSecondary = onContinue,
                         )
                         if (!setupState.previouslyConfigured) {
-                            SecondaryTextAction(label = tr(strings, "Copy setup command", "复制配置命令"), onClick = ::copyTermuxSetupCommand)
-                            SecondaryTextAction(label = tr(strings, "Termux settings", "Termux 设置"), onClick = onOpenTermuxSettings)
+                            SecondaryTextAction(label = stringResource(R.string.onboarding_copy_setup_command), onClick = ::copyTermuxSetupCommand)
+                            SecondaryTextAction(label = stringResource(R.string.onboarding_termux_settings), onClick = onOpenTermuxSettings)
                         }
                     }
                 }
@@ -994,7 +994,7 @@ private fun RootSetupPrompt(
             RootSetupIssue.Unknown,
             RootSetupIssue.Unavailable -> TourTextSecondary
         },
-        title = tr(strings, "Root shortcut", "Root 快捷配置"),
+        title = stringResource(R.string.onboarding_root_shortcut),
         body = rootSetupPromptBody(rootSetupState, strings),
     )
 
@@ -1011,36 +1011,36 @@ private fun RootSetupPrompt(
                     color = TourBlue,
                 )
                 Text(
-                    text = tr(strings, "Waiting for root authorization...", "正在等待 Root 授权..."),
+                    text = stringResource(R.string.onboarding_waiting_root_authorization),
                     style = MaterialTheme.typography.bodyMedium,
                     color = TourTextSecondary,
                 )
             }
             SecondaryTextAction(
-                label = tr(strings, "Continue manual setup", "继续手动配置"),
+                label = stringResource(R.string.onboarding_continue_manual_setup),
                 onClick = onContinueManual,
             )
         }
 
         RootSetupIssue.Ready -> TourActionRow(
-            primaryLabel = strings.continueLabel,
+            primaryLabel = stringResource(R.string.common_continue),
             onPrimary = onRootConfigured,
-            secondaryLabel = tr(strings, "Manual setup", "手动配置"),
+            secondaryLabel = stringResource(R.string.onboarding_manual_setup),
             onSecondary = onContinueManual,
         )
 
         RootSetupIssue.TermuxNotInstalled -> TourActionRow(
             primaryLabel = strings.install,
             onPrimary = onInstallTermux,
-            secondaryLabel = tr(strings, "Continue manual setup", "继续手动配置"),
+            secondaryLabel = stringResource(R.string.onboarding_continue_manual_setup),
             onSecondary = onContinueManual,
         )
 
         RootSetupIssue.Available -> {
             TourActionRow(
-                primaryLabel = tr(strings, "Use Root setup", "使用 Root 配置"),
+                primaryLabel = stringResource(R.string.onboarding_use_root_setup),
                 onPrimary = onUseRoot,
-                secondaryLabel = tr(strings, "Continue manual setup", "继续手动配置"),
+                secondaryLabel = stringResource(R.string.onboarding_continue_manual_setup),
                 onSecondary = onContinueManual,
             )
         }
@@ -1049,9 +1049,9 @@ private fun RootSetupPrompt(
         RootSetupIssue.Unavailable,
         RootSetupIssue.PermissionDenied,
         RootSetupIssue.Failed -> TourActionRow(
-            primaryLabel = tr(strings, "Use Root setup", "使用 Root 配置"),
+            primaryLabel = stringResource(R.string.onboarding_use_root_setup),
             onPrimary = onUseRoot,
-            secondaryLabel = tr(strings, "Continue manual setup", "继续手动配置"),
+            secondaryLabel = stringResource(R.string.onboarding_continue_manual_setup),
             onSecondary = onContinueManual,
         )
     }
@@ -1119,9 +1119,9 @@ private fun AgentModeAuthorizationStep(
     ConversationStepPage(
         stepIndex = stepIndex,
         stepCount = stepCount,
-        message = tr(strings, "Agent Mode is optional. It needs Root or Shizuku to control an isolated Android display.", "Agent 模式是可选项。它需要 Root 或 Shizuku 来控制隔离的 Android 显示。"),
+        message = stringResource(R.string.onboarding_agent_mode_message),
         onBack = onBack,
-        topRightLabel = strings.close,
+        topRightLabel = stringResource(R.string.common_close),
         onTopRight = onClose,
     ) {
         Column(
@@ -1132,7 +1132,7 @@ private fun AgentModeAuthorizationStep(
                 icon = Icons.Rounded.SmartToy,
                 accent = TourGreen,
                 title = strings.agentMode,
-                body = tr(strings, "Choose an authorization method, or skip this for now.", "选择一种授权方式，或者暂时先跳过。"),
+                body = stringResource(R.string.onboarding_agent_mode_choose_method),
             )
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -1140,19 +1140,19 @@ private fun AgentModeAuthorizationStep(
             ) {
                 AgentModeStageButton(
                     label = "Shizuku",
-                    subtitle = tr(strings, "Use the elevated Shizuku service when the app is installed.", "安装应用后使用提权的 Shizuku 服务。"),
+                    subtitle = stringResource(R.string.onboarding_agent_mode_shizuku_subtitle),
                     drawableRes = R.drawable.shizuku_mark,
                     onClick = { onContinue(true, AgentModeAuthorizationMethod.Shizuku) },
                 )
                 AgentModeStageButton(
                     label = "Root",
-                    subtitle = tr(strings, "Use a root shell for privileged input on rooted devices.", "在已 root 的设备上使用 root shell 进行特权输入。"),
+                    subtitle = stringResource(R.string.onboarding_agent_mode_root_subtitle),
                     drawableRes = R.drawable.root_mark,
                     onClick = { onContinue(true, AgentModeAuthorizationMethod.Root) },
                 )
                 AgentModeStageButton(
-                    label = strings.skip,
-                    subtitle = tr(strings, "Leave Agent Mode off and enable it later from Settings.", "先关闭 Agent 模式，之后再到设置中启用。"),
+                    label = stringResource(R.string.common_skip),
+                    subtitle = stringResource(R.string.onboarding_agent_mode_skip_subtitle),
                     drawableRes = R.drawable.skip_mark,
                     onClick = { onContinue(false, initialMethod) },
                 )
@@ -1175,9 +1175,9 @@ private fun TavilyStep(
     ConversationStepPage(
         stepIndex = stepIndex,
         stepCount = stepCount,
-        message = tr(strings, "If you want fresher web answers later, you can add search here.", "如果你之后想获得更新鲜的网页答案，可以在这里补上搜索能力。"),
+        message = stringResource(R.string.onboarding_tavily_message),
         onBack = onBack,
-        topRightLabel = strings.close,
+        topRightLabel = stringResource(R.string.common_close),
         onTopRight = onClose,
     ) {
         Column(
@@ -1187,16 +1187,16 @@ private fun TavilyStep(
             BrandStepLead(
                 drawableRes = R.drawable.tavily_mark,
                 title = "Tavily",
-                body = tr(strings, "This is optional. URL fetch already works without it.", "这是可选项。即使不填，URL 抓取也已经可以使用。"),
+                body = stringResource(R.string.onboarding_tavily_optional_body),
             )
             MinimalInputField(
-                label = tr(strings, "API key", "API 密钥"),
+                label = stringResource(R.string.onboarding_api_key),
                 value = value,
-                placeholder = tr(strings, "Paste it here", "粘贴到这里"),
+                placeholder = stringResource(R.string.onboarding_paste_it_here),
                 onValueChange = onValueChange,
             )
             PrimaryActionButton(
-                label = strings.continueLabel,
+                label = stringResource(R.string.common_continue),
                 onClick = onContinue,
             )
         }
@@ -1228,7 +1228,7 @@ private fun SummaryStep(
         stepCount = stepCount,
         message = message,
         onBack = onTertiary,
-        topRightLabel = strings.close,
+        topRightLabel = stringResource(R.string.common_close),
         onTopRight = onClose,
     ) {
         Column(
