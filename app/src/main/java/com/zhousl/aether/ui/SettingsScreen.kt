@@ -704,7 +704,7 @@ fun SettingsScreen(
                     if (page == SettingsPage.AgentMode && !termuxSetupState.isReady) {
                         Toast.makeText(
                             context,
-                            tr(strings, "Complete Termux setup before configuring Agent Mode.", "请先完成 Termux 设置，再配置 Agent 模式。"),
+                            stringResource(R.string.settings_agent_mode_requires_termux_toast),
                             Toast.LENGTH_SHORT,
                         ).show()
                     } else {
@@ -841,7 +841,7 @@ fun SettingsScreen(
             }
 
             SettingsPage.Personalization -> PersonalizationPage(
-                title = strings.personalization,
+                title = stringResource(R.string.settings_personalization),
                 systemPromptValue = systemPromptValue,
                 onSystemPromptChanged = { systemPromptValue = it },
                 onBack = { currentPage = SettingsPage.Hub.name },
@@ -868,7 +868,7 @@ fun SettingsScreen(
             )
 
             SettingsPage.Skills -> SkillsListPage(
-                title = strings.agentSkills,
+                title = stringResource(R.string.settings_agent_skills),
                 installedSkills = installedSkills,
                 onToggleSkillEnabled = onToggleSkillEnabled,
                 onRemoveSkill = onRemoveSkill,
@@ -877,7 +877,7 @@ fun SettingsScreen(
             )
 
             SettingsPage.AddSkill -> AddSkillPage(
-                title = strings.agentSkills,
+                title = stringResource(R.string.settings_agent_skills),
                 onImportSkillFolder = onImportSkillFolder,
                 onImportSkillZip = { callback ->
                     onImportSkillZip { success ->
@@ -895,7 +895,7 @@ fun SettingsScreen(
             )
 
             SettingsPage.McpServers -> McpServersListPage(
-                title = strings.mcpServers,
+                title = stringResource(R.string.settings_mcp_servers),
                 mcpServers = mcpServers,
                 onToggleMcpServerEnabled = onToggleMcpServerEnabled,
                 onRemoveMcpServer = onRemoveMcpServer,
@@ -909,7 +909,7 @@ fun SettingsScreen(
             )
 
             SettingsPage.AddMcpServer -> AddMcpServerPage(
-                title = strings.mcpServers,
+                title = stringResource(R.string.settings_mcp_servers),
                 existingServer = null,
                 onSaveHttpMcpServer = { serverId, name, url, headers ->
                     onSaveHttpMcpServer(serverId, name, url, headers)
@@ -923,7 +923,7 @@ fun SettingsScreen(
             )
 
             SettingsPage.EditMcpServer -> AddMcpServerPage(
-                title = strings.mcpServers,
+                title = stringResource(R.string.settings_mcp_servers),
                 existingServer = mcpServers.firstOrNull { it.id == editingMcpServerId },
                 onSaveHttpMcpServer = { serverId, name, url, headers ->
                     onSaveHttpMcpServer(serverId, name, url, headers)
@@ -967,7 +967,7 @@ fun SettingsScreen(
             )
 
             SettingsPage.Termux -> TermuxSettingsPage(
-                title = strings.termux,
+                title = stringResource(R.string.settings_termux),
                 termuxSetupState = termuxSetupState,
                 rootSetupState = rootSetupState,
                 selectedWorkspaceMode = agentWorkspaceModeValue,
@@ -986,7 +986,7 @@ fun SettingsScreen(
             )
 
             SettingsPage.AgentMode -> AgentModeSettingsPage(
-                title = strings.agentMode,
+                title = stringResource(R.string.settings_agent_mode),
                 termuxSetupState = termuxSetupState,
                 agentModeAuthorizationEnabled = agentModeAuthorizationEnabledValue,
                 agentModeAuthorizationMethod = agentModeAuthorizationMethodValue,
@@ -1023,7 +1023,7 @@ fun SettingsScreen(
             )
 
             SettingsPage.Developer -> DeveloperSettingsPage(
-                title = strings.developerSettings,
+                title = stringResource(R.string.settings_developer),
                 onReplayFollowUpOnboarding = ::persistAndReplayFollowUpOnboarding,
                 onImportAppData = onImportAppData,
                 onExportAppData = onExportAppData,
@@ -1035,7 +1035,7 @@ fun SettingsScreen(
             )
 
             SettingsPage.About -> AboutPage(
-                title = strings.about,
+                title = stringResource(R.string.settings_about),
                 appUpdate = appUpdate,
                 onOpenWebsite = onOpenWebsite,
                 onOpenPrivacyPolicy = onOpenPrivacyPolicy,
@@ -1155,7 +1155,7 @@ private fun SettingsHub(
                 SettingsNavRow(
                     icon = Icons.Rounded.Code,
                     title = stringResource(R.string.settings_mcp_servers),
-                    subtitle = strings.serverCountSummary(mcpServerCount),
+                    subtitle = stringResource(R.string.settings_mcp_server_count_summary, mcpServerCount),
                     onClick = { onNavigate(SettingsPage.McpServers) },
                 )
                 CardDivider()
@@ -1179,7 +1179,7 @@ private fun SettingsHub(
                     subtitle = if (termuxReady) {
                         stringResource(R.string.settings_agent_mode_subtitle)
                     } else {
-                        tr(strings, "Requires Termux setup", "Requires Termux setup")
+                        stringResource(R.string.settings_requires_termux_setup)
                     },
                     enabled = termuxReady,
                     onClick = { onNavigate(SettingsPage.AgentMode) },
@@ -1242,16 +1242,16 @@ private fun GeneralSettingsPage(
     onThemeModeSelected: (AppThemeMode) -> Unit,
     onBack: () -> Unit,
 ) {
-    SubPageScaffold(title = strings.generalSettings, onBack = onBack) {
+    SubPageScaffold(title = stringResource(R.string.settings_general), onBack = onBack) {
         SettingsCardGroup {
             Text(
-                text = strings.language,
+                text = stringResource(R.string.settings_language),
                 style = MaterialTheme.typography.titleMedium,
                 color = AetherOnSurface,
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                text = strings.languageDescription,
+                text = stringResource(R.string.settings_language_description),
                 style = MaterialTheme.typography.bodySmall,
                 color = AetherOnSurfaceVariant,
             )
@@ -1259,7 +1259,7 @@ private fun GeneralSettingsPage(
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 AppLanguage.entries.forEach { option ->
                     SettingsChoiceRow(
-                        title = strings.languageDisplayName(option),
+                        title = languageDisplayName(option),
                         subtitle = if (option == AppLanguage.English) {
                             "English interface"
                         } else {
@@ -1276,13 +1276,13 @@ private fun GeneralSettingsPage(
 
         SettingsCardGroup {
             Text(
-                text = strings.theme,
+                text = stringResource(R.string.settings_theme),
                 style = MaterialTheme.typography.titleMedium,
                 color = AetherOnSurface,
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                text = strings.themeDescription,
+                text = stringResource(R.string.settings_theme_description),
                 style = MaterialTheme.typography.bodySmall,
                 color = AetherOnSurfaceVariant,
             )
@@ -1290,11 +1290,11 @@ private fun GeneralSettingsPage(
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 AppThemeMode.entries.forEach { option ->
                     SettingsChoiceRow(
-                        title = strings.themeDisplayName(option),
+                        title = themeDisplayName(option),
                         subtitle = if (option == AppThemeMode.Light) {
-                            strings.lightThemeSubtitle
+                            stringResource(R.string.settings_light_theme_subtitle)
                         } else {
-                            strings.darkThemeSubtitle
+                            stringResource(R.string.settings_dark_theme_subtitle)
                         },
                         selected = option == selectedThemeMode,
                         onClick = { onThemeModeSelected(option) },
@@ -1808,7 +1808,6 @@ private fun PersonalizationPage(
     onSystemPromptChanged: (TextFieldValue) -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     SubPageScaffold(
         title = title,
         onBack = onBack,
@@ -1817,7 +1816,7 @@ private fun PersonalizationPage(
     ) {
         SettingsCardGroup {
             ChatGptTextField(
-                label = strings.customInstructions,
+                label = stringResource(R.string.settings_custom_instructions),
                 value = systemPromptValue,
                 onValueChange = onSystemPromptChanged,
                 minLines = 8,
@@ -2829,7 +2828,6 @@ private fun AddMcpServerPage(
     onSaveStdIoMcpServer: (String?, String, String, String, String, String) -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val isEditing = existingServer != null
     val existingHttpTransport = existingServer?.transport as? com.zhousl.aether.data.McpTransportConfig.StreamableHttp
     val existingStdIoTransport = existingServer?.transport as? com.zhousl.aether.data.McpTransportConfig.StdIo
@@ -3445,7 +3443,6 @@ private fun RootSetupAlreadyConfiguredDialog(
     onDismiss: () -> Unit,
     onContinue: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     Dialog(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
@@ -3473,12 +3470,12 @@ private fun RootSetupAlreadyConfiguredDialog(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Cancel", "取消"),
+                    label = stringResource(R.string.action_cancel),
                     onClick = onDismiss,
                     modifier = Modifier.weight(1f),
                 )
                 SettingsActionButton(
-                    label = tr(strings, "Continue", "继续"),
+                    label = stringResource(R.string.action_continue),
                     onClick = onContinue,
                     modifier = Modifier.weight(1f),
                 )
@@ -3504,7 +3501,6 @@ private fun RootSetupProgressPage(
     onRunRootSetup: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val rootAgentModeReady = agentModeAuthorizationEnabled &&
         agentModeAuthorizationMethod == AgentModeAuthorizationMethod.Root &&
         agentModeAuthorizationState.isReady
@@ -3530,7 +3526,7 @@ private fun RootSetupProgressPage(
     }
 
     SubPageScaffold(
-        title = tr(strings, "Root automatic setup", "Root 自动配置"),
+        title = stringResource(R.string.settings_root_automatic_setup),
         onBack = onBack,
     ) {
         SettingsCardGroup {
@@ -3564,7 +3560,7 @@ private fun RootSetupProgressPage(
                 }
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    text = rootSetupProgressTitle(rootSetupState.issue, strings),
+                    text = rootSetupProgressTitle(rootSetupState.issue),
                     style = MaterialTheme.typography.titleMedium,
                     color = AetherOnSurface,
                 )
@@ -3595,18 +3591,18 @@ private fun RootSetupProgressPage(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 RootSetupProgressStep(
-                    title = tr(strings, "Root access", "Root 访问"),
-                    subtitle = tr(strings, "Detect su and wait for authorization.", "检测 su 并等待授权。"),
+                    title = stringResource(R.string.settings_root_setup_step_root_access),
+                    subtitle = stringResource(R.string.settings_root_setup_step_root_access_subtitle),
                     status = rootStepStatus,
                 )
                 RootSetupProgressStep(
-                    title = tr(strings, "Termux command access", "Termux 命令访问"),
-                    subtitle = tr(strings, "Enable external apps and grant command permission.", "启用外部应用并授予命令权限。"),
+                    title = stringResource(R.string.settings_root_setup_step_termux_access),
+                    subtitle = stringResource(R.string.settings_root_setup_step_termux_access_subtitle),
                     status = termuxStepStatus,
                 )
                 RootSetupProgressStep(
-                    title = tr(strings, "Root Agent Mode", "Root Agent Mode"),
-                    subtitle = tr(strings, "Select Root authorization for local device control.", "为本地设备控制选择 Root 授权。"),
+                    title = stringResource(R.string.settings_root_setup_step_agent_mode),
+                    subtitle = stringResource(R.string.settings_root_setup_step_agent_mode_subtitle),
                     status = agentModeStepStatus,
                 )
             }
@@ -3616,7 +3612,7 @@ private fun RootSetupProgressPage(
 
         when {
             rootSetupState.isRunning -> SettingsSubtleActionButton(
-                label = tr(strings, "Back", "返回"),
+                label = stringResource(R.string.action_back),
                 onClick = onBack,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -3626,12 +3622,12 @@ private fun RootSetupProgressPage(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Run again", "重新执行"),
+                    label = stringResource(R.string.settings_run_again),
                     onClick = onRunRootSetup,
                     modifier = Modifier.weight(1f),
                 )
                 SettingsActionButton(
-                    label = tr(strings, "Done", "完成"),
+                    label = stringResource(R.string.action_done),
                     onClick = onBack,
                     modifier = Modifier.weight(1f),
                 )
@@ -3642,12 +3638,12 @@ private fun RootSetupProgressPage(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Back", "返回"),
+                    label = stringResource(R.string.action_back),
                     onClick = onBack,
                     modifier = Modifier.weight(1f),
                 )
                 SettingsActionButton(
-                    label = tr(strings, "Try again", "重试"),
+                    label = stringResource(R.string.action_try_again),
                     onClick = onRunRootSetup,
                     modifier = Modifier.weight(1f),
                 )
@@ -3732,18 +3728,18 @@ private fun rootSetupProgressAccent(issue: RootSetupIssue): Color = when (issue)
     RootSetupIssue.Unavailable -> AetherOnSurfaceVariant
 }
 
+@Composable
 private fun rootSetupProgressTitle(
     issue: RootSetupIssue,
-    strings: AetherStrings,
 ): String = when (issue) {
-    RootSetupIssue.Running -> tr(strings, "Configuring Root setup", "正在执行 Root 自动配置")
-    RootSetupIssue.Ready -> tr(strings, "Root setup completed", "Root 自动配置已完成")
-    RootSetupIssue.Available -> tr(strings, "Ready to start", "准备开始")
-    RootSetupIssue.Unavailable -> tr(strings, "Root is unavailable", "Root 不可用")
-    RootSetupIssue.PermissionDenied -> tr(strings, "Root authorization was not granted", "未获得 Root 授权")
-    RootSetupIssue.TermuxNotInstalled -> tr(strings, "Termux is required", "需要安装 Termux")
-    RootSetupIssue.Failed -> tr(strings, "Setup did not complete", "配置未完成")
-    RootSetupIssue.Unknown -> tr(strings, "Preparing setup", "正在准备配置")
+    RootSetupIssue.Running -> stringResource(R.string.settings_root_setup_configuring)
+    RootSetupIssue.Ready -> stringResource(R.string.settings_root_setup_completed)
+    RootSetupIssue.Available -> stringResource(R.string.settings_root_setup_ready_to_start)
+    RootSetupIssue.Unavailable -> stringResource(R.string.settings_root_setup_root_unavailable)
+    RootSetupIssue.PermissionDenied -> stringResource(R.string.settings_root_setup_permission_denied)
+    RootSetupIssue.TermuxNotInstalled -> stringResource(R.string.settings_root_setup_termux_required)
+    RootSetupIssue.Failed -> stringResource(R.string.settings_root_setup_failed)
+    RootSetupIssue.Unknown -> stringResource(R.string.settings_root_setup_preparing)
 }
 
 private fun rootSetupProgressBody(
@@ -3972,10 +3968,9 @@ private fun DeveloperSettingsPage(
     onTermuxReadyForTestingChanged: (Boolean) -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     SubPageScaffold(title = title, onBack = onBack) {
         Text(
-            text = tr(strings, "Developer-only tools and replay controls.", "Developer-only tools and replay controls."),
+            text = stringResource(R.string.settings_developer_description),
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -3986,25 +3981,25 @@ private fun DeveloperSettingsPage(
         SettingsCardGroup {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = tr(strings, "App Data", "应用数据"),
+                    text = stringResource(R.string.settings_app_data),
                     style = MaterialTheme.typography.labelLarge,
                     color = AetherOnSurface,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = tr(strings, "Import or export the complete local Aether data set as JSON.", "Import or export the complete local Aether data set as JSON."),
+                    text = stringResource(R.string.settings_app_data_description),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                 )
                 Spacer(Modifier.height(16.dp))
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Import app data", "导入应用数据"),
+                    label = stringResource(R.string.settings_import_app_data),
                     onClick = onImportAppData,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(10.dp))
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Export app data", "导出应用数据"),
+                    label = stringResource(R.string.settings_export_app_data),
                     onClick = onExportAppData,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -4016,19 +4011,19 @@ private fun DeveloperSettingsPage(
         SettingsCardGroup {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = tr(strings, "Logs", "日志"),
+                    text = stringResource(R.string.settings_logs),
                     style = MaterialTheme.typography.labelLarge,
                     color = AetherOnSurface,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = tr(strings, "Export recent Aether logcat output and diagnostic metadata.", "导出近期 Aether logcat 输出和诊断信息。"),
+                    text = stringResource(R.string.settings_logs_description),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                 )
                 Spacer(Modifier.height(16.dp))
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Export logs", "导出日志"),
+                    label = stringResource(R.string.settings_export_logs),
                     onClick = onExportLogs,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -4040,23 +4035,19 @@ private fun DeveloperSettingsPage(
         SettingsCardGroup {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = tr(strings, "Update testing", "Update testing"),
+                    text = stringResource(R.string.settings_update_testing),
                     style = MaterialTheme.typography.labelLarge,
                     color = AetherOnSurface,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = tr(
-                        strings,
-                        "Fetch the latest GitHub Release and show the update prompt even when the installed version is current.",
-                        "Fetch the latest GitHub Release and show the update prompt even when the installed version is current.",
-                    ),
+                    text = stringResource(R.string.settings_update_testing_description),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                 )
                 Spacer(Modifier.height(16.dp))
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Force update prompt", "Force update prompt"),
+                    label = stringResource(R.string.settings_force_update_prompt),
                     onClick = onForceUpdateCheckForTesting,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -4068,24 +4059,20 @@ private fun DeveloperSettingsPage(
         SettingsCardGroup {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = tr(strings, "Termux readiness override", "Termux readiness override"),
+                    text = stringResource(R.string.settings_termux_readiness_override),
                     style = MaterialTheme.typography.labelLarge,
                     color = AetherOnSurface,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = tr(
-                        strings,
-                        "Testing switch for Agent Mode gating. On treats Termux as ready; off treats it as not ready.",
-                        "Testing switch for Agent Mode gating. On treats Termux as ready; off treats it as not ready.",
-                    ),
+                    text = stringResource(R.string.settings_termux_readiness_override_description),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                 )
                 Spacer(Modifier.height(16.dp))
                 SettingsToggleRow(
-                    title = tr(strings, "Treat Termux as ready", "Treat Termux as ready"),
-                    subtitle = tr(strings, "On = ready. Off = not ready.", "On = ready. Off = not ready."),
+                    title = stringResource(R.string.settings_treat_termux_as_ready),
+                    subtitle = stringResource(R.string.settings_termux_ready_toggle_subtitle),
                     checked = termuxReadyForTesting,
                     onCheckedChange = onTermuxReadyForTestingChanged,
                 )
@@ -4097,19 +4084,19 @@ private fun DeveloperSettingsPage(
         SettingsCardGroup {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = tr(strings, "Replay Follow-up Tour", "重播后续引导"),
+                    text = stringResource(R.string.settings_replay_follow_up_tour),
                     style = MaterialTheme.typography.labelLarge,
                     color = AetherOnSurface,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = tr(strings, "Starts from Termux, then goes through Agent Mode, Tavily, Skills, and MCP.", "Starts from Termux, then goes through Agent Mode, Tavily, Skills, and MCP."),
+                    text = stringResource(R.string.settings_replay_follow_up_tour_description),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                 )
                 Spacer(Modifier.height(16.dp))
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Replay second part", "重播第二部分"),
+                    label = stringResource(R.string.settings_replay_second_part),
                     onClick = onReplayFollowUpOnboarding,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -4134,20 +4121,15 @@ private fun AboutPage(
     onDownloadAndInstallUpdate: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val updateSubtitle = when {
         appUpdate.isDownloading -> appUpdate.downloadProgress?.let { progress ->
-            tr(strings, "Downloading ${(progress * 100).toInt()}%", "Downloading ${(progress * 100).toInt()}%")
-        } ?: tr(strings, "Downloading update", "Downloading update")
-        appUpdate.isChecking -> tr(strings, "Checking GitHub Releases", "Checking GitHub Releases")
-        appUpdate.availableRelease != null -> tr(
-            strings,
-            "Aether ${appUpdate.availableRelease.versionName} is available",
-            "Aether ${appUpdate.availableRelease.versionName} is available",
-        )
-        else -> tr(strings, "Check GitHub Releases for a newer APK", "Check GitHub Releases for a newer APK")
+            stringResource(R.string.settings_update_downloading_percent, (progress * 100).toInt())
+        } ?: stringResource(R.string.settings_update_downloading)
+        appUpdate.isChecking -> stringResource(R.string.settings_update_checking_github_releases)
+        appUpdate.availableRelease != null -> stringResource(R.string.settings_update_available, appUpdate.availableRelease.versionName)
+        else -> stringResource(R.string.settings_update_check_newer_apk)
     }
-    val releaseLabel = tr(strings, "Release ${BuildConfig.VERSION_NAME}", "版本 ${BuildConfig.VERSION_NAME}")
+    val releaseLabel = stringResource(R.string.settings_release_summary, BuildConfig.VERSION_NAME)
     SubPageScaffold(title = title, onBack = onBack) {
         Column(
             modifier = Modifier
@@ -4157,7 +4139,7 @@ private fun AboutPage(
         ) {
             Image(
                 painter = painterResource(R.drawable.aether_mark),
-                contentDescription = tr(strings, "Aether logo", "Aether 标志"),
+                contentDescription = stringResource(R.string.settings_aether_logo),
                 modifier = Modifier.size(112.dp),
             )
             Spacer(Modifier.height(14.dp))
@@ -4177,27 +4159,27 @@ private fun AboutPage(
         Spacer(Modifier.height(24.dp))
 
         SettingsCardGroup {
-            AboutInfoRow(label = tr(strings, "Author", "Author"), value = "Zhou-Shilin")
+            AboutInfoRow(label = stringResource(R.string.settings_author), value = "Zhou-Shilin")
             CardDivider()
-            AboutInfoRow(label = tr(strings, "Version", "版本"), value = releaseLabel)
+            AboutInfoRow(label = stringResource(R.string.settings_version), value = releaseLabel)
             CardDivider()
             SettingsNavRow(
                 icon = Icons.Rounded.Refresh,
-                title = tr(strings, "Check for updates", "Check for updates"),
+                title = stringResource(R.string.settings_check_for_updates),
                 subtitle = updateSubtitle,
                 onClick = onCheckForUpdates,
             )
             CardDivider()
             SettingsNavRow(
                 icon = Icons.Rounded.Link,
-                title = tr(strings, "Website", "网站"),
+                title = stringResource(R.string.settings_website),
                 subtitle = AetherWebsiteUrl.removePrefix("https://"),
                 onClick = onOpenWebsite,
             )
             CardDivider()
             SettingsNavRow(
                 icon = Icons.Rounded.Link,
-                title = tr(strings, "Privacy Policy", "隐私政策"),
+                title = stringResource(R.string.settings_privacy_policy),
                 subtitle = AetherPrivacyPolicyUrl.removePrefix("https://"),
                 onClick = onOpenPrivacyPolicy,
             )
@@ -4209,7 +4191,7 @@ private fun AboutPage(
                 label = if (appUpdate.isDownloading) {
                     updateSubtitle
                 } else {
-                    tr(strings, "Download and install", "Download and install")
+                    stringResource(R.string.settings_download_and_install)
                 },
                 onClick = onDownloadAndInstallUpdate,
                 enabled = !appUpdate.isDownloading,
