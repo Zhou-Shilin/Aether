@@ -791,7 +791,6 @@ private fun ConversationTopBar(
     onModelSelected: (String) -> Unit,
     onNewChat: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -835,15 +834,10 @@ private fun ConversationModelSelector(
     var anchorBottomPx by remember { mutableIntStateOf(0) }
     val menuVisibility = remember { MutableTransitionState(false) }
     menuVisibility.targetState = expanded
-    val strings = rememberAetherStrings()
     val density = LocalDensity.current
     val menuWidth = 276.dp
     val selectedOption = options.firstOrNull { it.key == selectedModelKey } ?: options.firstOrNull()
-    val fallbackLabel = if (strings.appLanguage == AppLanguage.SimplifiedChinese) {
-        "选择模型"
-    } else {
-        "Select model"
-    }
+    val fallbackLabel = stringResource(R.string.chat_select_model)
 
     Box(
         modifier = modifier,
@@ -971,7 +965,6 @@ private fun ConversationEmptyState(
     inputFocused: Boolean,
     onStarterPromptSelected: (String) -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val titleOffset by animateDpAsState(
         targetValue = if (inputFocused) (-34).dp else (-24).dp,
         animationSpec = tween(durationMillis = 260, easing = ChatGptMotionEasing),
@@ -1039,7 +1032,6 @@ private fun EmptyStateChip(
     iconTint: Color,
     onClick: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     Row(
         modifier = Modifier
             .shadow(6.dp, RoundedCornerShape(999.dp), ambientColor = ChatGptControlShadow, spotColor = ChatGptControlShadow)
@@ -1066,7 +1058,6 @@ private fun EmptyStateChip(
 
 @Composable
 private fun ConversationThinkingIndicator() {
-    val strings = rememberAetherStrings()
     ShimmerStatusText(
         text = stringResource(R.string.chat_thinking),
         modifier = Modifier.padding(top = 6.dp),
@@ -1723,7 +1714,6 @@ private fun ConversationComposerBar(
     onQueueFollowUp: () -> Unit,
     onSteerFollowUp: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     var attachmentMenuExpanded by remember(conversationStateKey) { mutableStateOf(false) }
     val attachmentMenuVisibility = remember(conversationStateKey) { MutableTransitionState(false) }
     attachmentMenuVisibility.targetState = attachmentMenuExpanded
@@ -2272,7 +2262,6 @@ private fun ComposerSubmitButton(
     isSending: Boolean,
     onClick: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val enabled = hasDraft && canSendDraft
     val buttonColor = if (enabled) {
         ChatGptPurple
@@ -2313,7 +2302,6 @@ private fun ComposerActionTray(
     onRemoveMcpServer: (String) -> Unit,
     onRemoveAgentMode: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -2360,7 +2348,6 @@ private fun AgentModePreviewPanel(
     onAttachSurface: (Surface) -> Unit,
     onDetachSurface: (Surface) -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val bitmap = remember(displayState.latestPreviewPath, displayState.lastUpdatedMillis) {
         displayState.latestPreviewPath
             .takeIf { it.isNotBlank() }
@@ -2669,7 +2656,6 @@ private fun resolveAgentModeBubbleOffset(
 private fun AgentModePreviewHeader(
     displayState: AgentModeDisplayState,
 ) {
-    val strings = rememberAetherStrings()
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,

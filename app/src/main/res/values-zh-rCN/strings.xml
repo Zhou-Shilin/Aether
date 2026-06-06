@@ -64,6 +64,7 @@
     <string name="chat_add_note">添加备注</string>
     <string name="chat_ask_agent_mode">询问 Agent 模式</string>
     <string name="chat_ask_with_selected_tools">使用所选工具提问</string>
+    <string name="chat_select_model">选择模型</string>
     <string name="chat_first_prompt_ready_title">你的第一条提示已准备好</string>
     <string name="chat_first_prompt_ready_subtitle">点击发送来测试 Aether。</string>
     <string name="chat_editing_earlier_message_title">正在编辑较早的消息</string>

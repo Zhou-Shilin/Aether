@@ -73,6 +73,7 @@
     <string name="chat_add_note">Add a note</string>
     <string name="chat_ask_agent_mode">Ask Agent Mode</string>
     <string name="chat_ask_with_selected_tools">Ask with selected tools</string>
+    <string name="chat_select_model">Select model</string>
     <string name="chat_first_prompt_ready_title">Your first prompt is ready</string>
     <string name="chat_first_prompt_ready_subtitle">Tap send to test Aether.</string>
     <string name="chat_editing_earlier_message_title">Editing earlier message</string>
