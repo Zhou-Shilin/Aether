@@ -180,6 +180,7 @@
     <string name="agent_mode_virtual_display_preview">Virtual display preview will appear after the agent starts.</string>
     <string name="agent_mode_display_label">display</string>
     <string name="agent_mode_standby">standby</string>
+    <string name="agent_mode_display_id">display %1$d</string>
 
     <!-- Onboarding -->
     <string name="onboarding_finish_setup_title">Finish setup</string>

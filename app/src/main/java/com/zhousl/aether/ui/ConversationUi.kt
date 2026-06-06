@@ -801,7 +801,7 @@ private fun ConversationTopBar(
     ) {
         HeaderCircleButton(
             icon = Icons.Rounded.Menu,
-            contentDescription = strings.menu,
+            contentDescription = stringResource(R.string.common_menu),
             onClick = onMenu,
             size = 44.dp,
             containerColor = AetherSurface.copy(alpha = 0.96f),
@@ -816,7 +816,7 @@ private fun ConversationTopBar(
         )
         HeaderCircleButton(
             icon = LucideIcons.SquarePen,
-            contentDescription = strings.newChat,
+            contentDescription = stringResource(R.string.common_new_chat),
             onClick = onNewChat,
             size = 44.dp,
             containerColor = AetherSurface.copy(alpha = 0.96f),
@@ -986,7 +986,7 @@ private fun ConversationEmptyState(
         verticalArrangement = Arrangement.Center,
     ) {
         Text(
-            text = strings.whatCanIHelpWith,
+            text = stringResource(R.string.chat_welcome_help),
             style = MaterialTheme.typography.titleLarge.copy(
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 24.sp,
@@ -1753,10 +1753,10 @@ private fun ConversationComposerBar(
         selectedSkillActions.size + selectedMcpActions.size == 1 && !agentModeSelected -> {
             selectedSkillActions.firstOrNull()?.quickActionLabel()
                 ?: selectedMcpActions.firstOrNull()?.quickActionLabel()
-                ?: strings.replyToAether
+                ?: stringResource(R.string.chat_reply_to_aether)
         }
         hasSelectedActions -> stringResource(R.string.chat_ask_with_selected_tools)
-        else -> strings.askAether
+        else -> stringResource(R.string.chat_ask_aether)
     }
     val hasDraft = value.isNotBlank() || attachments.isNotEmpty()
     val showCompactSuggestion = compactSuggestionText.isNotBlank() &&
@@ -1861,7 +1861,7 @@ private fun ConversationComposerBar(
             SurfaceNotice(
                 title = stringResource(R.string.chat_first_prompt_ready_title),
                 subtitle = stringResource(R.string.chat_first_prompt_ready_subtitle),
-                actionLabel = strings.hide,
+                actionLabel = stringResource(R.string.common_hide),
                 onAction = onDismissStarterPromptHint,
                 actionEnabled = true,
             )
@@ -1870,7 +1870,7 @@ private fun ConversationComposerBar(
             SurfaceNotice(
                 title = stringResource(R.string.chat_editing_earlier_message_title),
                 subtitle = stringResource(R.string.chat_editing_earlier_message_subtitle),
-                actionLabel = strings.cancel,
+                actionLabel = stringResource(R.string.common_cancel),
                 onAction = onCancelEdit,
                 actionEnabled = true,
             )
@@ -2190,7 +2190,7 @@ private fun ConversationComposerBar(
                                     }
                                     if (agentModeAvailable) {
                                         ComposerPlusMenuRow(
-                                            title = strings.agentMode,
+                                            title = stringResource(R.string.agent_mode_label),
                                             icon = LucideIcons.MousePointer2,
                                             selected = agentModeSelected,
                                             iconTint = Color(0xFF6D5CFF),
@@ -2295,7 +2295,7 @@ private fun ComposerSubmitButton(
             contentDescription = if (isSending) {
                 stringResource(R.string.common_send_follow_up)
             } else {
-                strings.send
+                stringResource(R.string.common_send)
             },
             tint = Color.White,
             modifier = Modifier.size(21.dp),
@@ -2323,7 +2323,7 @@ private fun ComposerActionTray(
     ) {
         if (agentModeSelected) {
             ComposerActionChip(
-                label = strings.agentMode,
+                label = stringResource(R.string.agent_mode_label),
                 icon = LucideIcons.MousePointer2,
                 onRemove = onRemoveAgentMode,
             )
@@ -2682,7 +2682,7 @@ private fun AgentModePreviewHeader(
             modifier = Modifier.size(16.dp),
         )
         Text(
-            text = strings.agentMode,
+            text = stringResource(R.string.agent_mode_label),
             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
             color = AetherOnSurface,
         )
@@ -2711,7 +2711,7 @@ private fun AgentModePreviewHeader(
         Spacer(modifier = Modifier.weight(1f))
         Text(
             text = displayState.displayId?.let {
-                if (strings.appLanguage == AppLanguage.SimplifiedChinese) "显示 $it" else "display $it"
+                stringResource(R.string.agent_mode_display_id, it)
             } ?: stringResource(R.string.chat_standby),
             style = MaterialTheme.typography.labelSmall,
             color = AetherOnSurfaceVariant,
