@@ -37,6 +37,16 @@
     <string name="common_save">保存</string>
     <string name="common_search">搜索</string>
 
+    <string name="common_agree">同意</string>
+    <string name="common_decline">不同意</string>
+    <string name="common_later">稍后</string>
+    <string name="app_privacy_policy_title">隐私政策</string>
+    <string name="app_privacy_policy_message_prefix">使用 Aether 前，请先阅读并同意我们的</string>
+    <string name="app_privacy_policy_message_suffix">。</string>
+    <string name="app_update_available">发现新版本</string>
+    <string name="app_update_available_message">Aether %1$s 已可用，可以立即下载 APK 并安装。</string>
+    <string name="app_downloading">正在下载...</string>
+    <string name="app_download_and_install">下载并安装</string>
     <!-- Chat -->
     <string name="chat_welcome_help">想让我帮你做什么？</string>
     <string name="chat_create_image">生成图片</string>

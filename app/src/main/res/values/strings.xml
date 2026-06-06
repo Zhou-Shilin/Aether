@@ -41,6 +41,16 @@
     <string name="common_off">Off</string>
     <string name="common_optional">Optional</string>
 
+    <string name="common_agree">Agree</string>
+    <string name="common_decline">Decline</string>
+    <string name="common_later">Later</string>
+    <string name="app_privacy_policy_title">Privacy Policy</string>
+    <string name="app_privacy_policy_message_prefix">Please review and agree to Aether&apos;s </string>
+    <string name="app_privacy_policy_message_suffix"> before using the app.</string>
+    <string name="app_update_available">Update available</string>
+    <string name="app_update_available_message">Aether %1$s is available. You can download the APK and install it now.</string>
+    <string name="app_downloading">Downloading...</string>
+    <string name="app_download_and_install">Download and install</string>
     <!-- Chat -->
     <string name="chat_welcome_help">What can I help with?</string>
     <string name="chat_create_image">Create image</string>

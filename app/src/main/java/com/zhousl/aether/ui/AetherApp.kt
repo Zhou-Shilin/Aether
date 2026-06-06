@@ -154,9 +154,6 @@ private const val AssistantLocalFileOpenByteLimit = 32 * 1024 * 1024
 private const val AssistantLocalFileCacheDirectory = "assistant-local-open"
 private const val PrivacyPolicyAnnotationTag = "privacy_policy"
 
-private fun tr(strings: AetherStrings, english: String, chinese: String): String =
-    if (strings.appLanguage == com.zhousl.aether.data.AppLanguage.SimplifiedChinese) chinese else english
-
 private fun AppScreen.depth(): Int = when (this) {
     AppScreen.Onboarding -> 0
     AppScreen.Chat -> 1
@@ -180,7 +177,6 @@ fun AetherApp(
                 AetherAppContent(
                     viewModel = viewModel,
                     uiState = uiState,
-                    strings = strings,
                     onPrivacyPolicyAccepted = onPrivacyPolicyAccepted,
                 )
             }
@@ -192,7 +188,6 @@ fun AetherApp(
 private fun AetherAppContent(
     viewModel: AetherViewModel,
     uiState: AetherUiState,
-    strings: AetherStrings,
     onPrivacyPolicyAccepted: () -> Unit,
 ) {
     val drawerState = rememberDrawerState(initialValue = androidx.compose.material3.DrawerValue.Closed)
@@ -767,7 +762,6 @@ private fun AetherAppContent(
 
         if (uiState.isStartupRouteResolved && !uiState.settings.privacyPolicyAccepted) {
             PrivacyPolicyConsentDialog(
-                strings = strings,
                 onOpenPolicy = { openPrivacyPolicy(context) },
                 onAccept = viewModel::acceptPrivacyPolicy,
                 onDecline = { (context as? Activity)?.finishAffinity() },
@@ -780,7 +774,6 @@ private fun AetherAppContent(
             uiState.settings.privacyPolicyAccepted
         ) {
             AppUpdateAvailableDialog(
-                strings = strings,
                 updateState = uiState.appUpdate,
                 onDismiss = viewModel::dismissUpdateAvailableDialog,
                 onDownloadAndInstall = viewModel::downloadAndInstallUpdate,
@@ -791,7 +784,6 @@ private fun AetherAppContent(
 
 @Composable
 private fun PrivacyPolicyConsentDialog(
-    strings: AetherStrings,
     onOpenPolicy: () -> Unit,
     onAccept: () -> Unit,
     onDecline: () -> Unit,
@@ -803,14 +795,16 @@ private fun PrivacyPolicyConsentDialog(
         textContentColor = AetherOnSurfaceVariant,
         title = {
             Text(
-                text = tr(strings, "Privacy Policy", "\u9690\u79c1\u653f\u7b56"),
+                text = stringResource(R.string.app_privacy_policy_title),
                 style = MaterialTheme.typography.titleLarge,
             )
         },
         text = {
-            val policyText = tr(strings, "Privacy Policy", "\u9690\u79c1\u653f\u7b56")
+            val policyText = stringResource(R.string.app_privacy_policy_title)
+            val messagePrefix = stringResource(R.string.app_privacy_policy_message_prefix)
+            val messageSuffix = stringResource(R.string.app_privacy_policy_message_suffix)
             val annotatedText = buildAnnotatedString {
-                append(tr(strings, "Please review and agree to Aether's ", "\u4f7f\u7528 Aether \u524d\uff0c\u8bf7\u5148\u9605\u8bfb\u5e76\u540c\u610f\u6211\u4eec\u7684"))
+                append(messagePrefix)
                 pushStringAnnotation(
                     tag = PrivacyPolicyAnnotationTag,
                     annotation = AetherPrivacyPolicyUrl,
@@ -819,7 +813,7 @@ private fun PrivacyPolicyConsentDialog(
                     append(policyText)
                 }
                 pop()
-                append(tr(strings, " before using the app.", "\u3002"))
+                append(messageSuffix)
             }
             ClickableText(
                 text = annotatedText,
@@ -840,13 +834,13 @@ private fun PrivacyPolicyConsentDialog(
                     contentColor = Color.White,
                 ),
             ) {
-                Text(text = tr(strings, "Agree", "\u540c\u610f"))
+                Text(text = stringResource(R.string.common_agree))
             }
         },
         dismissButton = {
             TextButton(onClick = onDecline) {
                 Text(
-                    text = tr(strings, "Decline", "\u4e0d\u540c\u610f"),
+                    text = stringResource(R.string.common_decline),
                     color = AetherOnSurfaceVariant,
                 )
             }
@@ -856,7 +850,6 @@ private fun PrivacyPolicyConsentDialog(
 
 @Composable
 private fun AppUpdateAvailableDialog(
-    strings: AetherStrings,
     updateState: AppUpdateUiState,
     onDismiss: () -> Unit,
     onDownloadAndInstall: () -> Unit,
@@ -872,18 +865,14 @@ private fun AppUpdateAvailableDialog(
         textContentColor = AetherOnSurfaceVariant,
         title = {
             Text(
-                text = tr(strings, "Update available", "\u53d1\u73b0\u65b0\u7248\u672c"),
+                text = stringResource(R.string.app_update_available),
                 style = MaterialTheme.typography.titleLarge,
             )
         },
         text = {
             Column {
                 Text(
-                    text = tr(
-                        strings,
-                        "Aether ${release.versionName} is available. You can download the APK and install it now.",
-                        "Aether ${release.versionName} \u5df2\u53ef\u7528\uff0c\u53ef\u4ee5\u7acb\u5373\u4e0b\u8f7d APK \u5e76\u5b89\u88c5\u3002",
-                    ),
+                    text = stringResource(R.string.app_update_available_message, release.versionName),
                     style = MaterialTheme.typography.bodyMedium,
                     color = AetherOnSurfaceVariant,
                 )
@@ -902,7 +891,7 @@ private fun AppUpdateAvailableDialog(
                             text = if (progress != null) {
                                 "${(progress * 100).toInt()}%"
                             } else {
-                                tr(strings, "Downloading...", "\u6b63\u5728\u4e0b\u8f7d...")
+                                stringResource(R.string.app_downloading)
                             },
                             style = MaterialTheme.typography.bodyMedium,
                             color = AetherOnSurface,
@@ -921,7 +910,7 @@ private fun AppUpdateAvailableDialog(
                 ),
             ) {
                 Text(
-                    text = tr(strings, "Download and install", "\u4e0b\u8f7d\u5e76\u5b89\u88c5"),
+                    text = stringResource(R.string.app_download_and_install),
                     style = MaterialTheme.typography.labelLarge,
                 )
             }
@@ -932,7 +921,7 @@ private fun AppUpdateAvailableDialog(
                 enabled = !updateState.isDownloading,
             ) {
                 Text(
-                    text = tr(strings, "Later", "\u7a0d\u540e"),
+                    text = stringResource(R.string.common_later),
                     color = AetherOnSurfaceVariant,
                 )
             }
@@ -1303,7 +1292,6 @@ private fun ChatTopBar(
     onMenu: () -> Unit,
     onNewChat: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1312,22 +1300,21 @@ private fun ChatTopBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SurfaceIconButton(Icons.Rounded.Menu, strings.menu, onMenu)
+        SurfaceIconButton(Icons.Rounded.Menu, stringResource(R.string.common_menu), onMenu)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            SurfaceIconButton(Icons.Rounded.Create, strings.newChat, onNewChat)
-            SurfaceIconButton(Icons.Rounded.MoreHoriz, strings.more, {})
+            SurfaceIconButton(Icons.Rounded.Create, stringResource(R.string.common_new_chat), onNewChat)
+            SurfaceIconButton(Icons.Rounded.MoreHoriz, stringResource(R.string.common_more), {})
         }
     }
 }
 
 @Composable
 private fun EmptyChatState() {
-    val strings = rememberAetherStrings()
     val actions = listOf(
-        SuggestionAction(Icons.Rounded.Image, strings.createImage, Color(0xFF22C55E)),
-        SuggestionAction(Icons.Rounded.Lightbulb, strings.brainstorm, Color(0xFFFACC15)),
-        SuggestionAction(Icons.Rounded.Visibility, strings.analyzeImages, AetherPrimary),
-        SuggestionAction(Icons.Rounded.AutoAwesome, strings.more, AetherPrimary),
+        SuggestionAction(Icons.Rounded.Image, stringResource(R.string.chat_create_image), Color(0xFF22C55E)),
+        SuggestionAction(Icons.Rounded.Lightbulb, stringResource(R.string.chat_brainstorm), Color(0xFFFACC15)),
+        SuggestionAction(Icons.Rounded.Visibility, stringResource(R.string.chat_analyze_images), AetherPrimary),
+        SuggestionAction(Icons.Rounded.AutoAwesome, stringResource(R.string.common_more), AetherPrimary),
     )
 
     Column(
@@ -1338,7 +1325,7 @@ private fun EmptyChatState() {
         verticalArrangement = Arrangement.Center,
     ) {
         Text(
-            text = strings.whatCanIHelpWith,
+            text = stringResource(R.string.chat_welcome_help),
             style = MaterialTheme.typography.headlineMedium,
             color = AetherOnSurface,
         )
@@ -1428,7 +1415,6 @@ private fun MessageBubble(message: ChatMessage) {
 
 @Composable
 private fun TypingIndicator() {
-    val strings = rememberAetherStrings()
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -1440,7 +1426,7 @@ private fun TypingIndicator() {
             strokeWidth = 2.dp,
         )
         Text(
-            text = strings.aetherIsThinking,
+            text = stringResource(R.string.chat_aether_is_thinking),
             style = MaterialTheme.typography.bodyMedium,
             color = AetherOnSurfaceVariant,
         )
@@ -1455,7 +1441,6 @@ private fun ComposerBar(
     hasMessages: Boolean,
     isSending: Boolean,
 ) {
-    val strings = rememberAetherStrings()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1475,7 +1460,7 @@ private fun ComposerBar(
         ) {
             if (value.isEmpty()) {
                 Text(
-                    text = if (hasMessages) strings.replyToAether else strings.askAether,
+                    text = if (hasMessages) stringResource(R.string.chat_reply_to_aether) else stringResource(R.string.chat_ask_aether),
                     color = AetherOnSurfaceVariant,
                     style = MaterialTheme.typography.bodyLarge,
                 )
@@ -1493,7 +1478,7 @@ private fun ComposerBar(
         IconButton(onClick = {}, enabled = !isSending) {
             Icon(
                 imageVector = Icons.Rounded.KeyboardVoice,
-                contentDescription = strings.voice,
+                contentDescription = stringResource(R.string.chat_voice),
                 tint = AetherOnSurfaceVariant,
             )
         }
@@ -1515,7 +1500,6 @@ private fun AppDrawer(
     onSessionSelected: (String) -> Unit,
     onSettingsSelected: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     ModalDrawerSheet(
         modifier = Modifier.width(312.dp),
         drawerContainerColor = AetherSurface,
@@ -1534,18 +1518,18 @@ private fun AppDrawer(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 SearchBarStub(modifier = Modifier.weight(1f))
-                SurfaceIconButton(Icons.Rounded.Create, strings.newChat, onNewChat)
+                SurfaceIconButton(Icons.Rounded.Create, stringResource(R.string.common_new_chat), onNewChat)
             }
 
             Spacer(modifier = Modifier.height(14.dp))
-            DrawerPrimaryAction(Icons.Rounded.Create, strings.newChat, onNewChat)
-            DrawerPrimaryAction(Icons.Rounded.Image, strings.images, {})
-            DrawerPrimaryAction(Icons.Rounded.GridView, strings.apps, {})
-            DrawerPrimaryAction(Icons.Rounded.AutoAwesome, strings.gpts, {})
+            DrawerPrimaryAction(Icons.Rounded.Create, stringResource(R.string.common_new_chat), onNewChat)
+            DrawerPrimaryAction(Icons.Rounded.Image, stringResource(R.string.chat_images), {})
+            DrawerPrimaryAction(Icons.Rounded.GridView, stringResource(R.string.chat_apps), {})
+            DrawerPrimaryAction(Icons.Rounded.AutoAwesome, stringResource(R.string.chat_gpts), {})
 
             Spacer(modifier = Modifier.height(18.dp))
             Text(
-                text = strings.recent,
+                text = stringResource(R.string.chat_recent),
                 style = MaterialTheme.typography.labelLarge,
                 color = AetherOnSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 8.dp),
@@ -1553,7 +1537,7 @@ private fun AppDrawer(
             Spacer(modifier = Modifier.height(10.dp))
             if (sessions.isEmpty()) {
                 Text(
-                    text = strings.noConversationsYet,
+                    text = stringResource(R.string.chat_no_conversations_yet),
                     style = MaterialTheme.typography.bodyMedium,
                     color = AetherOnSurfaceVariant,
                     modifier = Modifier
@@ -1577,7 +1561,7 @@ private fun AppDrawer(
 
             Spacer(modifier = Modifier.height(4.dp))
             Spacer(modifier = Modifier.height(12.dp))
-            DrawerPrimaryAction(Icons.Rounded.Settings, strings.settings, onSettingsSelected)
+            DrawerPrimaryAction(Icons.Rounded.Settings, stringResource(R.string.settings_title), onSettingsSelected)
             Spacer(modifier = Modifier.height(8.dp))
         }
     }
@@ -1585,7 +1569,6 @@ private fun AppDrawer(
 
 @Composable
 private fun SearchBarStub(modifier: Modifier = Modifier) {
-    val strings = rememberAetherStrings()
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(22.dp))
@@ -1600,7 +1583,7 @@ private fun SearchBarStub(modifier: Modifier = Modifier) {
             tint = AetherOnSurfaceVariant,
         )
         Text(
-            text = strings.search,
+            text = stringResource(R.string.common_search),
             style = MaterialTheme.typography.bodyMedium,
             color = AetherOnSurfaceVariant,
         )
@@ -1637,7 +1620,6 @@ private fun SessionRow(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1655,7 +1637,7 @@ private fun SessionRow(
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = session.preview.ifBlank { strings.emptyDraft },
+            text = session.preview.ifBlank { stringResource(R.string.chat_empty_draft) },
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
             maxLines = 1,
