@@ -72,6 +72,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
@@ -325,17 +326,17 @@ fun OnboardingScreen(
             OnboardingStep.SkillsOverview -> SummaryStep(
                 stepIndex = stepIndex,
                 stepCount = steps.size,
-                message = tr(strings, "Later, you can add Skills so Aether remembers reusable workflows you like.", "之后你可以添加技能，让 Aether 记住你喜欢的可复用工作流。"),
-                title = tr(strings, "Skills", "技能"),
+                message = stringResource(R.string.onboarding_skills_message),
+                title = stringResource(R.string.onboarding_skills_title),
                 icon = Icons.Rounded.Extension,
                 accent = TourGold,
                 lineOne = if (installedSkillCount == 0) {
-                    tr(strings, "You do not need this now.", "现在不需要也没关系。")
+                    stringResource(R.string.onboarding_skills_not_needed)
                 } else {
-                    tr(strings, "$installedSkillCount Skills are already installed.", "已经安装了 $installedSkillCount 个技能。")
+                    stringResource(R.string.onboarding_skills_installed_count, installedSkillCount)
                 },
-                lineTwo = tr(strings, "Use them for prompts, checks, and templates.", "它们可以用来放提示词、检查项和模板。"),
-                chips = listOf(tr(strings, "Prompts", "提示词"), tr(strings, "Checks", "检查项"), tr(strings, "Templates", "模板")),
+                lineTwo = stringResource(R.string.onboarding_skills_line_two),
+                chips = listOf(stringResource(R.string.onboarding_skill_chip_prompts), stringResource(R.string.onboarding_skill_chip_checks), stringResource(R.string.onboarding_skill_chip_templates)),
                 primaryLabel = strings.continueLabel,
                 onPrimary = { currentStep = OnboardingStep.McpOverview },
                 secondaryLabel = strings.back,
@@ -346,20 +347,20 @@ fun OnboardingScreen(
             OnboardingStep.McpOverview -> SummaryStep(
                 stepIndex = stepIndex,
                 stepCount = steps.size,
-                message = tr(strings, "If you want live docs, search, or APIs later, you can connect MCP servers in Settings.", "如果之后你想接入实时文档、搜索或 API，可以在设置里连接 MCP 服务器。"),
+                message = stringResource(R.string.onboarding_mcp_message),
                 title = "MCP",
                 icon = Icons.Rounded.Cloud,
                 accent = TourBlue,
                 lineOne = if (mcpServerCount == 0) {
-                    tr(strings, "You can leave this for later.", "这一步也可以留到以后。")
+                    stringResource(R.string.onboarding_mcp_later)
                 } else {
-                    tr(strings, "$mcpServerCount MCP servers are already available.", "已经有 $mcpServerCount 个 MCP 服务器可用。")
+                    stringResource(R.string.onboarding_mcp_available_count, mcpServerCount)
                 },
-                lineTwo = tr(strings, "This is where Aether grows beyond local tools.", "这里是 Aether 超出本地工具能力的入口。"),
-                chips = listOf(tr(strings, "Docs", "文档"), tr(strings, "Search", "搜索"), "APIs"),
+                lineTwo = stringResource(R.string.onboarding_mcp_line_two),
+                chips = listOf(stringResource(R.string.onboarding_chip_docs), stringResource(R.string.onboarding_chip_search), "APIs"),
                 primaryLabel = strings.done,
                 onPrimary = onCompleteFollowUp,
-                secondaryLabel = tr(strings, "Open settings", "打开设置"),
+                secondaryLabel = stringResource(R.string.onboarding_open_settings),
                 onSecondary = onExploreSettings,
                 tertiaryLabel = strings.back,
                 onTertiary = { currentStep = OnboardingStep.SkillsOverview },
@@ -429,7 +430,7 @@ private fun LandingStep(
                         )
                         Spacer(modifier = Modifier.height(28.dp))
                         Text(
-                            text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "欢迎使用 Aether" else "Welcome to Aether",
+                            text = stringResource(R.string.onboarding_welcome_title),
                             modifier = Modifier.fillMaxWidth(),
                             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold),
                             color = TourTextPrimary,
@@ -437,7 +438,7 @@ private fun LandingStep(
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "在设备上运行、可与一切协作的智能体。" else "The on-device agent that works with everything.",
+                            text = stringResource(R.string.onboarding_welcome_subtitle),
                             modifier = Modifier.fillMaxWidth(),
                             style = MaterialTheme.typography.bodyMedium,
                             color = TourTextSecondary,
@@ -624,9 +625,9 @@ private fun ProviderSetupStep(
         (!provider.requiresApiKey(formState.baseUrl) || formState.apiKey.trim().isNotBlank())
 
     val message = when (stage) {
-        ProviderTourStage.PickProvider -> if (strings.appLanguage == AppLanguage.SimplifiedChinese) "首先，我们来选择你的模型提供方。" else "First, let's choose your model provider."
-        ProviderTourStage.Credentials -> if (strings.appLanguage == AppLanguage.SimplifiedChinese) "很好。填入密钥和基础 URL，然后我会获取模型。" else "Great. Add your key and base URL. I'll fetch the models after this."
-        ProviderTourStage.Model -> if (strings.appLanguage == AppLanguage.SimplifiedChinese) "选好模型后，我们就可以直接进入聊天。" else "Pick the model you want, and then we can go straight into chat."
+        ProviderTourStage.PickProvider -> stringResource(R.string.onboarding_provider_pick_message)
+        ProviderTourStage.Credentials -> stringResource(R.string.onboarding_provider_credentials_message)
+        ProviderTourStage.Model -> stringResource(R.string.onboarding_provider_model_message)
     }
     val backAction: (() -> Unit)? = when (stage) {
         ProviderTourStage.PickProvider -> onReturnToLanding
@@ -712,7 +713,7 @@ private fun ProviderSetupStep(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "你以后可以在设置中更改。" else "You can change this later in Settings.",
+                            text = stringResource(R.string.onboarding_change_later_settings),
                             style = MaterialTheme.typography.bodySmall,
                             color = TourTextSecondary,
                         )
@@ -726,11 +727,11 @@ private fun ProviderSetupStep(
                     ) {
                         TinyLabel(
                             text = when (provider) {
-                                LlmProvider.OpenAiResponses -> if (strings.appLanguage == AppLanguage.SimplifiedChinese) "正在使用 OpenAI Responses" else "Using OpenAI Responses"
-                                LlmProvider.OpenAiCompatible -> if (strings.appLanguage == AppLanguage.SimplifiedChinese) "正在使用 OpenAI Chat Completions" else "Using OpenAI Chat Completions"
-                                LlmProvider.VertexExpress -> if (strings.appLanguage == AppLanguage.SimplifiedChinese) "正在使用 Vertex" else "Using Vertex"
-                                LlmProvider.AnthropicMessages -> if (strings.appLanguage == AppLanguage.SimplifiedChinese) "正在使用 Anthropic" else "Using Anthropic"
-                                null -> if (strings.appLanguage == AppLanguage.SimplifiedChinese) "选择请求格式" else "Choose a request format"
+                                LlmProvider.OpenAiResponses -> stringResource(R.string.onboarding_using_openai_responses)
+                                LlmProvider.OpenAiCompatible -> stringResource(R.string.onboarding_using_openai_chat_completions)
+                                LlmProvider.VertexExpress -> stringResource(R.string.onboarding_using_vertex)
+                                LlmProvider.AnthropicMessages -> stringResource(R.string.onboarding_using_anthropic)
+                                null -> stringResource(R.string.onboarding_choose_request_format)
                             },
                             color = when (provider) {
                                 LlmProvider.VertexExpress -> TourBlue
@@ -786,7 +787,7 @@ private fun ProviderSetupStep(
                         verticalArrangement = Arrangement.spacedBy(18.dp),
                     ) {
                         Text(
-                            text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "如果我能找到更合适的模型，我会把它们排在前面。" else "I'll place the best matches first when I can find them.",
+                            text = stringResource(R.string.onboarding_best_models_first),
                             style = MaterialTheme.typography.bodySmall,
                             color = TourTextSecondary,
                         )
@@ -867,7 +868,7 @@ private fun TermuxStep(
         clipboardManager.setText(AnnotatedString(TermuxContract.ExternalAppsSetupCommand))
         Toast.makeText(
             context,
-            if (strings.appLanguage == AppLanguage.SimplifiedChinese) "已复制 Termux 配置命令" else "Termux setup command copied",
+            stringResource(R.string.onboarding_termux_setup_command_copied),
             Toast.LENGTH_SHORT,
         ).show()
     }
