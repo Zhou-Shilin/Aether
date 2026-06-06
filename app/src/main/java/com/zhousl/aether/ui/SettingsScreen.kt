@@ -1148,7 +1148,7 @@ private fun SettingsHub(
                 SettingsNavRow(
                     icon = Icons.Rounded.Extension,
                     title = stringResource(R.string.settings_agent_skills),
-                    subtitle = strings.skillCountSummary(skillCount),
+                    subtitle = settingsSkillCountSummary(skillCount),
                     onClick = { onNavigate(SettingsPage.Skills) },
                 )
                 CardDivider()
@@ -1161,12 +1161,8 @@ private fun SettingsHub(
                 CardDivider()
                 SettingsNavRow(
                     icon = Icons.Rounded.Schedule,
-                    title = tr(strings, "Scheduled Tasks", "定时任务"),
-                    subtitle = if (scheduledTaskCount == 0) {
-                        tr(strings, "No scheduled tasks", "暂无定时任务")
-                    } else {
-                        tr(strings, "$scheduledTaskCount configured", "已配置 $scheduledTaskCount 个")
-                    },
+                    title = stringResource(R.string.settings_scheduled_tasks),
+                    subtitle = settingsScheduledTaskCountSummary(scheduledTaskCount),
                     onClick = { onNavigate(SettingsPage.ScheduledTasks) },
                 )
                 CardDivider()
@@ -1982,7 +1978,6 @@ private fun SkillsListPage(
     onAddNew: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     SubPageScaffold(
         title = title,
         onBack = onBack,
@@ -1990,7 +1985,7 @@ private fun SkillsListPage(
         onTrailingAction = onAddNew,
     ) {
         Text(
-            text = tr(strings, "Manage installed skills and keep only the bundles you want Aether to use in chat.", "Manage installed skills and keep only the bundles you want Aether to use in chat."),
+            text = stringResource(R.string.settings_skills_description),
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -2007,19 +2002,19 @@ private fun SkillsListPage(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        tr(strings, "No skills installed", "No skills installed"),
+                        stringResource(R.string.settings_no_skills_installed),
                         style = MaterialTheme.typography.titleMedium,
                         color = AetherOnSurface,
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        tr(strings, "Import skills from a folder, zip, or remote URL.", "Import skills from a folder, zip, or remote URL."),
+                        stringResource(R.string.settings_import_skills_description),
                         style = MaterialTheme.typography.bodyMedium,
                         color = AetherOnSurfaceVariant,
                     )
                     Spacer(Modifier.height(16.dp))
                     SettingsActionButton(
-                        label = tr(strings, "Add Skill", "Add Skill"),
+                        label = stringResource(R.string.settings_add_skill),
                         onClick = onAddNew,
                     )
                 }
@@ -2043,7 +2038,6 @@ private fun SkillCard(
     onToggleEnabled: (Boolean) -> Unit,
     onRemove: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     var expanded by rememberSaveable(skill.id) { mutableStateOf(false) }
     Column(
         modifier = Modifier
@@ -2080,7 +2074,7 @@ private fun SkillCard(
             IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(36.dp)) {
                 Icon(
                     if (expanded) Icons.Rounded.ArrowDropDown else Icons.AutoMirrored.Rounded.ArrowForwardIos,
-                    contentDescription = if (expanded) tr(strings, "Collapse", "收起") else tr(strings, "Expand", "展开"),
+                    contentDescription = if (expanded) stringResource(R.string.action_collapse) else stringResource(R.string.action_expand),
                     tint = AetherOnSurfaceVariant,
                     modifier = Modifier.size(20.dp),
                 )
@@ -2105,16 +2099,16 @@ private fun SkillCard(
         if (expanded) {
             Spacer(Modifier.height(14.dp))
             Spacer(Modifier.height(14.dp))
-            DetailLine(tr(strings, "Skill ID", "技能 ID"), skill.id)
-            DetailLine(tr(strings, "Files", "Files"), "${skill.resourceEntries.size}")
-            DetailLine(tr(strings, "Allowed tools", "Allowed tools"), skill.allowedTools.ifEmpty { listOf(tr(strings, "Any", "Any")) }.joinToString(", "))
+            DetailLine(stringResource(R.string.settings_skill_id), skill.id)
+            DetailLine(stringResource(R.string.settings_skill_files), "${skill.resourceEntries.size}")
+            DetailLine(stringResource(R.string.settings_skill_allowed_tools), skill.allowedTools.ifEmpty { listOf(stringResource(R.string.settings_any)) }.joinToString(", "))
             if (skill.compatibility.isNotBlank()) {
-                DetailLine(tr(strings, "Compatibility", "Compatibility"), skill.compatibility)
+                DetailLine(stringResource(R.string.settings_skill_compatibility), skill.compatibility)
             }
             if (skill.source.label.isNotBlank()) {
-                DetailLine(tr(strings, "Source", "来源"), skill.source.label)
+                DetailLine(stringResource(R.string.settings_skill_source), skill.source.label)
             }
-            DetailLine(tr(strings, "Path", "路径"), skill.skillRootPath)
+            DetailLine(stringResource(R.string.settings_skill_path), skill.skillRootPath)
         }
     }
 }
@@ -2136,17 +2130,16 @@ private fun AddSkillPage(
         mutableStateOf(TextFieldValue(""))
     }
     var isInstalling by remember { mutableStateOf(false) }
-    val strings = rememberAetherStrings()
 
     val tabOptions = listOf(
-        tr(strings, "Folder", "Folder"),
+        stringResource(R.string.settings_skill_source_folder),
         "Zip",
         "URL",
     )
 
     SubPageScaffold(title = title, onBack = onBack) {
         Text(
-            text = tr(strings, "Import Agent Skills from a local folder, zip file, or remote URL.", "Import Agent Skills from a local folder, zip file, or remote URL."),
+            text = stringResource(R.string.settings_add_skill_description),
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -2193,13 +2186,13 @@ private fun AddSkillPage(
                         )
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            tr(strings, "Select a folder containing SKILL.md", "选择包含 SKILL.md 的文件夹"),
+                            stringResource(R.string.settings_select_skill_folder_description),
                             style = MaterialTheme.typography.bodyMedium,
                             color = AetherOnSurfaceVariant,
                         )
                         Spacer(Modifier.height(16.dp))
                         SettingsActionButton(
-                            label = tr(strings, "Choose Folder", "Choose Folder"),
+                            label = stringResource(R.string.settings_choose_folder),
                             onClick = {
                                 onImportSkillFolder()
                                 // Will navigate back via callback on success
@@ -2226,13 +2219,13 @@ private fun AddSkillPage(
                         )
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            tr(strings, "Select a .zip file containing SKILL.md", "选择包含 SKILL.md 的 .zip 文件"),
+                            stringResource(R.string.settings_select_skill_zip_description),
                             style = MaterialTheme.typography.bodyMedium,
                             color = AetherOnSurfaceVariant,
                         )
                         Spacer(Modifier.height(16.dp))
                         SettingsActionButton(
-                            label = tr(strings, "Choose Zip", "选择 Zip"),
+                            label = stringResource(R.string.settings_choose_zip),
                             onClick = {
                                 onImportSkillZip {}
                             },
@@ -2245,7 +2238,7 @@ private fun AddSkillPage(
                 // URL import
                 SettingsCardGroup {
                     ChatGptTextField(
-                        label = tr(strings, "Remote skill URL", "远程技能 URL"),
+                        label = stringResource(R.string.settings_remote_skill_url),
                         value = skillUrlValue,
                         onValueChange = { skillUrlValue = it },
                     )
@@ -2253,7 +2246,7 @@ private fun AddSkillPage(
 
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = tr(strings, "GitHub repo/tree URLs and direct zip links are supported.", "GitHub repo/tree URLs and direct zip links are supported."),
+                    text = stringResource(R.string.settings_remote_skill_url_description),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 4.dp),
@@ -2272,11 +2265,11 @@ private fun AddSkillPage(
                             color = AetherPrimary,
                         )
                         Spacer(Modifier.width(12.dp))
-                        Text(tr(strings, "Installing...", "安装中..."), color = AetherOnSurfaceVariant)
+                        Text(stringResource(R.string.settings_installing), color = AetherOnSurfaceVariant)
                     }
                 } else {
                     SettingsActionButton(
-                        label = tr(strings, "Install from URL", "从 URL 安装"),
+                        label = stringResource(R.string.settings_install_from_url),
                         onClick = {
                             if (skillUrlValue.text.isNotBlank()) {
                                 isInstalling = true
@@ -2510,19 +2503,14 @@ private fun ScheduledTasksPage(
     onAddNew: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     SubPageScaffold(
-        title = tr(strings, "Scheduled Tasks", "定时任务"),
+        title = stringResource(R.string.settings_scheduled_tasks),
         onBack = onBack,
         trailingIcon = Icons.Rounded.Add,
         onTrailingAction = onAddNew,
     ) {
         Text(
-            text = tr(
-                strings,
-                "Aether wakes at the next matching time and runs the task prompt as an automated Agent turn.",
-                "Aether 会在匹配的时间唤起，并把任务提示词作为一次自动 Agent 运行。",
-            ),
+            text = stringResource(R.string.settings_scheduled_tasks_description),
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -2538,19 +2526,19 @@ private fun ScheduledTasksPage(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        text = tr(strings, "No scheduled tasks", "暂无定时任务"),
+                        text = stringResource(R.string.settings_no_scheduled_tasks),
                         style = MaterialTheme.typography.titleMedium,
                         color = AetherOnSurface,
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = tr(strings, "Create one manually, or ask the Agent to create one with its scheduling tool.", "可以手动创建，也可以让 Agent 通过定时任务工具创建。"),
+                        text = stringResource(R.string.settings_create_scheduled_task_description),
                         style = MaterialTheme.typography.bodyMedium,
                         color = AetherOnSurfaceVariant,
                     )
                     Spacer(Modifier.height(16.dp))
                     SettingsActionButton(
-                        label = tr(strings, "Add Task", "新建任务"),
+                        label = stringResource(R.string.settings_add_task),
                         onClick = onAddNew,
                     )
                 }
@@ -2577,7 +2565,6 @@ private fun ScheduledTaskCard(
     onEdit: () -> Unit,
     onRemove: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -2606,7 +2593,7 @@ private fun ScheduledTaskCard(
             IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
                 Icon(
                     Icons.Rounded.Edit,
-                    contentDescription = strings.editMessage,
+                    contentDescription = stringResource(R.string.action_edit),
                     tint = AetherOnSurface,
                     modifier = Modifier.size(18.dp),
                 )
@@ -2614,7 +2601,7 @@ private fun ScheduledTaskCard(
             IconButton(onClick = onRemove, modifier = Modifier.size(36.dp)) {
                 Icon(
                     Icons.Rounded.Delete,
-                    contentDescription = strings.delete,
+                    contentDescription = stringResource(R.string.action_delete),
                     tint = Color(0xFFD25757),
                     modifier = Modifier.size(20.dp),
                 )
@@ -2634,16 +2621,16 @@ private fun ScheduledTaskCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = task.nextRunAtMillis?.formatScheduledTaskTime()
-                        ?.let { tr(strings, "Next run: $it", "下次运行：$it") }
-                        ?: tr(strings, "No next run scheduled", "未安排下次运行"),
+                        ?.let { stringResource(R.string.settings_next_run, it) }
+                        ?: stringResource(R.string.settings_no_next_run_scheduled),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                 )
                 Text(
                     text = if (task.createdBy == ScheduledTaskCreator.Agent) {
-                        tr(strings, "Created by Agent", "由 Agent 创建")
+                        stringResource(R.string.settings_created_by_agent)
                     } else {
-                        tr(strings, "Created manually", "手动创建")
+                        stringResource(R.string.settings_created_manually)
                     },
                     style = MaterialTheme.typography.labelSmall,
                     color = AetherOnSurfaceVariant,
@@ -2663,7 +2650,6 @@ private fun ScheduledTaskEditPage(
     onSave: (String, String, ScheduledTaskSchedule, Boolean) -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val existingInterval = existingTask?.schedule as? ScheduledTaskSchedule.Interval
     val existingDaily = existingTask?.schedule as? ScheduledTaskSchedule.Daily
     val existingWeekly = existingTask?.schedule as? ScheduledTaskSchedule.Weekly
@@ -2722,9 +2708,9 @@ private fun ScheduledTaskEditPage(
 
     SubPageScaffold(
         title = if (existingTask == null) {
-            tr(strings, "Add Scheduled Task", "新建定时任务")
+            stringResource(R.string.settings_add_scheduled_task)
         } else {
-            tr(strings, "Edit Scheduled Task", "编辑定时任务")
+            stringResource(R.string.settings_edit_scheduled_task)
         },
         onBack = onBack,
         trailingIcon = Icons.Rounded.Check,
@@ -2737,13 +2723,13 @@ private fun ScheduledTaskEditPage(
     ) {
         SettingsCardGroup {
             ChatGptTextField(
-                label = tr(strings, "Name", "名称"),
+                label = stringResource(R.string.settings_name),
                 value = nameValue,
                 onValueChange = { nameValue = it },
             )
             CardDivider()
             ChatGptTextField(
-                label = tr(strings, "Prompt", "提示词"),
+                label = stringResource(R.string.settings_prompt),
                 value = promptValue,
                 minLines = 4,
                 onValueChange = { promptValue = it },
@@ -2756,8 +2742,8 @@ private fun ScheduledTaskEditPage(
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 SettingsToggleRow(
-                    title = tr(strings, "Enabled", "启用"),
-                    subtitle = tr(strings, "Disabled tasks stay saved but do not wake Aether.", "关闭后任务仍会保存，但不会唤起 Aether。"),
+                    title = stringResource(R.string.settings_enabled),
+                    subtitle = stringResource(R.string.settings_disabled_tasks_saved_subtitle),
                     checked = enabledValue,
                     onCheckedChange = { enabledValue = it },
                 )
@@ -2766,9 +2752,9 @@ private fun ScheduledTaskEditPage(
         Spacer(Modifier.height(16.dp))
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
             listOf(
-                tr(strings, "Interval", "间隔"),
-                tr(strings, "Daily", "每天"),
-                tr(strings, "Weekly", "每周"),
+                stringResource(R.string.settings_schedule_interval),
+                stringResource(R.string.settings_schedule_daily),
+                stringResource(R.string.settings_schedule_weekly),
             ).forEachIndexed { index, label ->
                 SegmentedButton(
                     shape = SegmentedButtonDefaults.itemShape(index = index, count = 3),
@@ -2790,38 +2776,38 @@ private fun ScheduledTaskEditPage(
             when (scheduleMode) {
                 0 -> {
                     ChatGptTextField(
-                        label = tr(strings, "Every N minutes", "每隔多少分钟"),
+                        label = stringResource(R.string.settings_every_n_minutes),
                         value = intervalMinutesValue,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         onValueChange = { intervalMinutesValue = it.copy(text = it.text.filter(Char::isDigit)) },
                     )
                     CardDivider()
                     ChatGptTextField(
-                        label = tr(strings, "Active start HH:mm", "开始时间 HH:mm"),
+                        label = stringResource(R.string.settings_active_start_time),
                         value = activeStartValue,
                         onValueChange = { activeStartValue = it },
                     )
                     CardDivider()
                     ChatGptTextField(
-                        label = tr(strings, "Active end HH:mm", "结束时间 HH:mm"),
+                        label = stringResource(R.string.settings_active_end_time),
                         value = activeEndValue,
                         onValueChange = { activeEndValue = it },
                     )
                 }
                 1 -> ChatGptTextField(
-                    label = tr(strings, "Times HH:mm, comma separated", "时间 HH:mm，用逗号分隔"),
+                    label = stringResource(R.string.settings_times_comma_separated),
                     value = dailyTimesValue,
                     onValueChange = { dailyTimesValue = it },
                 )
                 else -> {
                     ChatGptTextField(
-                        label = tr(strings, "Days 1-7 or mon,tue", "星期 1-7 或 mon,tue"),
+                        label = stringResource(R.string.settings_days_of_week_input),
                         value = weeklyDaysValue,
                         onValueChange = { weeklyDaysValue = it },
                     )
                     CardDivider()
                     ChatGptTextField(
-                        label = tr(strings, "Time HH:mm", "时间 HH:mm"),
+                        label = stringResource(R.string.settings_time_hhmm),
                         value = weeklyTimeValue,
                         onValueChange = { weeklyTimeValue = it },
                     )
@@ -2830,11 +2816,7 @@ private fun ScheduledTaskEditPage(
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            text = tr(
-                strings,
-                "Interval windows are optional. Leave start and end blank to run all day.",
-                "间隔任务的时间窗口是可选的。开始和结束留空则全天运行。",
-            ),
+            text = stringResource(R.string.settings_interval_window_hint),
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
