@@ -31,6 +31,7 @@
     <string name="common_select_text">Select text</string>
     <string name="common_edit_message">Edit message</string>
     <string name="common_retry">Retry</string>
+    <string name="common_remove">Remove</string>
     <string name="common_copy_reply">Copy reply</string>
     <string name="common_redo_reply">Redo reply</string>
     <string name="common_delete_reply">Delete reply</string>
@@ -63,6 +64,23 @@
     <string name="chat_help_me_write_chip">Help me write</string>
     <string name="chat_summarize_file_chip">Summarize file</string>
     <string name="chat_thinking">Thinking</string>
+    <string name="chat_context_compacted">Context compacted</string>
+    <string name="chat_compacting_context">Compacting context</string>
+    <string name="chat_compact_thread_context">Compact this thread&apos;s context</string>
+    <string name="chat_compact_thread_context_percent">Compact this thread&apos;s context (%1$d%% full)</string>
+    <string name="chat_compact">Compact</string>
+    <string name="chat_additional_context">Additional context</string>
+    <string name="chat_add_note">Add a note</string>
+    <string name="chat_ask_agent_mode">Ask Agent Mode</string>
+    <string name="chat_ask_with_selected_tools">Ask with selected tools</string>
+    <string name="chat_first_prompt_ready_title">Your first prompt is ready</string>
+    <string name="chat_first_prompt_ready_subtitle">Tap send to test Aether.</string>
+    <string name="chat_editing_earlier_message_title">Editing earlier message</string>
+    <string name="chat_editing_earlier_message_subtitle">Sending will replace the replies that came after it.</string>
+    <string name="chat_agent_mode_virtual_display">Agent Mode virtual display</string>
+    <string name="chat_agent_mode_preview_pending">Virtual display preview will appear after the agent starts.</string>
+    <string name="chat_live">Live</string>
+    <string name="chat_standby">standby</string>
     <string name="chat_no_output">No output</string>
     <string name="chat_content_truncated">Content truncated for readability.</string>
 

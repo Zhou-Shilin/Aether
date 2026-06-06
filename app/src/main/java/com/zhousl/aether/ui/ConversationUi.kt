@@ -121,6 +121,7 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.PlatformTextStyle
@@ -589,14 +590,14 @@ fun ConversationScreen(
                             }
 
                             is ConversationListItem.CompactStatus -> {
-                                CompactStatusDivider(text = item.message.text.ifBlank { "Context compacted" })
+                                CompactStatusDivider(text = item.message.text.ifBlank { stringResource(R.string.chat_context_compacted) })
                             }
                         }
                     }
                     if (isCompacting) {
                         item(key = "compact-running-status") {
                             CompactStatusDivider(
-                                text = "Compacting context",
+                                text = stringResource(R.string.chat_compacting_context),
                                 isRunning = true,
                             )
                         }
@@ -1002,13 +1003,13 @@ private fun ConversationEmptyState(
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 EmptyStateChip(
                     icon = Icons.Rounded.Image,
-                    label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "分析图片" else "Analyze image",
+                    label = stringResource(R.string.chat_analyze_image_chip),
                     iconTint = Color(0xFF38A961),
                     onClick = { onStarterPromptSelected("Analyze this image and describe the important details.") },
                 )
                 EmptyStateChip(
                     icon = Icons.Rounded.Terminal,
-                    label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "代码" else "Code",
+                    label = stringResource(R.string.chat_code_chip),
                     iconTint = Color(0xFF7D70DD),
                     onClick = { onStarterPromptSelected("Help me write or debug this code: ") },
                 )
@@ -1016,13 +1017,13 @@ private fun ConversationEmptyState(
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 EmptyStateChip(
                     icon = Icons.Rounded.AutoAwesome,
-                    label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "帮我写" else "Help me write",
+                    label = stringResource(R.string.chat_help_me_write_chip),
                     iconTint = Color(0xFFE48AAE),
                     onClick = { onStarterPromptSelected("Help me write a clear, polished message about ") },
                 )
                 EmptyStateChip(
                     icon = Icons.Rounded.AttachFile,
-                    label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "总结文件" else "Summarize file",
+                    label = stringResource(R.string.chat_summarize_file_chip),
                     iconTint = Color(0xFF66C7D4),
                     onClick = { onStarterPromptSelected("Summarize this file and list the key points.") },
                 )
@@ -1067,7 +1068,7 @@ private fun EmptyStateChip(
 private fun ConversationThinkingIndicator() {
     val strings = rememberAetherStrings()
     ShimmerStatusText(
-        text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "思考中" else "Thinking",
+        text = stringResource(R.string.chat_thinking),
         modifier = Modifier.padding(top = 6.dp),
     )
 }
@@ -1488,7 +1489,7 @@ private fun CompactCommandSuggestion(
             )
         }
         Text(
-            text = "Compact",
+            text = stringResource(R.string.chat_compact),
             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
             color = AetherOnSurface,
             maxLines = 1,
@@ -1569,7 +1570,7 @@ private fun PendingSessionInputBubble(
             }
             Text(
                 text = pendingInput.preview.ifBlank {
-                    if (strings.appLanguage == AppLanguage.SimplifiedChinese) "补充上下文" else "Additional context"
+                    stringResource(R.string.chat_additional_context)
                 },
                 style = MaterialTheme.typography.bodyLarge,
                 color = AetherOnSurface,
@@ -1746,15 +1747,15 @@ private fun ConversationComposerBar(
     val hasSelectedActions = selectedSkillActions.isNotEmpty() || selectedMcpActions.isNotEmpty() || agentModeSelected
     val composerPlaceholder = when {
         value.isNotBlank() -> ""
-        attachments.isNotEmpty() -> if (strings.appLanguage == AppLanguage.SimplifiedChinese) "添加备注" else "Add a note"
+        attachments.isNotEmpty() -> stringResource(R.string.chat_add_note)
         agentModeSelected && selectedSkillActions.isEmpty() && selectedMcpActions.isEmpty() ->
-            if (strings.appLanguage == AppLanguage.SimplifiedChinese) "询问 Agent 模式" else "Ask Agent Mode"
+            stringResource(R.string.chat_ask_agent_mode)
         selectedSkillActions.size + selectedMcpActions.size == 1 && !agentModeSelected -> {
             selectedSkillActions.firstOrNull()?.quickActionLabel()
                 ?: selectedMcpActions.firstOrNull()?.quickActionLabel()
                 ?: strings.replyToAether
         }
-        hasSelectedActions -> if (strings.appLanguage == AppLanguage.SimplifiedChinese) "使用所选工具提问" else "Ask with selected tools"
+        hasSelectedActions -> stringResource(R.string.chat_ask_with_selected_tools)
         else -> strings.askAether
     }
     val hasDraft = value.isNotBlank() || attachments.isNotEmpty()
@@ -1858,8 +1859,8 @@ private fun ConversationComposerBar(
         }
         if (showStarterPromptHint) {
             SurfaceNotice(
-                title = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "你的第一条提示已准备好" else "Your first prompt is ready",
-                subtitle = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "点击发送来测试 Aether。" else "Tap send to test Aether.",
+                title = stringResource(R.string.chat_first_prompt_ready_title),
+                subtitle = stringResource(R.string.chat_first_prompt_ready_subtitle),
                 actionLabel = strings.hide,
                 onAction = onDismissStarterPromptHint,
                 actionEnabled = true,
@@ -1867,8 +1868,8 @@ private fun ConversationComposerBar(
         }
         if (isEditing) {
             SurfaceNotice(
-                title = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "正在编辑较早的消息" else "Editing earlier message",
-                subtitle = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "发送后会替换它之后的回复。" else "Sending will replace the replies that came after it.",
+                title = stringResource(R.string.chat_editing_earlier_message_title),
+                subtitle = stringResource(R.string.chat_editing_earlier_message_subtitle),
                 actionLabel = strings.cancel,
                 onAction = onCancelEdit,
                 actionEnabled = true,
@@ -2075,7 +2076,7 @@ private fun ConversationComposerBar(
                                                 verticalArrangement = Arrangement.spacedBy(2.dp),
                                             ) {
                                                 ComposerPlusMenuRow(
-                                                    title = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "引导当前运行" else "Steer current run",
+                                                    title = stringResource(R.string.branch_steer_current_run),
                                                     icon = Icons.Rounded.AutoAwesome,
                                                     iconTint = Color(0xFF8D6C2F),
                                                     iconContainerColor = Color(0xFFFFF3DE),
@@ -2085,7 +2086,7 @@ private fun ConversationComposerBar(
                                                     },
                                                 )
                                                 ComposerPlusMenuRow(
-                                                    title = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "排队下一轮" else "Queue next turn",
+                                                    title = stringResource(R.string.branch_queue_next_turn),
                                                     icon = Icons.Rounded.ArrowUpward,
                                                     iconTint = Color(0xFF2F6DA3),
                                                     iconContainerColor = Color(0xFFEAF2FF),
@@ -2118,7 +2119,7 @@ private fun ConversationComposerBar(
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Add,
-                        contentDescription = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "添加附件或工具" else "Add attachment or tool",
+                        contentDescription = stringResource(R.string.chat_add_attachment_or_tool),
                         tint = AetherOnSurface,
                         modifier = Modifier.size(27.dp),
                     )
@@ -2167,7 +2168,7 @@ private fun ConversationComposerBar(
                                     verticalArrangement = Arrangement.spacedBy(2.dp),
                                 ) {
                                     ComposerPlusMenuRow(
-                                        title = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "照片" else "Photos",
+                                        title = stringResource(R.string.chat_photos),
                                         icon = Icons.Rounded.Image,
                                         iconTint = Color(0xFF4E8D5A),
                                         iconContainerColor = AetherSurfaceHigh,
@@ -2176,7 +2177,7 @@ private fun ConversationComposerBar(
                                         },
                                     )
                                     ComposerPlusMenuRow(
-                                        title = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "文件" else "Files",
+                                        title = stringResource(R.string.chat_files),
                                         icon = Icons.Rounded.AttachFile,
                                         iconTint = AetherOnSurface,
                                         iconContainerColor = AetherSurfaceHigh,
@@ -2292,7 +2293,7 @@ private fun ComposerSubmitButton(
         Icon(
             imageVector = Icons.Rounded.ArrowUpward,
             contentDescription = if (isSending) {
-                if (strings.appLanguage == AppLanguage.SimplifiedChinese) "发送跟进" else "Send follow-up"
+                stringResource(R.string.common_send_follow_up)
             } else {
                 strings.send
             },
@@ -2431,7 +2432,7 @@ private fun AgentModePreviewPanel(
                 } else if (bitmap != null) {
                     Image(
                     bitmap = bitmap.asImageBitmap(),
-                    contentDescription = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "Agent 模式虚拟显示" else "Agent Mode virtual display",
+                    contentDescription = stringResource(R.string.chat_agent_mode_virtual_display),
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(10.dp)
@@ -2481,7 +2482,7 @@ private fun AgentModePreviewPanel(
             }
         } else {
             Text(
-                text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "代理启动后会显示虚拟屏幕预览。" else "Virtual display preview will appear after the agent starts.",
+                text = stringResource(R.string.chat_agent_mode_preview_pending),
                 style = MaterialTheme.typography.bodySmall,
                 color = AetherOnSurfaceVariant,
             )
@@ -2701,7 +2702,7 @@ private fun AgentModePreviewHeader(
                         .background(Color(0xFF20A564)),
                 )
                 Text(
-                    text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "实时" else "Live",
+                    text = stringResource(R.string.chat_live),
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
                     color = Color(0xFF137A49),
                 )
@@ -2711,7 +2712,7 @@ private fun AgentModePreviewHeader(
         Text(
             text = displayState.displayId?.let {
                 if (strings.appLanguage == AppLanguage.SimplifiedChinese) "显示 $it" else "display $it"
-            } ?: if (strings.appLanguage == AppLanguage.SimplifiedChinese) "待机" else "standby",
+            } ?: stringResource(R.string.chat_standby),
             style = MaterialTheme.typography.labelSmall,
             color = AetherOnSurfaceVariant,
         )
@@ -2825,7 +2826,7 @@ private fun ComposerActionChip(
         ) {
             Icon(
                 imageVector = Icons.Rounded.Close,
-                contentDescription = "Remove",
+                contentDescription = stringResource(R.string.common_remove),
                 tint = Color(0xFF4F8CFF),
                 modifier = Modifier.size(14.dp),
             )

@@ -60,6 +60,18 @@
     <string name="chat_help_me_write_chip">帮我写</string>
     <string name="chat_summarize_file_chip">总结文件</string>
     <string name="chat_thinking">思考中</string>
+    <string name="chat_additional_context">补充上下文</string>
+    <string name="chat_add_note">添加备注</string>
+    <string name="chat_ask_agent_mode">询问 Agent 模式</string>
+    <string name="chat_ask_with_selected_tools">使用所选工具提问</string>
+    <string name="chat_first_prompt_ready_title">你的第一条提示已准备好</string>
+    <string name="chat_first_prompt_ready_subtitle">点击发送来测试 Aether。</string>
+    <string name="chat_editing_earlier_message_title">正在编辑较早的消息</string>
+    <string name="chat_editing_earlier_message_subtitle">发送后会替换它之后的回复。</string>
+    <string name="chat_agent_mode_virtual_display">Agent 模式虚拟显示</string>
+    <string name="chat_agent_mode_preview_pending">代理启动后会显示虚拟屏幕预览。</string>
+    <string name="chat_live">实时</string>
+    <string name="chat_standby">待机</string>
     <string name="chat_no_output">无输出</string>
     <string name="chat_content_truncated">内容已截断，便于阅读。</string>
 
