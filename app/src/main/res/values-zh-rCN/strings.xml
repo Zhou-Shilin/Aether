@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Aether</string>
+
+    <!-- Common -->
+    <string name="common_menu">菜单</string>
+    <string name="common_new_chat">新建对话</string>
+    <string name="common_more">更多</string>
+    <string name="common_close">关闭</string>
+    <string name="common_skip">跳过</string>
+    <string name="common_back">返回</string>
+    <string name="common_continue">继续</string>
+    <string name="common_done">完成</string>
+    <string name="common_cancel">取消</string>
+    <string name="common_next">下一步</string>
+    <string name="common_install">安装</string>
+    <string name="common_refresh">刷新</string>
+    <string name="common_open_settings">打开设置</string>
+    <string name="common_open_termux">打开 Termux</string>
+    <string name="common_grant_access">授予权限</string>
+    <string name="common_load_models">加载模型</string>
+    <string name="common_start_chat">开始聊天</string>
+    <string name="common_send">发送</string>
+    <string name="common_send_follow_up">发送跟进</string>
+    <string name="common_hide">隐藏</string>
+    <string name="common_chat">聊天</string>
+    <string name="common_rename">重命名</string>
+    <string name="common_export">导出</string>
+    <string name="common_delete">删除</string>
+    <string name="common_copy">复制</string>
+    <string name="common_select_text">选择文本</string>
+    <string name="common_edit_message">编辑消息</string>
+    <string name="common_retry">重试</string>
+    <string name="common_copy_reply">复制回复</string>
+    <string name="common_redo_reply">重新执行回复</string>
+    <string name="common_delete_reply">删除回复</string>
+    <string name="common_save">保存</string>
+    <string name="common_search">搜索</string>
+
+    <!-- Chat -->
+    <string name="chat_welcome_help">想让我帮你做什么？</string>
+    <string name="chat_create_image">生成图片</string>
+    <string name="chat_brainstorm">头脑风暴</string>
+    <string name="chat_analyze_images">分析图片</string>
+    <string name="chat_aether_is_thinking">Aether 正在思考…</string>
+    <string name="chat_reply_to_aether">回复 Aether</string>
+    <string name="chat_ask_aether">询问 Aether</string>
+    <string name="chat_voice">语音</string>
+    <string name="chat_images">图片</string>
+    <string name="chat_apps">应用</string>
+    <string name="chat_gpts">GPTs</string>
+    <string name="chat_recent">最近</string>
+    <string name="chat_no_conversations_yet">还没有对话。</string>
+    <string name="chat_empty_draft">空白草稿</string>
+    <string name="chat_add_attachment_or_tool">添加附件或工具</string>
+    <string name="chat_photos">照片</string>
+    <string name="chat_files">文件</string>
+    <string name="chat_analyze_image_chip">分析图片</string>
+    <string name="chat_code_chip">代码</string>
+    <string name="chat_help_me_write_chip">帮我写</string>
+    <string name="chat_summarize_file_chip">总结文件</string>
+    <string name="chat_thinking">思考中</string>
+    <string name="chat_no_output">无输出</string>
+    <string name="chat_content_truncated">内容已截断，便于阅读。</string>
+
+    <!-- Settings -->
+    <string name="settings_title">设置</string>
+    <string name="settings_general">通用设置</string>
+    <string name="settings_language">语言</string>
+    <string name="settings_language_description">选择应用界面语言。</string>
+    <string name="settings_theme">主题</string>
+    <string name="settings_theme_description">选择应用界面外观。</string>
+    <string name="settings_light_theme_subtitle">保持当前明亮外观。</string>
+    <string name="settings_dark_theme_subtitle">在整个应用中使用深色界面。</string>
+    <string name="settings_workspace_mode">工作区模式</string>
+    <string name="settings_workspace_mode_description">选择每个会话是否使用独立工作区，或所有会话共用一个工作区。</string>
+    <string name="settings_model_providers">模型提供方</string>
+    <string name="settings_personalization">个性化</string>
+    <string name="settings_web_tools">网页工具</string>
+    <string name="settings_reliability">可靠性</string>
+    <string name="settings_agent_skills">Agent 技能</string>
+    <string name="settings_mcp_servers">MCP 服务器</string>
+    <string name="settings_termux">Termux</string>
+    <string name="settings_agent_mode">Agent 模式</string>
+    <string name="settings_developer">开发者设置</string>
+    <string name="settings_about">关于</string>
+    <string name="settings_get_started_tour">新手引导</string>
+    <string name="settings_general_hint">应用语言与外观</string>
+    <string name="settings_custom_instructions">自定义指令</string>
+    <string name="settings_tavily_configured">已配置 Tavily 搜索</string>
+    <string name="settings_tavily_not_configured">URL 抓取可用，Tavily 未配置</string>
+    <string name="settings_background_runs_on">后台运行已开启</string>
+    <string name="settings_background_runs_off">后台运行已关闭</string>
+    <string name="settings_connected">已连接</string>
+    <string name="settings_setup_required">需要设置</string>
+    <string name="settings_agent_mode_subtitle">授权与虚拟显示</string>
+    <string name="settings_get_started_tour_subtitle">重新播放首次启动和设置流程</string>
+    <string name="settings_developer_subtitle">重新播放后续引导流程</string>
+
+    <!-- Search -->
+    <string name="search_chats">搜索对话</string>
+    <string name="search_no_chats_match">没有匹配的对话</string>
+    <string name="search_new_chat_fallback">新建对话</string>
+
+    <!-- File / Termux -->
+    <string name="file_saved">文件已保存</string>
+    <string name="file_could_not_save">无法保存文件</string>
+    <string name="file_reply_copied">回复已复制</string>
+    <string name="termux_access_granted">已授予 Termux 访问权限</string>
+    <string name="termux_access_not_granted">未授予 Termux 访问权限</string>
+
+    <!-- Agent -->
+    <string name="agent_mode_label">Agent 模式</string>
+    <string name="agent_mode_virtual_display_preview">代理启动后会显示虚拟屏幕预览。</string>
+    <string name="agent_mode_display_label">显示</string>
+    <string name="agent_mode_standby">待机</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_finish_setup_title">完成设置</string>
+    <string name="onboarding_finish_setup_subtitle">连接模型后再回到聊天。</string>
+    <string name="onboarding_resume_setup">继续设置</string>
+    <string name="onboarding_first_prompt_ready_title">首条消息已就绪</string>
+    <string name="onboarding_first_prompt_ready_subtitle">点击发送来测试 Aether。</string>
+    <string name="onboarding_editing_earlier_message_title">正在编辑较早的消息</string>
+    <string name="onboarding_editing_earlier_message_subtitle">发送后会替换它之后的回复。</string>
+
+    <!-- Conversation -->
+    <string name="branch_steer_current_run">引导当前运行</string>
+    <string name="branch_queue_next_turn">排队下一轮</string>
+</resources>

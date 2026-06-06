@@ -1,5 +1,163 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Aether</string>
-</resources>
 
+    <!-- Common -->
+    <string name="common_menu">Menu</string>
+    <string name="common_new_chat">New chat</string>
+    <string name="common_more">More</string>
+    <string name="common_close">Close</string>
+    <string name="common_skip">Skip</string>
+    <string name="common_back">Back</string>
+    <string name="common_continue">Continue</string>
+    <string name="common_done">Done</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_next">Next</string>
+    <string name="common_install">Install</string>
+    <string name="common_refresh">Refresh</string>
+    <string name="common_open_settings">Open settings</string>
+    <string name="common_open_termux">Open Termux</string>
+    <string name="common_grant_access">Grant access</string>
+    <string name="common_load_models">Load models</string>
+    <string name="common_start_chat">Start chat</string>
+    <string name="common_send">Send</string>
+    <string name="common_send_follow_up">Send follow-up</string>
+    <string name="common_hide">Hide</string>
+    <string name="common_chat">Chat</string>
+    <string name="common_rename">Rename</string>
+    <string name="common_export">Export</string>
+    <string name="common_delete">Delete</string>
+    <string name="common_copy">Copy</string>
+    <string name="common_select_text">Select text</string>
+    <string name="common_edit_message">Edit message</string>
+    <string name="common_retry">Retry</string>
+    <string name="common_copy_reply">Copy reply</string>
+    <string name="common_redo_reply">Redo reply</string>
+    <string name="common_delete_reply">Delete reply</string>
+    <string name="common_save">Save</string>
+    <string name="common_search">Search</string>
+    <string name="common_on">On</string>
+    <string name="common_off">Off</string>
+    <string name="common_optional">Optional</string>
+
+    <!-- Chat -->
+    <string name="chat_welcome_help">What can I help with?</string>
+    <string name="chat_create_image">Create image</string>
+    <string name="chat_brainstorm">Brainstorm</string>
+    <string name="chat_analyze_images">Analyze images</string>
+    <string name="chat_aether_is_thinking">Aether is thinking...</string>
+    <string name="chat_reply_to_aether">Reply to Aether</string>
+    <string name="chat_ask_aether">Ask Aether</string>
+    <string name="chat_voice">Voice</string>
+    <string name="chat_images">Images</string>
+    <string name="chat_apps">Apps</string>
+    <string name="chat_gpts">GPTs</string>
+    <string name="chat_recent">Recent</string>
+    <string name="chat_no_conversations_yet">No conversations yet.</string>
+    <string name="chat_empty_draft">Empty draft</string>
+    <string name="chat_add_attachment_or_tool">Add attachment or tool</string>
+    <string name="chat_photos">Photos</string>
+    <string name="chat_files">Files</string>
+    <string name="chat_analyze_image_chip">Analyze image</string>
+    <string name="chat_code_chip">Code</string>
+    <string name="chat_help_me_write_chip">Help me write</string>
+    <string name="chat_summarize_file_chip">Summarize file</string>
+    <string name="chat_thinking">Thinking</string>
+    <string name="chat_no_output">No output</string>
+    <string name="chat_content_truncated">Content truncated for readability.</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_general">General Settings</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_language_description">Choose the app language.</string>
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_description">Choose the app appearance.</string>
+    <string name="settings_light_theme_subtitle">Keep the current bright appearance.</string>
+    <string name="settings_dark_theme_subtitle">Use a darker interface across the app.</string>
+    <string name="settings_workspace_mode">Workspace mode</string>
+    <string name="settings_workspace_mode_description">Choose whether each session gets its own workspace or everyone shares one workspace.</string>
+    <string name="settings_model_providers">Model Providers</string>
+    <string name="settings_personalization">Personalization</string>
+    <string name="settings_web_tools">Web Tools</string>
+    <string name="settings_reliability">Reliability</string>
+    <string name="settings_agent_skills">Agent Skills</string>
+    <string name="settings_mcp_servers">MCP Servers</string>
+    <string name="settings_termux">Termux</string>
+    <string name="settings_agent_mode">Agent Mode</string>
+    <string name="settings_developer">Developer Settings</string>
+    <string name="settings_about">About</string>
+    <string name="settings_get_started_tour">Get Started Tour</string>
+    <string name="settings_general_hint">App language and appearance</string>
+    <string name="settings_custom_instructions">Custom instructions</string>
+    <string name="settings_tavily_configured">Tavily search configured</string>
+    <string name="settings_tavily_not_configured">URL fetch ready, Tavily not configured</string>
+    <string name="settings_background_runs_on">Background runs on</string>
+    <string name="settings_background_runs_off">Background runs off</string>
+    <string name="settings_connected">Connected</string>
+    <string name="settings_setup_required">Setup required</string>
+    <string name="settings_agent_mode_subtitle">Authorization and virtual display</string>
+    <string name="settings_get_started_tour_subtitle">Replay the first-run landing and setup flow</string>
+    <string name="settings_developer_subtitle">Replay the follow-up onboarding flow</string>
+
+    <!-- Provider configuration -->
+    <string name="provider_form_provider_name">Provider name</string>
+    <string name="provider_form_provider_id">Provider ID</string>
+    <string name="provider_form_provider_id_required">Provider ID is required.</string>
+    <string name="provider_form_provider_id_invalid">Use lowercase letters, numbers, and underscores only.</string>
+    <string name="provider_form_provider_id_in_use">This provider ID is already in use.</string>
+    <string name="provider_form_request_format">Request format</string>
+    <string name="provider_form_request_format_openai_responses">Use OpenAI-compatible /responses endpoints.</string>
+    <string name="provider_form_request_format_openai_chat_completions">Use OpenAI-compatible /chat/completions endpoints.</string>
+    <string name="provider_form_request_format_vertex_express">Use Vertex AI Express Mode generateContent.</string>
+    <string name="provider_form_request_format_anthropic_messages">Use Anthropic-compatible /messages endpoints.</string>
+    <string name="provider_form_basic_tool_compatibility">Basic tool compatibility</string>
+    <string name="provider_form_compatibility_mode_description">Compatibility mode uses basic function calling and disables parallel or batch tool features for providers with limited tool support.</string>
+    <string name="provider_form_api_key">API Key</string>
+    <string name="provider_form_base_url">Base URL</string>
+    <string name="provider_form_manual_model_ids">Manual model IDs</string>
+    <string name="provider_form_model_picker_requires_api_key">Enabled models appear in the chat model picker. This request format requires an API key.</string>
+    <string name="provider_form_model_picker_refresh_hint">Enabled models appear in the chat model picker. Refresh loads models from the provider API.</string>
+    <string name="provider_form_choose_provider">Choose provider</string>
+    <string name="provider_form_model_list">Model list</string>
+    <string name="provider_form_no_models_loaded">No models loaded yet.</string>
+    <string name="provider_form_models_enabled_count">%1$d/%2$d enabled</string>
+    <string name="provider_form_fetch_models">Fetch models</string>
+    <string name="provider_form_custom_request_headers">Custom request headers</string>
+    <string name="provider_form_headers_configured_count">%1$d configured</string>
+    <string name="provider_form_add_header">Add header</string>
+    <string name="provider_form_header_name">Header</string>
+    <string name="provider_form_header_value">Value</string>
+    <string name="provider_form_remove_header">Remove header</string>
+
+    <!-- Search -->
+    <string name="search_chats">Search chats</string>
+    <string name="search_no_chats_match">No chats match</string>
+    <string name="search_new_chat_fallback">New chat</string>
+
+    <!-- File / Termux -->
+    <string name="file_saved">File saved</string>
+    <string name="file_could_not_save">Couldn\'t save file</string>
+    <string name="file_reply_copied">Reply copied</string>
+    <string name="termux_access_granted">Termux access granted</string>
+    <string name="termux_access_not_granted">Termux access not granted</string>
+
+    <!-- Agent -->
+    <string name="agent_mode_label">Agent Mode</string>
+    <string name="agent_mode_virtual_display_preview">Virtual display preview will appear after the agent starts.</string>
+    <string name="agent_mode_display_label">display</string>
+    <string name="agent_mode_standby">standby</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_finish_setup_title">Finish setup</string>
+    <string name="onboarding_finish_setup_subtitle">Connect a model, then come back to chat.</string>
+    <string name="onboarding_resume_setup">Resume setup</string>
+    <string name="onboarding_first_prompt_ready_title">First prompt ready</string>
+    <string name="onboarding_first_prompt_ready_subtitle">Tap send to test Aether.</string>
+    <string name="onboarding_editing_earlier_message_title">Editing earlier message</string>
+    <string name="onboarding_editing_earlier_message_subtitle">Sending will replace the replies that came after it.</string>
+
+    <!-- Conversation -->
+    <string name="branch_steer_current_run">Steer current run</string>
+    <string name="branch_queue_next_turn">Queue next turn</string>
+</resources>
