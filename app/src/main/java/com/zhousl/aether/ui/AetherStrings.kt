@@ -1,13 +1,19 @@
 package com.zhousl.aether.ui
 
+import android.content.Context
+import android.content.res.Configuration
+import android.os.LocaleList
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import com.zhousl.aether.data.AppLanguage
 import com.zhousl.aether.data.AppThemeMode
 import org.json.JSONObject
+import java.util.Locale
 
 @Stable
 data class AetherStrings(
@@ -134,11 +140,33 @@ fun AetherLocalization(
     content: @Composable () -> Unit,
 ) {
     val strings = remember(language) { aetherStringsFor(language) }
-    CompositionLocalProvider(LocalAetherStrings provides strings, content = content)
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val localizedConfiguration = remember(configuration, language) {
+        configuration.localizedFor(language)
+    }
+    val localizedContext = remember(context, localizedConfiguration) {
+        context.createConfigurationContext(localizedConfiguration)
+    }
+
+    CompositionLocalProvider(
+        LocalAetherStrings provides strings,
+        LocalConfiguration provides localizedConfiguration,
+        LocalContext provides localizedContext,
+        content = content,
+    )
 }
 
 @Composable
 fun rememberAetherStrings(): AetherStrings = LocalAetherStrings.current
+
+private fun Configuration.localizedFor(language: AppLanguage): Configuration {
+    val locale = Locale.forLanguageTag(language.languageTag)
+    return Configuration(this).apply {
+        setLocales(LocaleList(locale))
+        setLayoutDirection(locale)
+    }
+}
 
 fun aetherStringsFor(language: AppLanguage): AetherStrings = when (language) {
     AppLanguage.English -> AetherStrings(
