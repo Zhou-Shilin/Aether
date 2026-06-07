@@ -107,6 +107,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.zhousl.aether.BuildConfig
+
 import com.zhousl.aether.R
 import java.util.Locale
 import com.zhousl.aether.data.AetherPrivacyPolicyUrl
@@ -273,8 +274,7 @@ private const val PageTransitionDuration = 320
 private val PageTransitionEasing = CubicBezierEasing(0.22f, 0.84f, 0.18f, 1f)
 private val SettingsTopFadeHeight = 40.dp
 
-private fun tr(strings: AetherStrings, english: String, chinese: String): String =
-    if (strings.appLanguage == AppLanguage.SimplifiedChinese) chinese else english
+
 
 @Composable
 private fun settingsLanguageDisplayName(language: AppLanguage): String = when (language) {
@@ -482,11 +482,14 @@ fun SettingsScreen(
     var themeModeValue by rememberSaveable {
         mutableStateOf(themeMode)
     }
+    LaunchedEffect(language) {
+        languageValue = language
+    }
     var defaultChatModelKeyValue by rememberSaveable { mutableStateOf(defaultChatModelKey) }
     var defaultTitleModelKeyValue by rememberSaveable { mutableStateOf(defaultTitleModelKey) }
     var defaultNamingModelKeyValue by rememberSaveable { mutableStateOf(defaultNamingModelKey) }
     var defaultCompactingModelKeyValue by rememberSaveable { mutableStateOf(defaultCompactingModelKey) }
-    val strings = remember(languageValue) { aetherStringsFor(languageValue) }
+
     val enabledModelOptions = remember(providerConfigs) { providerConfigs.availableModelOptions() }
 
     // Track which provider is being edited
@@ -664,7 +667,6 @@ fun SettingsScreen(
     ) { targetPage ->
         when (targetPage) {
             SettingsPage.Hub -> SettingsHub(
-                strings = strings,
                 generalSettingsSummary = settingsGeneralSummary(
                     language = languageValue,
                     themeMode = themeModeValue,
@@ -1054,7 +1056,6 @@ fun SettingsScreen(
 
 @Composable
 private fun SettingsHub(
-    strings: AetherStrings,
     generalSettingsSummary: String,
     activeProviderName: String,
     systemPromptSnippet: String,
@@ -1236,7 +1237,6 @@ private fun SettingsHub(
 
 @Composable
 private fun GeneralSettingsPage(
-    strings: AetherStrings,
     selectedLanguage: AppLanguage,
     onLanguageSelected: (AppLanguage) -> Unit,
     selectedThemeMode: AppThemeMode,

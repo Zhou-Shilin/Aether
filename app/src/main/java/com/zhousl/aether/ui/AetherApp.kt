@@ -3,11 +3,13 @@ package com.zhousl.aether.ui
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.Context
 import android.net.Uri
 import android.provider.Settings
 import android.util.Patterns
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import com.zhousl.aether.AetherLocaleManager
 import com.zhousl.aether.R
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -109,6 +111,7 @@ import androidx.core.content.FileProvider
 import com.zhousl.aether.data.AetherPrivacyPolicyUrl
 import com.zhousl.aether.data.AetherWebsiteUrl
 import com.zhousl.aether.data.AgentModeAuthorizationMethod
+import com.zhousl.aether.data.AppLanguage
 import com.zhousl.aether.data.AppSettings
 import com.zhousl.aether.data.AutomaticModelPurpose
 import com.zhousl.aether.data.LlmProviderConfig
@@ -166,20 +169,24 @@ fun AetherApp(
     onPrivacyPolicyAccepted: () -> Unit = {},
 ) {
     val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
-    val strings = remember(uiState.settings.language) { aetherStringsFor(uiState.settings.language) }
 
-    AetherLocalization(uiState.settings.language) {
-        AetherTheme(themeMode = uiState.settings.themeMode) {
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.background,
-            ) {
-                AetherAppContent(
-                    viewModel = viewModel,
-                    uiState = uiState,
-                    onPrivacyPolicyAccepted = onPrivacyPolicyAccepted,
-                )
-            }
+    LaunchedEffect(uiState.settings.language) {
+        val currentLanguage = AetherLocaleManager.currentLanguage()
+        if (uiState.settings.language != currentLanguage) {
+            viewModel.updateAppLanguage(currentLanguage)
+        }
+    }
+
+    AetherTheme(themeMode = uiState.settings.themeMode) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background,
+        ) {
+            AetherAppContent(
+                viewModel = viewModel,
+                uiState = uiState,
+                onPrivacyPolicyAccepted = onPrivacyPolicyAccepted,
+            )
         }
     }
 }
@@ -193,11 +200,7 @@ private fun AetherAppContent(
     val drawerState = rememberDrawerState(initialValue = androidx.compose.material3.DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val fileSavedToastLabel = stringResource(R.string.file_saved)
-    val fileCouldNotSaveToastLabel = stringResource(R.string.file_could_not_save)
-    val termuxAccessGrantedToastLabel = stringResource(R.string.termux_access_granted)
-    val termuxAccessNotGrantedToastLabel = stringResource(R.string.termux_access_not_granted)
-    val replyCopiedToastLabel = stringResource(R.string.file_reply_copied)
+
     val lifecycleOwner = LocalLifecycleOwner.current
     val clipboardManager = LocalClipboardManager.current
     val workspaceFileBridge = remember(context) { WorkspaceFileBridge(context) }
@@ -264,7 +267,6 @@ private fun AetherAppContent(
             onPrivacyPolicyAccepted()
         }
     }
-
     var pendingSaveTarget by remember { mutableStateOf<PendingSaveTarget?>(null) }
     var pendingSessionExportId by remember { mutableStateOf<String?>(null) }
     var pendingSkillZipCompletion by remember { mutableStateOf<((Boolean) -> Unit)?>(null) }
@@ -349,7 +351,7 @@ private fun AetherAppContent(
                 }
                 Toast.makeText(
                     context,
-                    if (didSave) fileSavedToastLabel else fileCouldNotSaveToastLabel,
+                    context.getString(if (didSave) R.string.file_saved else R.string.file_could_not_save),
                     Toast.LENGTH_SHORT,
                 ).show()
             }
@@ -408,7 +410,13 @@ private fun AetherAppContent(
             viewModel.refreshTermuxSetup()
             Toast.makeText(
                 context,
-                if (granted) termuxAccessGrantedToastLabel else termuxAccessNotGrantedToastLabel,
+                context.getString(
+                    if (granted) {
+                        R.string.termux_access_granted
+                    } else {
+                        R.string.termux_access_not_granted
+                    },
+                ),
                 Toast.LENGTH_SHORT,
             ).show()
         },
@@ -637,7 +645,7 @@ private fun AetherAppContent(
                     },
                     onCopyMessage = { message ->
                         clipboardManager.setText(AnnotatedString(message.text))
-                        Toast.makeText(context, replyCopiedToastLabel, Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.file_reply_copied), Toast.LENGTH_SHORT).show()
                     },
                     onRequestTermuxPermission = { requestTermuxPermission("chat_termux_permission") },
                     onOpenAppPermissions = {
@@ -695,7 +703,10 @@ private fun AetherAppContent(
                     isFetchingModels = uiState.isFetchingModels,
                     appUpdate = uiState.appUpdate,
                     onSave = viewModel::saveSettings,
-                    onUpdateLanguage = viewModel::updateAppLanguage,
+                    onUpdateLanguage = { language ->
+                        viewModel.updateAppLanguage(language)
+                        AetherLocaleManager.applyIfChanged(language)
+                    },
                     onUpdateThemeMode = viewModel::updateAppThemeMode,
                     onUpsertProviderConfig = viewModel::upsertProviderConfig,
                     onRemoveProviderConfig = viewModel::removeProviderConfig,
@@ -1727,18 +1738,16 @@ private fun CircleAction(
 @Preview(showBackground = true, backgroundColor = 0xFF000000)
 @Composable
 private fun AetherAppPreview() {
-    AetherLocalization(language = com.zhousl.aether.data.AppLanguage.English) {
-        AetherTheme {
-            ChatScreen(
-                messages = defaultPreviewMessages(),
-                inputValue = "",
-                onInputChanged = {},
-                onSend = {},
-                onMenu = {},
-                onNewChat = {},
-                isSending = false,
-            )
-        }
+    AetherTheme {
+        ChatScreen(
+            messages = defaultPreviewMessages(),
+            inputValue = "",
+            onInputChanged = {},
+            onSend = {},
+            onMenu = {},
+            onNewChat = {},
+            isSending = false,
+        )
     }
 }
 
