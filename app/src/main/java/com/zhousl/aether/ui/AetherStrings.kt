@@ -3,6 +3,7 @@ package com.zhousl.aether.ui
 import android.content.Context
 import android.content.res.Configuration
 import android.os.LocaleList
+import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Stable
@@ -141,6 +142,9 @@ fun AetherLocalization(
 ) {
     val strings = remember(language) { aetherStringsFor(language) }
     val context = LocalContext.current
+    val activityResultRegistryOwner = checkNotNull(LocalActivityResultRegistryOwner.current) {
+        "No ActivityResultRegistryOwner was provided via LocalActivityResultRegistryOwner"
+    }
     val configuration = LocalConfiguration.current
     val localizedConfiguration = remember(configuration, language) {
         configuration.localizedFor(language)
@@ -153,6 +157,7 @@ fun AetherLocalization(
         LocalAetherStrings provides strings,
         LocalConfiguration provides localizedConfiguration,
         LocalContext provides localizedContext,
+        LocalActivityResultRegistryOwner provides activityResultRegistryOwner,
         content = content,
     )
 }
