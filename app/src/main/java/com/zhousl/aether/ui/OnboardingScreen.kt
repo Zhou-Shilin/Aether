@@ -859,13 +859,14 @@ private fun TermuxStep(
 
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
+    val setupCommandCopiedLabel = stringResource(R.string.onboarding_termux_setup_command_copied)
     var shouldAutoContinue by rememberSaveable(stepIndex) { mutableStateOf(!setupState.isReady) }
     var showRootSetupPrompt by rememberSaveable(stepIndex) { mutableStateOf(true) }
     fun copyTermuxSetupCommand() {
         clipboardManager.setText(AnnotatedString(TermuxContract.ExternalAppsSetupCommand))
         Toast.makeText(
             context,
-            stringResource(R.string.onboarding_termux_setup_command_copied),
+            setupCommandCopiedLabel,
             Toast.LENGTH_SHORT,
         ).show()
     }

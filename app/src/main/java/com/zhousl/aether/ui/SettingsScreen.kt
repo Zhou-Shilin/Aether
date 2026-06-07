@@ -444,6 +444,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    val agentModeRequiresTermuxToastLabel = stringResource(R.string.settings_agent_mode_requires_termux_toast)
     // Mutable field values - survive recomposition & config changes
     var systemPromptValue by rememberSaveable(stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(systemPrompt))
@@ -704,7 +705,7 @@ fun SettingsScreen(
                     if (page == SettingsPage.AgentMode && !termuxSetupState.isReady) {
                         Toast.makeText(
                             context,
-                            stringResource(R.string.settings_agent_mode_requires_termux_toast),
+                            agentModeRequiresTermuxToastLabel,
                             Toast.LENGTH_SHORT,
                         ).show()
                     } else {
@@ -1148,7 +1149,7 @@ private fun SettingsHub(
                 SettingsNavRow(
                     icon = Icons.Rounded.Extension,
                     title = stringResource(R.string.settings_agent_skills),
-                    subtitle = settingsSkillCountSummary(skillCount),
+                    subtitle = stringResource(R.string.settings_skills_count_configured, skillCount),
                     onClick = { onNavigate(SettingsPage.Skills) },
                 )
                 CardDivider()
@@ -1162,7 +1163,7 @@ private fun SettingsHub(
                 SettingsNavRow(
                     icon = Icons.Rounded.Schedule,
                     title = stringResource(R.string.settings_scheduled_tasks),
-                    subtitle = settingsScheduledTaskCountSummary(scheduledTaskCount),
+                    subtitle = stringResource(R.string.settings_scheduled_tasks_count_configured, scheduledTaskCount),
                     onClick = { onNavigate(SettingsPage.ScheduledTasks) },
                 )
                 CardDivider()
@@ -1259,11 +1260,11 @@ private fun GeneralSettingsPage(
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 AppLanguage.entries.forEach { option ->
                     SettingsChoiceRow(
-                        title = languageDisplayName(option),
+                        title = settingsLanguageDisplayName(option),
                         subtitle = if (option == AppLanguage.English) {
-                            "English interface"
+                            stringResource(R.string.settings_language_english_interface)
                         } else {
-                            "Simplified Chinese interface"
+                            stringResource(R.string.settings_language_simplified_chinese_interface)
                         },
                         selected = option == selectedLanguage,
                         onClick = { onLanguageSelected(option) },
@@ -1290,7 +1291,7 @@ private fun GeneralSettingsPage(
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 AppThemeMode.entries.forEach { option ->
                     SettingsChoiceRow(
-                        title = themeDisplayName(option),
+                        title = settingsThemeDisplayName(option),
                         subtitle = if (option == AppThemeMode.Light) {
                             stringResource(R.string.settings_light_theme_subtitle)
                         } else {
@@ -1825,11 +1826,7 @@ private fun PersonalizationPage(
 
         Spacer(Modifier.height(8.dp))
         Text(
-            text = tr(
-                strings,
-                "Supports {{current_datetime}}, {{current_date}}, {{current_time}}, {{timezone}}, and {{unix_timestamp}}.",
-                "支持 {{current_datetime}}、{{current_date}}、{{current_time}}、{{timezone}} 和 {{unix_timestamp}}。",
-            ),
+            text = stringResource(R.string.settings_custom_instructions_variables_hint),
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -3208,11 +3205,7 @@ private fun AgentModeSettingsPage(
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        text = tr(
-                            strings,
-                            "Configure Termux first. Agent Mode uses the Termux bridge for its workspace and screenshot flow, so authorization cannot be enabled until Termux is ready.",
-                            "Configure Termux first. Agent Mode uses the Termux bridge for its workspace and screenshot flow, so authorization cannot be enabled until Termux is ready.",
-                        ),
+                        text = stringResource(R.string.settings_agent_mode_unavailable_body),
                         style = MaterialTheme.typography.bodySmall,
                         color = AetherOnSurfaceVariant,
                     )
@@ -3238,17 +3231,9 @@ private fun AgentModeSettingsPage(
         RootSetupAlreadyConfiguredDialog(
             title = stringResource(R.string.settings_agent_mode_already_configured),
             body = if (agentModeAuthorizationMethod == AgentModeAuthorizationMethod.Root) {
-                tr(
-                    strings,
-                    "Root Agent Mode authorization is already ready. You do not need to run Root automatic setup again.",
-                    "Root Agent Mode 授权已经正常，不需要再次执行 Root 自动配置。",
-                )
+                stringResource(R.string.settings_agent_mode_root_already_configured_body)
             } else {
-                tr(
-                    strings,
-                    "Agent Mode authorization is already ready. Root automatic setup is not required; continuing will reconfigure Agent Mode to Root.",
-                    "Agent Mode 授权已经正常，不需要执行 Root 自动配置；继续后会将 Agent Mode 重新配置为 Root。",
-                )
+                stringResource(R.string.settings_agent_mode_already_configured_body)
             },
             onDismiss = { showAlreadyConfiguredDialog = false },
             onContinue = {
@@ -3328,11 +3313,7 @@ private fun AgentModeSettingsPage(
                 RootSetupSettingsSection(
                     title = stringResource(R.string.settings_root_automatic_setup),
                     rootSetupState = rootSetupState,
-                    body = tr(
-                        strings,
-                        "Use su to select Root mode and prepare local device control automatically.",
-                        "使用 su 自动选择 Root 模式，并准备本地设备控制。",
-                    ),
+                    body = stringResource(R.string.settings_agent_mode_root_setup_body),
                     onConfigureWithRoot = ::requestRootSetup,
                 )
             }
@@ -3566,7 +3547,7 @@ private fun RootSetupProgressPage(
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = rootSetupProgressBody(rootSetupState.issue, strings),
+                    text = rootSetupProgressBody(rootSetupState.issue),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                 )
@@ -3742,54 +3723,19 @@ private fun rootSetupProgressTitle(
     RootSetupIssue.Unknown -> stringResource(R.string.settings_root_setup_preparing)
 }
 
+@Composable
 private fun rootSetupProgressBody(
     issue: RootSetupIssue,
-    strings: AetherStrings,
 ): String = when (issue) {
-    RootSetupIssue.Running -> tr(
-        strings,
-        "Aether is requesting su, enabling Termux command access, and preparing Root Agent Mode.",
-        "Aether \u6b63\u5728\u8bf7\u6c42 su\u3001\u542f\u7528 Termux \u547d\u4ee4\u8bbf\u95ee\uff0c\u5e76\u51c6\u5907 Root Agent Mode\u3002",
-    )
-
-    RootSetupIssue.Ready -> tr(
-        strings,
-        "Termux command access and Root Agent Mode authorization are ready.",
-        "Termux \u547d\u4ee4\u8bbf\u95ee\u548c Root Agent Mode \u6388\u6743\u5df2\u7ecf\u5c31\u7eea\u3002",
-    )
-
+    RootSetupIssue.Running -> stringResource(R.string.settings_root_setup_progress_body_running)
+    RootSetupIssue.Ready -> stringResource(R.string.settings_root_setup_progress_body_ready)
     RootSetupIssue.Available,
-    RootSetupIssue.Unknown -> tr(
-        strings,
-        "Start setup to grant su and finish the local access configuration.",
-        "开始配置后会请求 su，并完成本地访问配置。",
-    )
-
-    RootSetupIssue.Unavailable -> tr(
-        strings,
-        "No su binary was detected on this device.",
-        "当前设备未检测到 su。",
-    )
-
-    RootSetupIssue.PermissionDenied -> tr(
-        strings,
-        "Grant su to Aether, then try Root automatic setup again.",
-        "请授予 Aether su 权限后重试 Root 自动配置。",
-    )
-
-    RootSetupIssue.TermuxNotInstalled -> tr(
-        strings,
-        "Install Termux first, then return to this setup.",
-        "请先安装 Termux，然后返回继续配置。",
-    )
-
-    RootSetupIssue.Failed -> tr(
-        strings,
-        "The setup command finished with an error. Review the detail above and retry when ready.",
-        "配置命令返回错误。请查看上方详情后重试。",
-    )
+    RootSetupIssue.Unknown -> stringResource(R.string.settings_root_setup_progress_body_available)
+    RootSetupIssue.Unavailable -> stringResource(R.string.settings_root_setup_progress_body_unavailable)
+    RootSetupIssue.PermissionDenied -> stringResource(R.string.settings_root_setup_progress_body_permission_denied)
+    RootSetupIssue.TermuxNotInstalled -> stringResource(R.string.settings_root_setup_progress_body_termux_not_installed)
+    RootSetupIssue.Failed -> stringResource(R.string.settings_root_setup_progress_body_failed)
 }
-
 @Composable
 private fun RootSetupSettingsSection(
     title: String,

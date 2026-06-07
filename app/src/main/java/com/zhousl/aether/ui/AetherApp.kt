@@ -193,6 +193,11 @@ private fun AetherAppContent(
     val drawerState = rememberDrawerState(initialValue = androidx.compose.material3.DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val fileSavedToastLabel = stringResource(R.string.file_saved)
+    val fileCouldNotSaveToastLabel = stringResource(R.string.file_could_not_save)
+    val termuxAccessGrantedToastLabel = stringResource(R.string.termux_access_granted)
+    val termuxAccessNotGrantedToastLabel = stringResource(R.string.termux_access_not_granted)
+    val replyCopiedToastLabel = stringResource(R.string.file_reply_copied)
     val lifecycleOwner = LocalLifecycleOwner.current
     val clipboardManager = LocalClipboardManager.current
     val workspaceFileBridge = remember(context) { WorkspaceFileBridge(context) }
@@ -344,7 +349,7 @@ private fun AetherAppContent(
                 }
                 Toast.makeText(
                     context,
-                    if (didSave) stringResource(R.string.file_saved) else stringResource(R.string.file_could_not_save),
+                    if (didSave) fileSavedToastLabel else fileCouldNotSaveToastLabel,
                     Toast.LENGTH_SHORT,
                 ).show()
             }
@@ -403,7 +408,7 @@ private fun AetherAppContent(
             viewModel.refreshTermuxSetup()
             Toast.makeText(
                 context,
-                if (granted) stringResource(R.string.termux_access_granted) else stringResource(R.string.termux_access_not_granted),
+                if (granted) termuxAccessGrantedToastLabel else termuxAccessNotGrantedToastLabel,
                 Toast.LENGTH_SHORT,
             ).show()
         },
@@ -632,7 +637,7 @@ private fun AetherAppContent(
                     },
                     onCopyMessage = { message ->
                         clipboardManager.setText(AnnotatedString(message.text))
-                        Toast.makeText(context, stringResource(R.string.common_reply_copied), Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, replyCopiedToastLabel, Toast.LENGTH_SHORT).show()
                     },
                     onRequestTermuxPermission = { requestTermuxPermission("chat_termux_permission") },
                     onOpenAppPermissions = {
