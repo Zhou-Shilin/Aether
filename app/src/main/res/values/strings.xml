@@ -9,6 +9,7 @@
     <string name="common_close">Close</string>
     <string name="common_skip">Skip</string>
     <string name="common_back">Back</string>
+    <string name="common_choose">Choose</string>
     <string name="common_continue">Continue</string>
     <string name="common_done">Done</string>
     <string name="common_cancel">Cancel</string>
