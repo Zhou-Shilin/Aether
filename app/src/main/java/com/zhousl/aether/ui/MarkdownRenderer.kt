@@ -886,8 +886,9 @@ private fun MarkdownImagePreviewDialog(
     onDismiss: () -> Unit,
     onOpenLink: (String) -> Unit,
 ) {
+    val fallbackTitle = stringResource(R.string.markdown_image_preview_title)
     MarkdownPreviewDialogFrame(
-        title = altText.ifBlank { "Image preview" },
+        title = altText.ifBlank { fallbackTitle },
         onDismiss = onDismiss,
     ) {
         when {
@@ -918,7 +919,7 @@ private fun MarkdownImagePreviewDialog(
             )
 
             else -> Text(
-                text = imageState.error ?: "Preview unavailable.",
+                text = imageState.error ?: stringResource(R.string.markdown_preview_unavailable),
                 style = MaterialTheme.typography.bodyMedium,
                 color = AetherOnSurfaceVariant,
             )
@@ -926,7 +927,7 @@ private fun MarkdownImagePreviewDialog(
 
         if (!originalLinkTarget.isNullOrBlank()) {
             Text(
-                text = "Open original",
+                text = stringResource(R.string.markdown_open_original),
                 style = MaterialTheme.typography.bodyMedium,
                 color = AetherPrimary,
                 modifier = Modifier.clickable { onOpenLink(originalLinkTarget) },
@@ -941,7 +942,7 @@ private fun MarkdownMermaidPreviewDialog(
     onDismiss: () -> Unit,
 ) {
     MarkdownPreviewDialogFrame(
-        title = "Mermaid preview",
+        title = stringResource(R.string.markdown_mermaid_preview_title),
         onDismiss = onDismiss,
     ) {
         MarkdownHtmlBlock(
@@ -994,7 +995,7 @@ private fun MarkdownPreviewDialogFrame(
                     modifier = Modifier.weight(1f),
                 )
                 Text(
-                    text = "Close",
+                    text = stringResource(R.string.common_close),
                     style = MaterialTheme.typography.bodyMedium,
                     color = AetherPrimary,
                     modifier = Modifier.clickable(onClick = onDismiss),

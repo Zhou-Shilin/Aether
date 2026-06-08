@@ -1,5 +1,6 @@
 package com.zhousl.aether.ui
 
+import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.SystemClock
@@ -136,7 +137,7 @@ import com.zhousl.aether.ui.theme.AetherSecondary
 import com.zhousl.aether.ui.theme.AetherSurface
 import com.zhousl.aether.ui.theme.AetherSurfaceHigh
 import com.zhousl.aether.ui.theme.AetherTertiary
-import com.zhousl.aether.data.AppLanguage
+
 import com.zhousl.aether.termux.TermuxContract
 import com.zhousl.aether.termux.TermuxSetupIssue
 import com.zhousl.aether.termux.TermuxSetupState
@@ -833,8 +834,9 @@ private fun AssistantMessageBlock(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        val agentModeFrames = remember(message.toolInvocations) {
-            buildAgentModeReplayFrames(message.toolInvocations)
+        val context = LocalContext.current
+        val agentModeFrames = remember(context, message.toolInvocations) {
+            buildAgentModeReplayFrames(context, message.toolInvocations)
         }
         val workContent: @Composable () -> Unit = {
             AssistantMessageWorkContent(
@@ -981,8 +983,9 @@ fun ConversationAssistantGroupBubble(
     val thoughtDurationMillis = messages.lastOrNull()?.thoughtDurationMillis
     val hasReasoningTrace = messages.any { it.reasoningTrace != null }
     val showActions = messages.none { it.assistantActionsHidden }
-    val agentModeReplayTimeline = remember(messages) {
-        buildAgentModeReplayTimeline(messages)
+    val context = LocalContext.current
+    val agentModeReplayTimeline = remember(context, messages) {
+        buildAgentModeReplayTimeline(context, messages)
     }
     val groupAgentModeFrames = agentModeReplayTimeline.frames
     val interleavedAgentModeTextIds = agentModeReplayTimeline.interleavedTextMessageIds
@@ -1122,8 +1125,9 @@ private fun AssistantGroupMessageContent(
     onOpenAttachment: (ChatAttachment) -> Unit,
     onOpenLink: (String) -> Unit,
 ) {
-    val agentModeFrames = remember(message.toolInvocations) {
-        buildAgentModeReplayFrames(message.toolInvocations)
+    val context = LocalContext.current
+    val agentModeFrames = remember(context, message.toolInvocations) {
+        buildAgentModeReplayFrames(context, message.toolInvocations)
     }
     if (message.reasoningTrace != null) {
         ReasoningTraceStatus(
@@ -2257,9 +2261,12 @@ private fun ReasoningTimelineToolRow(
     isLast: Boolean,
     onOpenLink: (String) -> Unit,
 ) {
+    val context = LocalContext.current
     val arguments = remember(toolInvocation.argumentsJson) { parseJsonObject(toolInvocation.argumentsJson) }
     val output = remember(toolInvocation.outputJson) { parseJsonObject(toolInvocation.outputJson) }
-    val title = remember(toolInvocation) { formatToolInvocationTitleLabel(toolInvocation) }
+    val title = remember(context, toolInvocation.toolName, toolInvocation.isRunning, toolInvocation.argumentsJson) {
+        formatToolInvocationTitleLabel(context, toolInvocation, arguments = arguments)
+    }
     val webSourceMetadata = remember(toolInvocation.toolName, toolInvocation.argumentsJson, toolInvocation.outputJson) {
         webSourceMetadata(toolInvocation.toolName, arguments, output)
     }
@@ -2609,16 +2616,30 @@ fun ToolInvocationCard(
     toolInvocation: ChatToolInvocation,
     topPadding: Dp = 6.dp,
 ) {
+    val context = LocalContext.current
     val arguments = remember(toolInvocation.argumentsJson) { parseJsonObject(toolInvocation.argumentsJson) }
+    val output = remember(toolInvocation.outputJson) { parseJsonObject(toolInvocation.outputJson) }
+    val title = remember(context, toolInvocation.toolName, toolInvocation.isRunning, toolInvocation.argumentsJson) {
+        formatToolInvocationTitleLabel(context, toolInvocation, arguments = arguments)
+    }
     val noOutputLabel = stringResource(R.string.chat_no_output)
     val contentTruncatedLabel = stringResource(R.string.chat_content_truncated)
-    val context = LocalContext.current
     val exitCodeLabel = remember(context) {
         { exitCode: Int -> context.getString(R.string.tool_invocation_exit_code, exitCode) }
     }
-    val detail = remember(toolInvocation, noOutputLabel, contentTruncatedLabel, exitCodeLabel) {
+    val detail = remember(
+        toolInvocation.toolName,
+        toolInvocation.isRunning,
+        toolInvocation.argumentsJson,
+        toolInvocation.outputJson,
+        noOutputLabel,
+        contentTruncatedLabel,
+        exitCodeLabel,
+    ) {
         formatToolInvocationDetail(
             toolInvocation = toolInvocation,
+            arguments = arguments,
+            output = output,
             noOutputLabel = noOutputLabel,
             contentTruncatedLabel = contentTruncatedLabel,
             exitCodeLabel = exitCodeLabel,
@@ -2659,13 +2680,13 @@ fun ToolInvocationCard(
     ) {
         if (toolInvocation.isRunning) {
             ShimmerStatusText(
-                text = formatToolInvocationTitleLabel(toolInvocation.copy(isRunning = true)),
+                text = title,
                 travelDurationMillis = 3200,
                 pauseDurationMillis = 1000,
             )
         } else {
             Text(
-                text = formatToolInvocationTitleLabel(toolInvocation.copy(isRunning = false)),
+                text = title,
                 style = MaterialTheme.typography.bodyMedium,
                 color = AetherOnSurfaceVariant,
             )
@@ -3372,8 +3393,9 @@ private fun formatThoughtDuration(durationMillis: Long): String {
     }.joinToString(" ")
 }
 
+@Composable
 fun formatWorkedSummaryTitle(durationMillis: Long): String =
-    "Working for ${formatThoughtDuration(durationMillis)}"
+    stringResource(R.string.chat_working_for_duration, formatThoughtDuration(durationMillis))
 
 fun workDurationMillisForMessages(
     messages: List<ChatMessage>,
@@ -3474,11 +3496,12 @@ private fun formatReasoningTraceDoneLabel(trace: ReasoningTrace): String {
     }
 }
 
+@Composable
 private fun formatReasoningTraceDoneChunkTitle(trace: ReasoningTrace): String {
     val startedAt = trace.startedAtMillis.takeIf { it > 0L }
     val endedAt = trace.completedAtMillis ?: System.currentTimeMillis()
     val duration = startedAt?.let { formatThoughtDuration((endedAt - it).coerceAtLeast(1L)) } ?: "0s"
-    return "Thought for $duration"
+    return stringResource(R.string.chat_thought_for_duration, duration)
 }
 
 @Composable
@@ -3528,37 +3551,39 @@ private fun formatWorkspaceCopyProgress(copyingToWorkspaceLabel: String, attachm
     return listOfNotNull(copyingToWorkspaceLabel, progressLabel, speedLabel).joinToString(" · ")
 }
 
-private fun formatToolInvocationTitleLabel(toolInvocation: ChatToolInvocation): String {
-    val arguments = parseJsonObject(toolInvocation.argumentsJson)
+private fun formatToolInvocationTitleLabel(
+    context: Context,
+    toolInvocation: ChatToolInvocation,
+    isRunningOverride: Boolean = toolInvocation.isRunning,
+    arguments: JSONObject? = parseJsonObject(toolInvocation.argumentsJson),
+): String {
+    val isRunning = isRunningOverride
     return when (toolInvocation.toolName.lowercase()) {
-        "bash" -> if (toolInvocation.isRunning) "Executing bash command" else "Executed bash command"
-        "fetch_bash_output" -> if (toolInvocation.isRunning) "Fetching bash output" else "Fetched bash output"
-        "kill_bash" -> if (toolInvocation.isRunning) "Stopping bash command" else "Stopped bash command"
-        "sleep" -> if (toolInvocation.isRunning) "Waiting" else "Waited"
-        "read" -> if (toolInvocation.isRunning) "Reading file" else "Read file"
-        "edit" -> if (toolInvocation.isRunning) "Editing file" else "Edited file"
-        "write" -> if (toolInvocation.isRunning) "Writing file" else "Wrote file"
-        "grep" -> if (toolInvocation.isRunning) "Searching files" else "Searched files"
-        "find" -> if (toolInvocation.isRunning) "Finding files" else "Found files"
-        "ls" -> if (toolInvocation.isRunning) "Listing files" else "Listed files"
-        "analyze_image" -> if (toolInvocation.isRunning) "Analyzing image" else "Analyzed image"
-        "agent_display" -> formatAgentDisplayTitle(
-            isRunning = toolInvocation.isRunning,
-            arguments = arguments,
-        )
+        "bash" -> context.getString(if (isRunning) R.string.tool_title_bash_running else R.string.tool_title_bash_done)
+        "fetch_bash_output" -> context.getString(if (isRunning) R.string.tool_title_fetch_bash_output_running else R.string.tool_title_fetch_bash_output_done)
+        "kill_bash" -> context.getString(if (isRunning) R.string.tool_title_kill_bash_running else R.string.tool_title_kill_bash_done)
+        "sleep" -> context.getString(if (isRunning) R.string.tool_title_sleep_running else R.string.tool_title_sleep_done)
+        "read" -> context.getString(if (isRunning) R.string.tool_title_read_running else R.string.tool_title_read_done)
+        "edit" -> context.getString(if (isRunning) R.string.tool_title_edit_running else R.string.tool_title_edit_done)
+        "write" -> context.getString(if (isRunning) R.string.tool_title_write_running else R.string.tool_title_write_done)
+        "grep" -> context.getString(if (isRunning) R.string.tool_title_grep_running else R.string.tool_title_grep_done)
+        "find" -> context.getString(if (isRunning) R.string.tool_title_find_running else R.string.tool_title_find_done)
+        "ls" -> context.getString(if (isRunning) R.string.tool_title_ls_running else R.string.tool_title_ls_done)
+        "analyze_image" -> context.getString(if (isRunning) R.string.tool_title_analyze_image_running else R.string.tool_title_analyze_image_done)
+        "agent_display" -> formatAgentDisplayTitle(context = context, isRunning = isRunning, arguments = arguments)
         "tavily_search" -> formatArgumentDrivenTitle(
-            isRunning = toolInvocation.isRunning,
-            progressiveVerb = "Searching",
-            completedVerb = "Searched",
+            isRunning = isRunning,
+            progressiveVerb = context.getString(R.string.tool_title_searching),
+            completedVerb = context.getString(R.string.tool_title_searched),
             subject = arguments?.optString("query").orEmpty(),
-            fallback = "Tavily search",
+            fallback = context.getString(R.string.tool_title_tavily_search_fallback),
         )
         "fetch_web_url" -> formatArgumentDrivenTitle(
-            isRunning = toolInvocation.isRunning,
-            progressiveVerb = "Fetching",
-            completedVerb = "Fetched",
+            isRunning = isRunning,
+            progressiveVerb = context.getString(R.string.tool_title_fetching),
+            completedVerb = context.getString(R.string.tool_title_fetched),
             subject = arguments?.optString("url").orEmpty(),
-            fallback = "web page",
+            fallback = context.getString(R.string.tool_title_web_page_fallback),
         )
         "aether_config_get",
         "aether_config_set",
@@ -3567,14 +3592,15 @@ private fun formatToolInvocationTitleLabel(toolInvocation: ChatToolInvocation): 
         "aether_termux_manage",
         "aether_agent_mode_manage",
         "aether_developer_manage" -> formatAetherToolTitle(
+            context = context,
             toolName = toolInvocation.toolName,
-            isRunning = toolInvocation.isRunning,
+            isRunning = isRunning,
             arguments = arguments,
         )
-        else -> if (toolInvocation.isRunning) {
-            "Using ${toolInvocation.toolName}"
+        else -> if (isRunning) {
+            context.getString(R.string.tool_title_using_tool, toolInvocation.toolName)
         } else {
-            "Used ${toolInvocation.toolName}"
+            context.getString(R.string.tool_title_used_tool, toolInvocation.toolName)
         }
     }
 }
@@ -3641,32 +3667,14 @@ private fun summarizeToolInvocationCommandLabel(
     }.trim()
 }
 
-private fun formatAttachmentMeta(attachment: ChatAttachment): String {
-    val typeLabel = if (attachment.kind == AttachmentKind.Image) "Photo" else "File"
-    val sizeLabel = attachment.sizeBytes?.let(::formatAttachmentSize)
-    return listOfNotNull(typeLabel, sizeLabel).joinToString(" • ")
-}
-
-private fun formatToolInvocationTitle(toolInvocation: ChatToolInvocation): String =
-    formatToolInvocationTitleLabel(toolInvocation)
-
-private fun formatToolInvocationGroupTitle(
-    count: Int,
-    isRunning: Boolean,
-): String = if (isRunning) {
-    "Executing $count tools"
-} else {
-    "Executed $count tools"
-}
-
 private fun formatToolInvocationDetail(
     toolInvocation: ChatToolInvocation,
+    arguments: JSONObject? = parseJsonObject(toolInvocation.argumentsJson),
+    output: JSONObject? = parseJsonObject(toolInvocation.outputJson),
     noOutputLabel: String,
     contentTruncatedLabel: String,
     exitCodeLabel: (Int) -> String,
 ): ToolInvocationDetail {
-    val arguments = parseJsonObject(toolInvocation.argumentsJson)
-    val output = parseJsonObject(toolInvocation.outputJson)
     val command = output?.optString("command")
         .orEmpty()
         .trim()
@@ -3798,6 +3806,7 @@ private fun formatArgumentDrivenTitle(
 }
 
 private fun formatAgentDisplayTitle(
+    context: Context,
     isRunning: Boolean,
     arguments: JSONObject?,
 ): String {
@@ -3805,37 +3814,38 @@ private fun formatAgentDisplayTitle(
     return when (action) {
         "list_apps", "apps", "installed_apps" -> formatArgumentDrivenTitle(
             isRunning = isRunning,
-            progressiveVerb = "Reading",
-            completedVerb = "Read",
+            progressiveVerb = context.getString(R.string.tool_title_reading),
+            completedVerb = context.getString(R.string.tool_title_read),
             subject = arguments?.optString("query").orEmpty(),
-            fallback = "installed apps",
+            fallback = context.getString(R.string.tool_title_installed_apps_fallback),
         )
-        "start" -> if (isRunning) "Starting Agent Mode display" else "Started Agent Mode display"
-        "status" -> if (isRunning) "Checking Agent Mode display" else "Checked Agent Mode display"
+        "start" -> context.getString(if (isRunning) R.string.tool_title_starting_agent_mode_display else R.string.tool_title_started_agent_mode_display)
+        "status" -> context.getString(if (isRunning) R.string.tool_title_checking_agent_mode_display else R.string.tool_title_checked_agent_mode_display)
         "launch" -> formatArgumentDrivenTitle(
             isRunning = isRunning,
-            progressiveVerb = "Launching",
-            completedVerb = "Launched",
+            progressiveVerb = context.getString(R.string.tool_title_launching),
+            completedVerb = context.getString(R.string.tool_title_launched),
             subject = arguments?.optString("target").orEmpty(),
-            fallback = "app in Agent Mode",
+            fallback = context.getString(R.string.tool_title_agent_mode_app_fallback),
         )
-        "tap" -> if (isRunning) "Tapping Agent Mode display" else "Tapped Agent Mode display"
-        "swipe" -> if (isRunning) "Swiping Agent Mode display" else "Swiped Agent Mode display"
+        "tap" -> context.getString(if (isRunning) R.string.tool_title_tapping_agent_mode_display else R.string.tool_title_tapped_agent_mode_display)
+        "swipe" -> context.getString(if (isRunning) R.string.tool_title_swiping_agent_mode_display else R.string.tool_title_swiped_agent_mode_display)
         "key" -> formatArgumentDrivenTitle(
             isRunning = isRunning,
-            progressiveVerb = "Pressing",
-            completedVerb = "Pressed",
+            progressiveVerb = context.getString(R.string.tool_title_pressing),
+            completedVerb = context.getString(R.string.tool_title_pressed),
             subject = arguments?.optString("key").orEmpty(),
-            fallback = "key in Agent Mode",
+            fallback = context.getString(R.string.tool_title_agent_mode_key_fallback),
         )
-        "text" -> if (isRunning) "Typing in Agent Mode" else "Typed in Agent Mode"
-        "screenshot" -> if (isRunning) "Capturing Agent Mode display" else "Captured Agent Mode display"
-        "stop" -> if (isRunning) "Stopping Agent Mode display" else "Stopped Agent Mode display"
-        else -> if (isRunning) "Using Agent Mode display" else "Used Agent Mode display"
+        "text" -> context.getString(if (isRunning) R.string.tool_title_typing_agent_mode else R.string.tool_title_typed_agent_mode)
+        "screenshot" -> context.getString(if (isRunning) R.string.tool_title_capturing_agent_mode_display else R.string.tool_title_captured_agent_mode_display)
+        "stop" -> context.getString(if (isRunning) R.string.tool_title_stopping_agent_mode_display else R.string.tool_title_stopped_agent_mode_display)
+        else -> context.getString(if (isRunning) R.string.tool_title_using_agent_mode_display else R.string.tool_title_used_agent_mode_display)
     }
 }
 
 private fun formatAetherToolTitle(
+    context: Context,
     toolName: String,
     isRunning: Boolean,
     arguments: JSONObject?,
@@ -3844,44 +3854,44 @@ private fun formatAetherToolTitle(
     return when (toolName.lowercase()) {
         "aether_config_get" -> formatArgumentDrivenTitle(
             isRunning = isRunning,
-            progressiveVerb = "Reading",
-            completedVerb = "Read",
+            progressiveVerb = context.getString(R.string.tool_title_reading),
+            completedVerb = context.getString(R.string.tool_title_read),
             subject = summarizeAetherCategories(arguments),
-            fallback = "Aether settings",
+            fallback = context.getString(R.string.tool_title_aether_settings_fallback),
         )
         "aether_config_set" -> formatArgumentDrivenTitle(
             isRunning = isRunning,
-            progressiveVerb = "Updating",
-            completedVerb = "Updated",
+            progressiveVerb = context.getString(R.string.tool_title_updating),
+            completedVerb = context.getString(R.string.tool_title_updated),
             subject = arguments?.optString("category").orEmpty(),
-            fallback = "Aether settings",
+            fallback = context.getString(R.string.tool_title_aether_settings_fallback),
         )
         "aether_skill_manage" -> when (action.lowercase()) {
-            "install_remote" -> formatArgumentDrivenTitle(isRunning, "Installing", "Installed", arguments?.optString("url").orEmpty(), "Agent Skill")
-            "remove" -> formatArgumentDrivenTitle(isRunning, "Removing", "Removed", optAetherString(arguments, "skill_id", "skillId"), "Agent Skill")
-            "set_enabled" -> formatArgumentDrivenTitle(isRunning, "Updating", "Updated", optAetherString(arguments, "skill_id", "skillId"), "Agent Skill")
-            else -> if (isRunning) "Reading Agent Skills" else "Read Agent Skills"
+            "install_remote" -> formatArgumentDrivenTitle(isRunning, context.getString(R.string.tool_title_installing), context.getString(R.string.tool_title_installed), arguments?.optString("url").orEmpty(), context.getString(R.string.tool_title_agent_skill_fallback))
+            "remove" -> formatArgumentDrivenTitle(isRunning, context.getString(R.string.tool_title_removing), context.getString(R.string.tool_title_removed), optAetherString(arguments, "skill_id", "skillId"), context.getString(R.string.tool_title_agent_skill_fallback))
+            "set_enabled" -> formatArgumentDrivenTitle(isRunning, context.getString(R.string.tool_title_updating), context.getString(R.string.tool_title_updated), optAetherString(arguments, "skill_id", "skillId"), context.getString(R.string.tool_title_agent_skill_fallback))
+            else -> context.getString(if (isRunning) R.string.tool_title_reading_agent_skills else R.string.tool_title_read_agent_skills)
         }
         "aether_mcp_manage" -> when (action.lowercase()) {
-            "upsert_streamable_http", "upsert_stdio" -> formatArgumentDrivenTitle(isRunning, "Saving", "Saved", optAetherString(arguments, "display_name", "displayName"), "MCP server")
-            "remove" -> formatArgumentDrivenTitle(isRunning, "Removing", "Removed", optAetherString(arguments, "server_id", "serverId"), "MCP server")
-            "set_enabled" -> formatArgumentDrivenTitle(isRunning, "Updating", "Updated", optAetherString(arguments, "server_id", "serverId"), "MCP server")
-            else -> if (isRunning) "Reading MCP servers" else "Read MCP servers"
+            "upsert_streamable_http", "upsert_stdio" -> formatArgumentDrivenTitle(isRunning, context.getString(R.string.tool_title_saving), context.getString(R.string.tool_title_saved), optAetherString(arguments, "display_name", "displayName"), context.getString(R.string.tool_title_mcp_server_fallback))
+            "remove" -> formatArgumentDrivenTitle(isRunning, context.getString(R.string.tool_title_removing), context.getString(R.string.tool_title_removed), optAetherString(arguments, "server_id", "serverId"), context.getString(R.string.tool_title_mcp_server_fallback))
+            "set_enabled" -> formatArgumentDrivenTitle(isRunning, context.getString(R.string.tool_title_updating), context.getString(R.string.tool_title_updated), optAetherString(arguments, "server_id", "serverId"), context.getString(R.string.tool_title_mcp_server_fallback))
+            else -> context.getString(if (isRunning) R.string.tool_title_reading_mcp_servers else R.string.tool_title_read_mcp_servers)
         }
         "aether_termux_manage" -> when (action.lowercase()) {
-            "configure_root_access" -> if (isRunning) "Configuring Termux root access" else "Configured Termux root access"
-            "inspect_root_setup" -> if (isRunning) "Checking Root setup" else "Checked Root setup"
-            else -> if (isRunning) "Checking Termux setup" else "Checked Termux setup"
+            "configure_root_access" -> context.getString(if (isRunning) R.string.tool_title_configuring_termux_root else R.string.tool_title_configured_termux_root)
+            "inspect_root_setup" -> context.getString(if (isRunning) R.string.tool_title_checking_root_setup else R.string.tool_title_checked_root_setup)
+            else -> context.getString(if (isRunning) R.string.tool_title_checking_termux_setup else R.string.tool_title_checked_termux_setup)
         }
         "aether_agent_mode_manage" -> when (action.lowercase()) {
-            "set_authorization" -> if (isRunning) "Updating Agent Mode authorization" else "Updated Agent Mode authorization"
-            "request_shizuku_permission" -> if (isRunning) "Requesting Shizuku permission" else "Requested Shizuku permission"
-            "stop_display" -> if (isRunning) "Stopping Agent Mode display" else "Stopped Agent Mode display"
-            "refresh_displays" -> if (isRunning) "Refreshing Agent Mode displays" else "Refreshed Agent Mode displays"
-            else -> if (isRunning) "Checking Agent Mode authorization" else "Checked Agent Mode authorization"
+            "set_authorization" -> context.getString(if (isRunning) R.string.tool_title_updating_agent_mode_authorization else R.string.tool_title_updated_agent_mode_authorization)
+            "request_shizuku_permission" -> context.getString(if (isRunning) R.string.tool_title_requesting_shizuku_permission else R.string.tool_title_requested_shizuku_permission)
+            "stop_display" -> context.getString(if (isRunning) R.string.tool_title_stopping_agent_mode_display else R.string.tool_title_stopped_agent_mode_display)
+            "refresh_displays" -> context.getString(if (isRunning) R.string.tool_title_refreshing_agent_mode_displays else R.string.tool_title_refreshed_agent_mode_displays)
+            else -> context.getString(if (isRunning) R.string.tool_title_checking_agent_mode_authorization else R.string.tool_title_checked_agent_mode_authorization)
         }
-        "aether_developer_manage" -> if (isRunning) "Reading Aether diagnostics" else "Read Aether diagnostics"
-        else -> if (isRunning) "Managing Aether" else "Managed Aether"
+        "aether_developer_manage" -> context.getString(if (isRunning) R.string.tool_title_reading_aether_diagnostics else R.string.tool_title_read_aether_diagnostics)
+        else -> context.getString(if (isRunning) R.string.tool_title_managing_aether else R.string.tool_title_managed_aether)
     }
 }
 
@@ -3991,20 +4001,21 @@ private fun summarizeAgentDisplayCommand(arguments: JSONObject?): String {
 }
 
 private fun buildAgentModeReplayTimeline(
+    context: Context,
     messages: List<ChatMessage>,
 ): AgentModeReplayTimeline {
     val frames = mutableListOf<AgentModeReplayFrame>()
     val interleavedTextMessageIds = mutableSetOf<String>()
     var firstFrameMessageIndex = -1
     messages.forEachIndexed { index, message ->
-        val messageFrames = buildAgentModeReplayFrames(message.toolInvocations)
+        val messageFrames = buildAgentModeReplayFrames(context, message.toolInvocations)
         if (messageFrames.isNotEmpty()) {
             if (firstFrameMessageIndex < 0) {
                 firstFrameMessageIndex = index
             }
             frames += messageFrames
         }
-        if (message.text.isNotBlank() && frames.isNotEmpty() && messages.hasFutureAgentModeFrame(index + 1)) {
+        if (message.text.isNotBlank() && frames.isNotEmpty() && messages.hasFutureAgentModeFrame(context, index + 1)) {
             frames[frames.lastIndex] = frames.last().copy(overlayText = message.text)
             interleavedTextMessageIds += message.id
         }
@@ -4016,12 +4027,13 @@ private fun buildAgentModeReplayTimeline(
     )
 }
 
-private fun List<ChatMessage>.hasFutureAgentModeFrame(startIndex: Int): Boolean =
+private fun List<ChatMessage>.hasFutureAgentModeFrame(context: Context, startIndex: Int): Boolean =
     drop(startIndex).any { message ->
-        buildAgentModeReplayFrames(message.toolInvocations).isNotEmpty()
+        buildAgentModeReplayFrames(context, message.toolInvocations).isNotEmpty()
     }
 
 private fun buildAgentModeReplayFrames(
+    context: Context,
     toolInvocations: List<ChatToolInvocation>,
 ): List<AgentModeReplayFrame> = buildList {
     toolInvocations.forEach { invocation ->
@@ -4041,7 +4053,12 @@ private fun buildAgentModeReplayFrames(
                 cursorY = output.optionalInt("cursor_y", "cursorY"),
                 overlayText = "",
                 completedAtUptimeMillis = invocation.completedAtUptimeMillis ?: invocation.startedAtUptimeMillis,
-                toolTitle = formatToolInvocationTitleLabel(invocation.copy(isRunning = true)),
+                toolTitle = formatToolInvocationTitleLabel(
+                    context = context,
+                    toolInvocation = invocation,
+                    isRunningOverride = true,
+                    arguments = parseJsonObject(invocation.argumentsJson),
+                ),
             )
         )
     }

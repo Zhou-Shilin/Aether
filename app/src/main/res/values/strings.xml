@@ -113,6 +113,7 @@
     <string name="common_open">Open</string>
     <string name="common_error">Error</string>
     <string name="chat_thought_for_duration">Thought for %1$s</string>
+    <string name="chat_working_for_duration">Working for %1$s</string>
     <string name="chat_waiting_for_reasoning">Waiting for reasoning...</string>
     <string name="chat_raw_reasoning">Raw reasoning</string>
     <string name="chat_summarizing_reasoning">Summarizing reasoning</string>
@@ -418,7 +419,10 @@
     <string name="attachment_workspace_copy_failed">Workspace copy failed</string>
     <string name="attachment_remove">Remove attachment</string>
     <string name="attachment_close_preview">Close preview</string>
+    <string name="markdown_image_preview_title">Image preview</string>
+    <string name="markdown_preview_unavailable">Preview unavailable.</string>
     <string name="markdown_open_original">Open original</string>
+    <string name="markdown_mermaid_preview_title">Mermaid preview</string>
 
     <!-- Search -->
     <string name="search_chats">Search chats</string>
