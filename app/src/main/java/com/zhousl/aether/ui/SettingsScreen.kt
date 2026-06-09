@@ -99,6 +99,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
@@ -106,6 +107,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.zhousl.aether.BuildConfig
+
 import com.zhousl.aether.R
 import java.util.Locale
 import com.zhousl.aether.data.AetherPrivacyPolicyUrl
@@ -272,8 +274,49 @@ private const val PageTransitionDuration = 320
 private val PageTransitionEasing = CubicBezierEasing(0.22f, 0.84f, 0.18f, 1f)
 private val SettingsTopFadeHeight = 40.dp
 
-private fun tr(strings: AetherStrings, english: String, chinese: String): String =
-    if (strings.appLanguage == AppLanguage.SimplifiedChinese) chinese else english
+
+
+@Composable
+private fun settingsLanguageDisplayName(language: AppLanguage): String = when (language) {
+    AppLanguage.English -> stringResource(R.string.language_english)
+    AppLanguage.SimplifiedChinese -> stringResource(R.string.language_simplified_chinese)
+}
+
+@Composable
+private fun settingsLanguageSubtitle(language: AppLanguage): String = when (language) {
+    AppLanguage.English -> stringResource(R.string.settings_language_english_interface)
+    AppLanguage.SimplifiedChinese -> stringResource(R.string.settings_language_simplified_chinese_interface)
+}
+
+@Composable
+private fun settingsThemeDisplayName(themeMode: AppThemeMode): String = when (themeMode) {
+    AppThemeMode.System -> stringResource(R.string.theme_system)
+    AppThemeMode.Light -> stringResource(R.string.theme_light)
+    AppThemeMode.Dark -> stringResource(R.string.theme_dark)
+}
+
+@Composable
+private fun settingsThemeSubtitle(themeMode: AppThemeMode): String = when (themeMode) {
+    AppThemeMode.System -> stringResource(R.string.settings_system_theme_subtitle)
+    AppThemeMode.Light -> stringResource(R.string.settings_light_theme_subtitle)
+    AppThemeMode.Dark -> stringResource(R.string.settings_dark_theme_subtitle)
+}
+
+@Composable
+private fun settingsGeneralSummary(language: AppLanguage, themeMode: AppThemeMode): String =
+    stringResource(
+        R.string.settings_general_summary,
+        settingsLanguageDisplayName(language),
+        settingsThemeDisplayName(themeMode),
+    )
+
+@Composable
+private fun settingsEnabledProvidersSummary(enabledCount: Int): String =
+    stringResource(R.string.settings_enabled_providers_count, enabledCount)
+
+@Composable
+private fun settingsReleaseSummary(versionName: String): String =
+    stringResource(R.string.settings_release_summary, versionName)
 
 private fun settingsTopOverlayBodyGradient(): Brush = Brush.verticalGradient(
     colorStops = arrayOf(
@@ -401,6 +444,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    val agentModeRequiresTermuxToastLabel = stringResource(R.string.settings_agent_mode_requires_termux_toast)
     // Mutable field values - survive recomposition & config changes
     var systemPromptValue by rememberSaveable(stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(systemPrompt))
@@ -438,11 +482,14 @@ fun SettingsScreen(
     var themeModeValue by rememberSaveable {
         mutableStateOf(themeMode)
     }
+    LaunchedEffect(language) {
+        languageValue = language
+    }
     var defaultChatModelKeyValue by rememberSaveable { mutableStateOf(defaultChatModelKey) }
     var defaultTitleModelKeyValue by rememberSaveable { mutableStateOf(defaultTitleModelKey) }
     var defaultNamingModelKeyValue by rememberSaveable { mutableStateOf(defaultNamingModelKey) }
     var defaultCompactingModelKeyValue by rememberSaveable { mutableStateOf(defaultCompactingModelKey) }
-    val strings = remember(languageValue) { aetherStringsFor(languageValue) }
+
     val enabledModelOptions = remember(providerConfigs) { providerConfigs.availableModelOptions() }
 
     // Track which provider is being edited
@@ -620,14 +667,13 @@ fun SettingsScreen(
     ) { targetPage ->
         when (targetPage) {
             SettingsPage.Hub -> SettingsHub(
-                strings = strings,
-                generalSettingsSummary = strings.generalSettingsSummary(
+                generalSettingsSummary = settingsGeneralSummary(
                     language = languageValue,
                     themeMode = themeModeValue,
                 ),
                 activeProviderName = providerConfigs.count { it.isEnabled }.let { enabledCount ->
                     when {
-                        enabledCount > 1 -> tr(strings, "$enabledCount providers enabled", "已启用 $enabledCount 个 Provider")
+                        enabledCount > 1 -> settingsEnabledProvidersSummary(enabledCount)
                         enabledCount == 1 -> providerConfigs.firstOrNull { it.isEnabled }?.name.orEmpty()
                         enabledModelOptions.isNotEmpty() -> enabledModelOptions.first().fullLabel
                         else -> provider.displayName
@@ -637,19 +683,22 @@ fun SettingsScreen(
                 tavilyConfigured = tavilyApiKeyValue.text.isNotBlank(),
                 reliabilitySummary = buildString {
                     append(
-                        "Reconnect after ${
+                        stringResource(
+                            R.string.settings_reconnect_after_seconds,
                             normalizeLlmInactivityReconnectTimeoutSeconds(
                                 llmInactivityReconnectTimeoutValue.text.trim().toIntOrNull()
-                            )
-                        }s"
+                            ),
+                        )
                     )
                     append(" · ")
                     append(
-                        if (keepTasksRunningInBackgroundValue) {
-                            "Background runs on"
-                        } else {
-                            "Background runs off"
-                        }
+                        stringResource(
+                            if (keepTasksRunningInBackgroundValue) {
+                                R.string.settings_background_runs_on
+                            } else {
+                                R.string.settings_background_runs_off
+                            },
+                        )
                     )
                 },
                 termuxReady = termuxSetupState.isReady,
@@ -661,7 +710,7 @@ fun SettingsScreen(
                     if (page == SettingsPage.AgentMode && !termuxSetupState.isReady) {
                         Toast.makeText(
                             context,
-                            tr(strings, "Complete Termux setup before configuring Agent Mode.", "请先完成 Termux 设置，再配置 Agent 模式。"),
+                            agentModeRequiresTermuxToastLabel,
                             Toast.LENGTH_SHORT,
                         ).show()
                     } else {
@@ -672,7 +721,6 @@ fun SettingsScreen(
             )
 
             SettingsPage.General -> GeneralSettingsPageV2(
-                strings = strings,
                 selectedLanguage = languageValue,
                 onLanguageSelected = {
                     languageValue = it
@@ -713,60 +761,60 @@ fun SettingsScreen(
             )
 
             SettingsPage.DefaultChatModel -> ModelSelectionListPage(
-                title = tr(strings, "Default Chat Model", "默认聊天模型"),
-                subtitle = tr(strings, "Used for new chats and when a conversation has not selected a model yet.", "用于新建聊天，以及当前会话尚未单独选择模型时。"),
+                title = stringResource(R.string.settings_default_chat_model),
+                subtitle = stringResource(R.string.settings_default_chat_model_subtitle),
                 selectedKey = defaultChatModelKeyValue,
                 options = enabledModelOptions,
                 automaticLabel = enabledModelOptions.findModelOption(
                     enabledModelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Chat)
-                )?.fullLabel?.let { tr(strings, "Automatic · $it", "自动选择 · $it") }
-                    ?: tr(strings, "Automatic", "自动选择"),
-                automaticSubtitle = tr(strings, "Prioritize the SOTA models", "优先选择前沿模型"),
+                )?.fullLabel?.let { stringResource(R.string.settings_automatic_model_with_name, it) }
+                    ?: stringResource(R.string.settings_automatic_model),
+                automaticSubtitle = stringResource(R.string.settings_prioritize_sota_models),
                 onSelected = { defaultChatModelKeyValue = it },
                 onBack = { currentPage = SettingsPage.DefaultModels.name },
             )
 
             SettingsPage.DefaultTitleModel -> ModelSelectionListPage(
-                title = tr(strings, "Default Title Model", "默认标题模型"),
-                subtitle = tr(strings, "Used when Aether automatically generates conversation titles.", "用于 Aether 自动生成会话标题。"),
+                title = stringResource(R.string.settings_default_title_model),
+                subtitle = stringResource(R.string.settings_default_title_model_subtitle),
                 selectedKey = defaultTitleModelKeyValue,
                 options = enabledModelOptions,
                 automaticLabel = enabledModelOptions.findModelOption(
                     enabledModelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Title)
                         .ifBlank { enabledModelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Chat) }
-                )?.fullLabel?.let { tr(strings, "Automatic · $it", "自动选择 · $it") }
-                    ?: tr(strings, "Automatic", "自动选择"),
-                automaticSubtitle = tr(strings, "Prioritize the SOTA models", "优先选择前沿模型"),
+                )?.fullLabel?.let { stringResource(R.string.settings_automatic_model_with_name, it) }
+                    ?: stringResource(R.string.settings_automatic_model),
+                automaticSubtitle = stringResource(R.string.settings_prioritize_sota_models),
                 onSelected = { defaultTitleModelKeyValue = it },
                 onBack = { currentPage = SettingsPage.DefaultModels.name },
             )
 
             SettingsPage.DefaultNamingModel -> ModelSelectionListPage(
-                title = tr(strings, "Default Naming Model", "默认命名模型"),
-                subtitle = tr(strings, "Used for automatic naming flows such as Agent Skills and MCP labels.", "用于 Agent Skills、MCP 等自动命名流程。"),
+                title = stringResource(R.string.settings_default_naming_model),
+                subtitle = stringResource(R.string.settings_default_naming_model_subtitle),
                 selectedKey = defaultNamingModelKeyValue,
                 options = enabledModelOptions,
                 automaticLabel = enabledModelOptions.findModelOption(
                     enabledModelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Naming)
                         .ifBlank { enabledModelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Chat) }
-                )?.fullLabel?.let { tr(strings, "Automatic · $it", "自动选择 · $it") }
-                    ?: tr(strings, "Automatic", "自动选择"),
-                automaticSubtitle = tr(strings, "Prioritize the SOTA models", "优先选择前沿模型"),
+                )?.fullLabel?.let { stringResource(R.string.settings_automatic_model_with_name, it) }
+                    ?: stringResource(R.string.settings_automatic_model),
+                automaticSubtitle = stringResource(R.string.settings_prioritize_sota_models),
                 onSelected = { defaultNamingModelKeyValue = it },
                 onBack = { currentPage = SettingsPage.DefaultModels.name },
             )
 
             SettingsPage.DefaultCompactingModel -> ModelSelectionListPage(
-                title = tr(strings, "Default Compacting Model", "默认压缩模型"),
-                subtitle = tr(strings, "Used when /compact summarizes the current conversation.", "用于 /compact 总结当前会话。"),
+                title = stringResource(R.string.settings_default_compacting_model),
+                subtitle = stringResource(R.string.settings_default_compacting_model_subtitle),
                 selectedKey = defaultCompactingModelKeyValue,
                 options = enabledModelOptions,
                 automaticLabel = enabledModelOptions.findModelOption(
                     enabledModelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Compacting)
                         .ifBlank { enabledModelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Chat) }
-                )?.fullLabel?.let { tr(strings, "Automatic · $it", "自动选择 · $it") }
-                    ?: tr(strings, "Automatic", "自动选择"),
-                automaticSubtitle = tr(strings, "Prioritize efficient summary models", "优先选择高效总结模型"),
+                )?.fullLabel?.let { stringResource(R.string.settings_automatic_model_with_name, it) }
+                    ?: stringResource(R.string.settings_automatic_model),
+                automaticSubtitle = stringResource(R.string.settings_prioritize_efficient_summary_models),
                 onSelected = { defaultCompactingModelKeyValue = it },
                 onBack = { currentPage = SettingsPage.DefaultModels.name },
             )
@@ -799,14 +847,14 @@ fun SettingsScreen(
             }
 
             SettingsPage.Personalization -> PersonalizationPage(
-                title = strings.personalization,
+                title = stringResource(R.string.settings_personalization),
                 systemPromptValue = systemPromptValue,
                 onSystemPromptChanged = { systemPromptValue = it },
                 onBack = { currentPage = SettingsPage.Hub.name },
             )
 
             SettingsPage.WebTools -> WebToolsPage(
-                title = strings.webTools,
+                title = stringResource(R.string.settings_web_tools),
                 tavilyApiKeyValue = tavilyApiKeyValue,
                 onTavilyApiKeyChanged = { tavilyApiKeyValue = it },
                 tavilyBaseUrlValue = tavilyBaseUrlValue,
@@ -815,7 +863,7 @@ fun SettingsScreen(
             )
 
             SettingsPage.Reliability -> ReliabilityPage(
-                title = strings.reliability,
+                title = stringResource(R.string.settings_reliability),
                 llmInactivityReconnectTimeoutValue = llmInactivityReconnectTimeoutValue,
                 onLlmInactivityReconnectTimeoutChanged = { llmInactivityReconnectTimeoutValue = it },
                 keepTasksRunningInBackground = keepTasksRunningInBackgroundValue,
@@ -826,7 +874,7 @@ fun SettingsScreen(
             )
 
             SettingsPage.Skills -> SkillsListPage(
-                title = strings.agentSkills,
+                title = stringResource(R.string.settings_agent_skills),
                 installedSkills = installedSkills,
                 onToggleSkillEnabled = onToggleSkillEnabled,
                 onRemoveSkill = onRemoveSkill,
@@ -835,7 +883,7 @@ fun SettingsScreen(
             )
 
             SettingsPage.AddSkill -> AddSkillPage(
-                title = strings.agentSkills,
+                title = stringResource(R.string.settings_agent_skills),
                 onImportSkillFolder = onImportSkillFolder,
                 onImportSkillZip = { callback ->
                     onImportSkillZip { success ->
@@ -853,7 +901,7 @@ fun SettingsScreen(
             )
 
             SettingsPage.McpServers -> McpServersListPage(
-                title = strings.mcpServers,
+                title = stringResource(R.string.settings_mcp_servers),
                 mcpServers = mcpServers,
                 onToggleMcpServerEnabled = onToggleMcpServerEnabled,
                 onRemoveMcpServer = onRemoveMcpServer,
@@ -867,7 +915,7 @@ fun SettingsScreen(
             )
 
             SettingsPage.AddMcpServer -> AddMcpServerPage(
-                title = strings.mcpServers,
+                title = stringResource(R.string.settings_mcp_servers),
                 existingServer = null,
                 onSaveHttpMcpServer = { serverId, name, url, headers ->
                     onSaveHttpMcpServer(serverId, name, url, headers)
@@ -881,7 +929,7 @@ fun SettingsScreen(
             )
 
             SettingsPage.EditMcpServer -> AddMcpServerPage(
-                title = strings.mcpServers,
+                title = stringResource(R.string.settings_mcp_servers),
                 existingServer = mcpServers.firstOrNull { it.id == editingMcpServerId },
                 onSaveHttpMcpServer = { serverId, name, url, headers ->
                     onSaveHttpMcpServer(serverId, name, url, headers)
@@ -925,7 +973,7 @@ fun SettingsScreen(
             )
 
             SettingsPage.Termux -> TermuxSettingsPage(
-                title = strings.termux,
+                title = stringResource(R.string.settings_termux),
                 termuxSetupState = termuxSetupState,
                 rootSetupState = rootSetupState,
                 selectedWorkspaceMode = agentWorkspaceModeValue,
@@ -944,7 +992,7 @@ fun SettingsScreen(
             )
 
             SettingsPage.AgentMode -> AgentModeSettingsPage(
-                title = strings.agentMode,
+                title = stringResource(R.string.settings_agent_mode),
                 termuxSetupState = termuxSetupState,
                 agentModeAuthorizationEnabled = agentModeAuthorizationEnabledValue,
                 agentModeAuthorizationMethod = agentModeAuthorizationMethodValue,
@@ -981,7 +1029,7 @@ fun SettingsScreen(
             )
 
             SettingsPage.Developer -> DeveloperSettingsPage(
-                title = strings.developerSettings,
+                title = stringResource(R.string.settings_developer),
                 onReplayFollowUpOnboarding = ::persistAndReplayFollowUpOnboarding,
                 onImportAppData = onImportAppData,
                 onExportAppData = onExportAppData,
@@ -993,7 +1041,7 @@ fun SettingsScreen(
             )
 
             SettingsPage.About -> AboutPage(
-                title = strings.about,
+                title = stringResource(R.string.settings_about),
                 appUpdate = appUpdate,
                 onOpenWebsite = onOpenWebsite,
                 onOpenPrivacyPolicy = onOpenPrivacyPolicy,
@@ -1011,7 +1059,6 @@ fun SettingsScreen(
 
 @Composable
 private fun SettingsHub(
-    strings: AetherStrings,
     generalSettingsSummary: String,
     activeProviderName: String,
     systemPromptSnippet: String,
@@ -1056,8 +1103,8 @@ private fun SettingsHub(
                 SettingsCardGroup {
                     SettingsNavRow(
                         icon = Icons.Rounded.AutoAwesome,
-                        title = strings.generalSettings,
-                        subtitle = generalSettingsSummary.ifBlank { strings.generalSettingsHubHint },
+                        title = stringResource(R.string.settings_general),
+                        subtitle = generalSettingsSummary.ifBlank { stringResource(R.string.settings_general_hint) },
                         onClick = { onNavigate(SettingsPage.General) },
                     )
                 }
@@ -1068,32 +1115,32 @@ private fun SettingsHub(
             SettingsCardGroup {
                 SettingsNavRow(
                     icon = Icons.Rounded.Cloud,
-                    title = strings.modelProviders,
+                    title = stringResource(R.string.settings_model_providers),
                     subtitle = activeProviderName,
                     onClick = { onNavigate(SettingsPage.Providers) },
                 )
                 CardDivider()
                 SettingsNavRow(
                     icon = Icons.Rounded.Person,
-                    title = strings.personalization,
-                    subtitle = systemPromptSnippet.ifBlank { strings.customInstructions },
+                    title = stringResource(R.string.settings_personalization),
+                    subtitle = systemPromptSnippet.ifBlank { stringResource(R.string.settings_custom_instructions) },
                     onClick = { onNavigate(SettingsPage.Personalization) },
                 )
                 CardDivider()
                 SettingsNavRow(
                     icon = Icons.Rounded.Link,
-                    title = strings.webTools,
+                    title = stringResource(R.string.settings_web_tools),
                     subtitle = if (tavilyConfigured) {
-                        strings.tavilyConfigured
+                        stringResource(R.string.settings_tavily_configured)
                     } else {
-                        strings.tavilyNotConfigured
+                        stringResource(R.string.settings_tavily_not_configured)
                     },
                     onClick = { onNavigate(SettingsPage.WebTools) },
                 )
                 CardDivider()
                 SettingsNavRow(
                     icon = Icons.Rounded.Refresh,
-                    title = strings.reliability,
+                    title = stringResource(R.string.settings_reliability),
                     subtitle = reliabilitySummary,
                     onClick = { onNavigate(SettingsPage.Reliability) },
                 )
@@ -1105,43 +1152,39 @@ private fun SettingsHub(
             SettingsCardGroup {
                 SettingsNavRow(
                     icon = Icons.Rounded.Extension,
-                    title = strings.agentSkills,
-                    subtitle = strings.skillCountSummary(skillCount),
+                    title = stringResource(R.string.settings_agent_skills),
+                    subtitle = stringResource(R.string.settings_skills_count_configured, skillCount),
                     onClick = { onNavigate(SettingsPage.Skills) },
                 )
                 CardDivider()
                 SettingsNavRow(
                     icon = Icons.Rounded.Code,
-                    title = strings.mcpServers,
-                    subtitle = strings.serverCountSummary(mcpServerCount),
+                    title = stringResource(R.string.settings_mcp_servers),
+                    subtitle = stringResource(R.string.settings_mcp_server_count_summary, mcpServerCount),
                     onClick = { onNavigate(SettingsPage.McpServers) },
                 )
                 CardDivider()
                 SettingsNavRow(
                     icon = Icons.Rounded.Schedule,
-                    title = tr(strings, "Scheduled Tasks", "定时任务"),
-                    subtitle = if (scheduledTaskCount == 0) {
-                        tr(strings, "No scheduled tasks", "暂无定时任务")
-                    } else {
-                        tr(strings, "$scheduledTaskCount configured", "已配置 $scheduledTaskCount 个")
-                    },
+                    title = stringResource(R.string.settings_scheduled_tasks),
+                    subtitle = stringResource(R.string.settings_scheduled_tasks_count_configured, scheduledTaskCount),
                     onClick = { onNavigate(SettingsPage.ScheduledTasks) },
                 )
                 CardDivider()
                 SettingsNavRow(
                     icon = Icons.Rounded.Terminal,
-                    title = strings.termux,
-                    subtitle = if (termuxReady) strings.connected else strings.setupRequired,
+                    title = stringResource(R.string.settings_termux),
+                    subtitle = if (termuxReady) stringResource(R.string.settings_connected) else stringResource(R.string.settings_setup_required),
                     onClick = { onNavigate(SettingsPage.Termux) },
                 )
                 CardDivider()
                 SettingsNavRow(
                     icon = LucideIcons.MousePointer2,
-                    title = strings.agentMode,
+                    title = stringResource(R.string.settings_agent_mode),
                     subtitle = if (termuxReady) {
-                        strings.agentModeSubtitle
+                        stringResource(R.string.settings_agent_mode_subtitle)
                     } else {
-                        tr(strings, "Requires Termux setup", "Requires Termux setup")
+                        stringResource(R.string.settings_requires_termux_setup)
                     },
                     enabled = termuxReady,
                     onClick = { onNavigate(SettingsPage.AgentMode) },
@@ -1154,15 +1197,15 @@ private fun SettingsHub(
             SettingsCardGroup {
                 SettingsNavRow(
                     icon = Icons.Rounded.AutoAwesome,
-                    title = strings.getStartedTour,
-                    subtitle = strings.getStartedTourSubtitle,
+                    title = stringResource(R.string.settings_get_started_tour),
+                    subtitle = stringResource(R.string.settings_get_started_tour_subtitle),
                     onClick = onReplayOnboarding,
                 )
                 CardDivider()
                 SettingsNavRow(
                     icon = Icons.Rounded.Code,
-                    title = strings.developerSettings,
-                    subtitle = strings.developerSettingsSubtitle,
+                    title = stringResource(R.string.settings_developer),
+                    subtitle = stringResource(R.string.settings_developer_subtitle),
                     onClick = { onNavigate(SettingsPage.Developer) },
                 )
             }
@@ -1172,8 +1215,8 @@ private fun SettingsHub(
             SettingsCardGroup {
                 SettingsNavRow(
                     icon = Icons.Rounded.Info,
-                    title = strings.about,
-                    subtitle = "Release ${BuildConfig.VERSION_NAME}",
+                    title = stringResource(R.string.settings_about),
+                    subtitle = settingsReleaseSummary(BuildConfig.VERSION_NAME),
                     onClick = { onNavigate(SettingsPage.About) },
                 )
             }
@@ -1183,7 +1226,7 @@ private fun SettingsHub(
 
             SettingsTopBarOverlay(
                 modifier = Modifier.align(Alignment.TopCenter),
-                title = strings.settings,
+                title = stringResource(R.string.settings_title),
                 onBack = onBack,
                 onBodyHeightChanged = { topBarBodyHeightPx = it },
             )
@@ -1197,23 +1240,22 @@ private fun SettingsHub(
 
 @Composable
 private fun GeneralSettingsPage(
-    strings: AetherStrings,
     selectedLanguage: AppLanguage,
     onLanguageSelected: (AppLanguage) -> Unit,
     selectedThemeMode: AppThemeMode,
     onThemeModeSelected: (AppThemeMode) -> Unit,
     onBack: () -> Unit,
 ) {
-    SubPageScaffold(title = strings.generalSettings, onBack = onBack) {
+    SubPageScaffold(title = stringResource(R.string.settings_general), onBack = onBack) {
         SettingsCardGroup {
             Text(
-                text = strings.language,
+                text = stringResource(R.string.settings_language),
                 style = MaterialTheme.typography.titleMedium,
                 color = AetherOnSurface,
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                text = strings.languageDescription,
+                text = stringResource(R.string.settings_language_description),
                 style = MaterialTheme.typography.bodySmall,
                 color = AetherOnSurfaceVariant,
             )
@@ -1221,11 +1263,11 @@ private fun GeneralSettingsPage(
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 AppLanguage.entries.forEach { option ->
                     SettingsChoiceRow(
-                        title = strings.languageDisplayName(option),
+                        title = settingsLanguageDisplayName(option),
                         subtitle = if (option == AppLanguage.English) {
-                            "English interface"
+                            stringResource(R.string.settings_language_english_interface)
                         } else {
-                            "Simplified Chinese interface"
+                            stringResource(R.string.settings_language_simplified_chinese_interface)
                         },
                         selected = option == selectedLanguage,
                         onClick = { onLanguageSelected(option) },
@@ -1238,13 +1280,13 @@ private fun GeneralSettingsPage(
 
         SettingsCardGroup {
             Text(
-                text = strings.theme,
+                text = stringResource(R.string.settings_theme),
                 style = MaterialTheme.typography.titleMedium,
                 color = AetherOnSurface,
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                text = strings.themeDescription,
+                text = stringResource(R.string.settings_theme_description),
                 style = MaterialTheme.typography.bodySmall,
                 color = AetherOnSurfaceVariant,
             )
@@ -1252,11 +1294,11 @@ private fun GeneralSettingsPage(
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 AppThemeMode.entries.forEach { option ->
                     SettingsChoiceRow(
-                        title = strings.themeDisplayName(option),
+                        title = settingsThemeDisplayName(option),
                         subtitle = if (option == AppThemeMode.Light) {
-                            strings.lightThemeSubtitle
+                            stringResource(R.string.settings_light_theme_subtitle)
                         } else {
-                            strings.darkThemeSubtitle
+                            stringResource(R.string.settings_dark_theme_subtitle)
                         },
                         selected = option == selectedThemeMode,
                         onClick = { onThemeModeSelected(option) },
@@ -1269,28 +1311,23 @@ private fun GeneralSettingsPage(
 
 @Composable
 private fun GeneralSettingsPageV2(
-    strings: AetherStrings,
     selectedLanguage: AppLanguage,
     onLanguageSelected: (AppLanguage) -> Unit,
     selectedThemeMode: AppThemeMode,
     onThemeModeSelected: (AppThemeMode) -> Unit,
     onBack: () -> Unit,
 ) {
-    SubPageScaffold(title = strings.generalSettings, onBack = onBack) {
+    SubPageScaffold(title = stringResource(R.string.settings_general), onBack = onBack) {
         SettingsCardGroup {
             SelectionDropdownField(
-                label = strings.language,
-                supportingText = strings.languageDescription,
-                selectedLabel = strings.languageDisplayName(selectedLanguage),
+                label = stringResource(R.string.settings_language),
+                supportingText = stringResource(R.string.settings_language_description),
+                selectedLabel = settingsLanguageDisplayName(selectedLanguage),
                 options = AppLanguage.entries.map { option ->
                     SelectionOption(
                         key = option.storageValue,
-                        title = strings.languageDisplayName(option),
-                        subtitle = if (option == AppLanguage.English) {
-                            "English interface"
-                        } else {
-                            "Simplified Chinese interface"
-                        },
+                        title = settingsLanguageDisplayName(option),
+                        subtitle = settingsLanguageSubtitle(option),
                         selected = option == selectedLanguage,
                         onClick = { onLanguageSelected(option) },
                     )
@@ -1302,14 +1339,14 @@ private fun GeneralSettingsPageV2(
 
         SettingsCardGroup {
             SelectionDropdownField(
-                label = strings.theme,
-                supportingText = strings.themeDescription,
-                selectedLabel = strings.themeDisplayName(selectedThemeMode),
+                label = stringResource(R.string.settings_theme),
+                supportingText = stringResource(R.string.settings_theme_description),
+                selectedLabel = settingsThemeDisplayName(selectedThemeMode),
                 options = AppThemeMode.entries.map { option ->
                     SelectionOption(
                         key = option.storageValue,
-                        title = strings.themeDisplayName(option),
-                        subtitle = strings.themeSubtitle(option),
+                        title = settingsThemeDisplayName(option),
+                        subtitle = settingsThemeSubtitle(option),
                         selected = option == selectedThemeMode,
                         onClick = { onThemeModeSelected(option) },
                     )
@@ -1324,21 +1361,16 @@ private fun TermuxEnvironmentVariablesSection(
     variables: List<TermuxEnvironmentVariable>,
     onVariablesChanged: (List<TermuxEnvironmentVariable>) -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     SettingsCardGroup {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = tr(strings, "Environment variables", "环境变量"),
+                text = stringResource(R.string.settings_environment_variables),
                 style = MaterialTheme.typography.titleMedium,
                 color = AetherOnSurface,
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                text = tr(
-                    strings,
-                    "Injected into every Termux bash command, for example HTTP_PROXY or HTTPS_PROXY.",
-                    "每次运行 Termux bash 命令时都会注入，例如 HTTP_PROXY 或 HTTPS_PROXY。",
-                ),
+                text = stringResource(R.string.settings_environment_variables_description),
                 style = MaterialTheme.typography.bodySmall,
                 color = AetherOnSurfaceVariant,
             )
@@ -1368,7 +1400,7 @@ private fun TermuxEnvironmentVariablesSection(
                 }
 
                 ChatGptTextField(
-                    label = tr(strings, "Name", "名称"),
+                    label = stringResource(R.string.settings_variable_name),
                     value = nameValue,
                     onValueChange = {
                         nameValue = it
@@ -1376,7 +1408,7 @@ private fun TermuxEnvironmentVariablesSection(
                     },
                 )
                 ChatGptTextField(
-                    label = tr(strings, "Value", "值"),
+                    label = stringResource(R.string.settings_variable_value),
                     value = valueValue,
                     onValueChange = {
                         valueValue = it
@@ -1386,7 +1418,7 @@ private fun TermuxEnvironmentVariablesSection(
                 if (variable.name.isNotBlank() || variable.value.isNotBlank()) {
                     Spacer(Modifier.height(8.dp))
                     SettingsSubtleActionButton(
-                        label = tr(strings, "Remove variable", "删除变量"),
+                        label = stringResource(R.string.settings_remove_variable),
                         onClick = {
                             commitRows(rows.filterIndexed { rowIndex, _ -> rowIndex != index })
                         },
@@ -1396,7 +1428,7 @@ private fun TermuxEnvironmentVariablesSection(
                 Spacer(Modifier.height(12.dp))
             }
             SettingsSubtleActionButton(
-                label = tr(strings, "Add variable", "添加变量"),
+                label = stringResource(R.string.settings_add_variable),
                 onClick = { onVariablesChanged(variables + TermuxEnvironmentVariable("", "")) },
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -1414,9 +1446,8 @@ private fun ProvidersListPage(
     onAddNew: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     SubPageScaffold(
-        title = strings.modelProviders,
+        title = stringResource(R.string.settings_model_providers),
         onBack = onBack,
         trailingIcon = Icons.Rounded.Add,
         onTrailingAction = onAddNew,
@@ -1430,19 +1461,19 @@ private fun ProvidersListPage(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        tr(strings, "No providers configured", "未配置模型提供方"),
+                        stringResource(R.string.settings_no_providers_configured),
                         style = MaterialTheme.typography.titleMedium,
                         color = AetherOnSurface,
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        tr(strings, "Add a provider to connect to an LLM API.", "Add a provider to connect to an LLM API."),
+                        stringResource(R.string.settings_add_provider_description),
                         style = MaterialTheme.typography.bodyMedium,
                         color = AetherOnSurfaceVariant,
                     )
                     Spacer(Modifier.height(16.dp))
                     SettingsActionButton(
-                        label = tr(strings, "Add Provider", "Add Provider"),
+                        label = stringResource(R.string.settings_add_provider),
                         onClick = onAddNew,
                     )
                 }
@@ -1463,8 +1494,8 @@ private fun ProvidersListPage(
         SettingsCardGroup {
             SettingsNavRow(
                 icon = Icons.Rounded.AutoAwesome,
-                title = tr(strings, "Default Models", "默认模型"),
-                subtitle = tr(strings, "Choose dedicated defaults for chat, titles, naming, and compaction.", "为聊天、标题、命名和压缩分别设置默认模型。"),
+                title = stringResource(R.string.settings_default_models),
+                subtitle = stringResource(R.string.settings_default_models_subtitle),
                 onClick = onOpenDefaultModels,
             )
         }
@@ -1484,7 +1515,6 @@ private fun DefaultModelsPage(
     onOpenDefaultCompactingModel: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val automaticChatLabel = modelOptions.findModelOption(
         modelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Chat)
     )?.fullLabel
@@ -1501,16 +1531,16 @@ private fun DefaultModelsPage(
             .ifBlank { modelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Chat) }
     )?.fullLabel
     SubPageScaffold(
-        title = tr(strings, "Default Models", "默认模型"),
+        title = stringResource(R.string.settings_default_models),
         onBack = onBack,
     ) {
         SettingsCardGroup {
             SettingsNavRow(
                 icon = Icons.Rounded.AutoAwesome,
-                title = tr(strings, "Default Chat Model", "默认聊天模型"),
+                title = stringResource(R.string.settings_default_chat_model),
                 subtitle = if (defaultChatModelKey.isBlank()) {
-                    automaticChatLabel?.let { tr(strings, "Automatic · $it", "自动选择 · $it") }
-                        ?: tr(strings, "Automatic", "自动选择")
+                    automaticChatLabel?.let { stringResource(R.string.settings_automatic_model_with_name, it) }
+                        ?: stringResource(R.string.settings_automatic_model)
                 } else {
                     modelOptions.findModelOption(defaultChatModelKey)?.fullLabel.orEmpty()
                 },
@@ -1519,10 +1549,10 @@ private fun DefaultModelsPage(
             CardDivider()
             SettingsNavRow(
                 icon = Icons.Rounded.Edit,
-                title = tr(strings, "Default Title Model", "默认标题模型"),
+                title = stringResource(R.string.settings_default_title_model),
                 subtitle = if (defaultTitleModelKey.isBlank()) {
-                    automaticTitleLabel?.let { tr(strings, "Automatic · $it", "自动选择 · $it") }
-                        ?: tr(strings, "Automatic", "自动选择")
+                    automaticTitleLabel?.let { stringResource(R.string.settings_automatic_model_with_name, it) }
+                        ?: stringResource(R.string.settings_automatic_model)
                 } else {
                     modelOptions.findModelOption(defaultTitleModelKey)?.fullLabel.orEmpty()
                 },
@@ -1531,10 +1561,10 @@ private fun DefaultModelsPage(
             CardDivider()
             SettingsNavRow(
                 icon = Icons.Rounded.Person,
-                title = tr(strings, "Default Naming Model", "默认命名模型"),
+                title = stringResource(R.string.settings_default_naming_model),
                 subtitle = if (defaultNamingModelKey.isBlank()) {
-                    automaticNamingLabel?.let { tr(strings, "Automatic · $it", "自动选择 · $it") }
-                        ?: tr(strings, "Automatic", "自动选择")
+                    automaticNamingLabel?.let { stringResource(R.string.settings_automatic_model_with_name, it) }
+                        ?: stringResource(R.string.settings_automatic_model)
                 } else {
                     modelOptions.findModelOption(defaultNamingModelKey)?.fullLabel.orEmpty()
                 },
@@ -1543,10 +1573,10 @@ private fun DefaultModelsPage(
             CardDivider()
             SettingsNavRow(
                 icon = Icons.Rounded.AutoAwesome,
-                title = tr(strings, "Default Compacting Model", "默认压缩模型"),
+                title = stringResource(R.string.settings_default_compacting_model),
                 subtitle = if (defaultCompactingModelKey.isBlank()) {
-                    automaticCompactingLabel?.let { tr(strings, "Automatic · $it", "自动选择 · $it") }
-                        ?: tr(strings, "Automatic", "自动选择")
+                    automaticCompactingLabel?.let { stringResource(R.string.settings_automatic_model_with_name, it) }
+                        ?: stringResource(R.string.settings_automatic_model)
                 } else {
                     modelOptions.findModelOption(defaultCompactingModelKey)?.fullLabel.orEmpty()
                 },
@@ -1563,7 +1593,6 @@ private fun ProviderCard(
     onEdit: () -> Unit,
     onRemove: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val availableModels = config.availableModels()
     val enabledModels = config.enabledModels()
 
@@ -1601,11 +1630,7 @@ private fun ProviderCard(
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                text = tr(
-                    strings,
-                    "${enabledModels.size} of ${availableModels.size} models enabled",
-                    "已启用 ${enabledModels.size}/${availableModels.size} 个模型",
-                ),
+                text = stringResource(R.string.settings_provider_models_enabled_count, enabledModels.size, availableModels.size),
                 style = MaterialTheme.typography.bodySmall,
                 color = AetherOnSurfaceVariant,
                 maxLines = 1,
@@ -1616,7 +1641,7 @@ private fun ProviderCard(
         IconButton(onClick = onEdit) {
             Icon(
                 Icons.Rounded.Edit,
-                contentDescription = tr(strings, "Edit", "编辑"),
+                contentDescription = stringResource(R.string.action_edit),
                 tint = AetherOnSurfaceVariant,
             )
         }
@@ -1624,7 +1649,7 @@ private fun ProviderCard(
         IconButton(onClick = onRemove) {
             Icon(
                 Icons.Rounded.Delete,
-                contentDescription = tr(strings, "Remove", "移除"),
+                contentDescription = stringResource(R.string.action_remove),
                 tint = Color(0xFFD25757),
             )
         }
@@ -1642,7 +1667,6 @@ private fun ModelSelectionListPage(
     onSelected: (String) -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val selectedOption = options.findModelOption(selectedKey)
 
     SubPageScaffold(
@@ -1663,12 +1687,12 @@ private fun ModelSelectionListPage(
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Text(
-                        text = tr(strings, "No enabled models available", "没有可用的已启用模型"),
+                        text = stringResource(R.string.settings_no_enabled_models_available),
                         style = MaterialTheme.typography.titleMedium,
                         color = AetherOnSurface,
                     )
                     Text(
-                        text = tr(strings, "Enable at least one provider model first, then return here to choose a default.", "请先启用至少一个 Provider 模型，然后再回来选择默认模型。"),
+                        text = stringResource(R.string.settings_enable_provider_model_first),
                         style = MaterialTheme.typography.bodyMedium,
                         color = AetherOnSurfaceVariant,
                     )
@@ -1756,12 +1780,11 @@ private fun ProviderEditPage(
     onFetchModels: (LlmProviderConfig, (List<String>) -> Unit) -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val isNew = existingConfig == null
     val formState = rememberProviderFormState(existingConfig)
 
     SubPageScaffold(
-        title = if (isNew) tr(strings, "Add Provider", "添加 Provider") else tr(strings, "Edit Provider", "编辑 Provider"),
+        title = if (isNew) stringResource(R.string.settings_add_provider) else stringResource(R.string.settings_edit_provider),
         onBack = onBack,
         trailingIcon = Icons.Rounded.Check,
         trailingEnabled = formState.isValid(existingProviderIds),
@@ -1789,7 +1812,6 @@ private fun PersonalizationPage(
     onSystemPromptChanged: (TextFieldValue) -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     SubPageScaffold(
         title = title,
         onBack = onBack,
@@ -1798,7 +1820,7 @@ private fun PersonalizationPage(
     ) {
         SettingsCardGroup {
             ChatGptTextField(
-                label = strings.customInstructions,
+                label = stringResource(R.string.settings_custom_instructions),
                 value = systemPromptValue,
                 onValueChange = onSystemPromptChanged,
                 minLines = 8,
@@ -1807,11 +1829,7 @@ private fun PersonalizationPage(
 
         Spacer(Modifier.height(8.dp))
         Text(
-            text = tr(
-                strings,
-                "Supports {{current_datetime}}, {{current_date}}, {{current_time}}, {{timezone}}, and {{unix_timestamp}}.",
-                "支持 {{current_datetime}}、{{current_date}}、{{current_time}}、{{timezone}} 和 {{unix_timestamp}}。",
-            ),
+            text = stringResource(R.string.settings_custom_instructions_variables_hint),
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -1834,7 +1852,6 @@ private fun ReliabilityPage(
     onNotifyOnTaskCompletionChanged: (Boolean) -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     SubPageScaffold(
         title = title,
         onBack = onBack,
@@ -1842,7 +1859,7 @@ private fun ReliabilityPage(
         onTrailingAction = onBack,
     ) {
         Text(
-            text = tr(strings, "Multitasking", "后台运行"),
+            text = stringResource(R.string.settings_multitasking),
             style = MaterialTheme.typography.labelLarge,
             color = AetherOnSurface,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -1855,15 +1872,15 @@ private fun ReliabilityPage(
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 SettingsToggleRow(
-                    title = tr(strings, "Keep tasks running in background", "Keep tasks running in background"),
-                    subtitle = tr(strings, "Uses an Android foreground service so active chats can keep working after you leave Aether.", "Uses an Android foreground service so active chats can keep working after you leave Aether."),
+                    title = stringResource(R.string.settings_keep_tasks_running_background),
+                    subtitle = stringResource(R.string.settings_keep_tasks_running_background_subtitle),
                     checked = keepTasksRunningInBackground,
                     onCheckedChange = onKeepTasksRunningInBackgroundChanged,
                 )
                 Spacer(Modifier.height(4.dp))
                 SettingsToggleRow(
-                    title = tr(strings, "Notify when background tasks finish", "后台任务结束时通知"),
-                    subtitle = tr(strings, "Shows a completion alert when a run ends while Aether is not on screen.", "Shows a completion alert when a run ends while Aether is not on screen."),
+                    title = stringResource(R.string.settings_notify_background_tasks_finish),
+                    subtitle = stringResource(R.string.settings_notify_background_tasks_finish_subtitle),
                     checked = notifyOnTaskCompletion,
                     onCheckedChange = onNotifyOnTaskCompletionChanged,
                 )
@@ -1872,7 +1889,7 @@ private fun ReliabilityPage(
 
         Spacer(Modifier.height(16.dp))
         Text(
-            text = tr(strings, "Reconnect", "重连"),
+            text = stringResource(R.string.settings_reconnect),
             style = MaterialTheme.typography.labelLarge,
             color = AetherOnSurface,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -1881,7 +1898,7 @@ private fun ReliabilityPage(
 
         SettingsCardGroup {
             ChatGptTextField(
-                label = tr(strings, "Reconnect after idle seconds", "空闲多少秒后重连"),
+                label = stringResource(R.string.settings_reconnect_after_idle_seconds),
                 value = llmInactivityReconnectTimeoutValue,
                 onValueChange = {
                     val digitsOnly = it.text.filter(Char::isDigit)
@@ -1898,7 +1915,7 @@ private fun ReliabilityPage(
 
         Spacer(Modifier.height(8.dp))
         Text(
-            text = tr(strings, "If a request produces no response activity at all for this many seconds, Aether cancels that attempt and reconnects with backoff. Range: 30-3600 seconds.", "If a request produces no response activity at all for this many seconds, Aether cancels that attempt and reconnects with backoff. Range: 30-3600 seconds."),
+            text = stringResource(R.string.settings_reconnect_after_idle_description),
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -1915,7 +1932,6 @@ private fun WebToolsPage(
     onTavilyBaseUrlChanged: (TextFieldValue) -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     SubPageScaffold(
         title = title,
         onBack = onBack,
@@ -1924,13 +1940,13 @@ private fun WebToolsPage(
     ) {
         SettingsCardGroup {
             ChatGptTextField(
-                label = tr(strings, "Tavily API Key", "Tavily API 密钥"),
+                label = stringResource(R.string.settings_tavily_api_key),
                 value = tavilyApiKeyValue,
                 onValueChange = onTavilyApiKeyChanged,
             )
             CardDivider()
             ChatGptTextField(
-                label = tr(strings, "Tavily Base URL", "Tavily Base URL"),
+                label = stringResource(R.string.settings_tavily_base_url),
                 value = tavilyBaseUrlValue,
                 onValueChange = onTavilyBaseUrlChanged,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
@@ -1939,7 +1955,7 @@ private fun WebToolsPage(
 
         Spacer(Modifier.height(8.dp))
         Text(
-            text = tr(strings, "fetch_web_url works without extra setup. tavily_search uses this API key and Base URL; leave the URL blank to use the official Tavily endpoint.", "fetch_web_url 无需额外配置。tavily_search 使用这里的 API Key 和 Base URL；留空则使用 Tavily 官方端点。"),
+            text = stringResource(R.string.settings_web_tools_description),
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -1956,7 +1972,6 @@ private fun SkillsListPage(
     onAddNew: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     SubPageScaffold(
         title = title,
         onBack = onBack,
@@ -1964,7 +1979,7 @@ private fun SkillsListPage(
         onTrailingAction = onAddNew,
     ) {
         Text(
-            text = tr(strings, "Manage installed skills and keep only the bundles you want Aether to use in chat.", "Manage installed skills and keep only the bundles you want Aether to use in chat."),
+            text = stringResource(R.string.settings_skills_description),
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -1981,19 +1996,19 @@ private fun SkillsListPage(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        tr(strings, "No skills installed", "No skills installed"),
+                        stringResource(R.string.settings_no_skills_installed),
                         style = MaterialTheme.typography.titleMedium,
                         color = AetherOnSurface,
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        tr(strings, "Import skills from a folder, zip, or remote URL.", "Import skills from a folder, zip, or remote URL."),
+                        stringResource(R.string.settings_import_skills_description),
                         style = MaterialTheme.typography.bodyMedium,
                         color = AetherOnSurfaceVariant,
                     )
                     Spacer(Modifier.height(16.dp))
                     SettingsActionButton(
-                        label = tr(strings, "Add Skill", "Add Skill"),
+                        label = stringResource(R.string.settings_add_skill),
                         onClick = onAddNew,
                     )
                 }
@@ -2017,7 +2032,6 @@ private fun SkillCard(
     onToggleEnabled: (Boolean) -> Unit,
     onRemove: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     var expanded by rememberSaveable(skill.id) { mutableStateOf(false) }
     Column(
         modifier = Modifier
@@ -2054,7 +2068,7 @@ private fun SkillCard(
             IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(36.dp)) {
                 Icon(
                     if (expanded) Icons.Rounded.ArrowDropDown else Icons.AutoMirrored.Rounded.ArrowForwardIos,
-                    contentDescription = if (expanded) tr(strings, "Collapse", "收起") else tr(strings, "Expand", "展开"),
+                    contentDescription = if (expanded) stringResource(R.string.action_collapse) else stringResource(R.string.action_expand),
                     tint = AetherOnSurfaceVariant,
                     modifier = Modifier.size(20.dp),
                 )
@@ -2062,7 +2076,7 @@ private fun SkillCard(
             IconButton(onClick = onRemove, modifier = Modifier.size(36.dp)) {
                 Icon(
                     Icons.Rounded.Delete,
-                    contentDescription = tr(strings, "Remove", "移除"),
+                    contentDescription = stringResource(R.string.action_remove),
                     tint = Color(0xFFD25757),
                     modifier = Modifier.size(20.dp),
                 )
@@ -2079,16 +2093,16 @@ private fun SkillCard(
         if (expanded) {
             Spacer(Modifier.height(14.dp))
             Spacer(Modifier.height(14.dp))
-            DetailLine(tr(strings, "Skill ID", "技能 ID"), skill.id)
-            DetailLine(tr(strings, "Files", "Files"), "${skill.resourceEntries.size}")
-            DetailLine(tr(strings, "Allowed tools", "Allowed tools"), skill.allowedTools.ifEmpty { listOf(tr(strings, "Any", "Any")) }.joinToString(", "))
+            DetailLine(stringResource(R.string.settings_skill_id), skill.id)
+            DetailLine(stringResource(R.string.settings_skill_files), "${skill.resourceEntries.size}")
+            DetailLine(stringResource(R.string.settings_skill_allowed_tools), skill.allowedTools.ifEmpty { listOf(stringResource(R.string.settings_any)) }.joinToString(", "))
             if (skill.compatibility.isNotBlank()) {
-                DetailLine(tr(strings, "Compatibility", "Compatibility"), skill.compatibility)
+                DetailLine(stringResource(R.string.settings_skill_compatibility), skill.compatibility)
             }
             if (skill.source.label.isNotBlank()) {
-                DetailLine(tr(strings, "Source", "来源"), skill.source.label)
+                DetailLine(stringResource(R.string.settings_skill_source), skill.source.label)
             }
-            DetailLine(tr(strings, "Path", "路径"), skill.skillRootPath)
+            DetailLine(stringResource(R.string.settings_skill_path), skill.skillRootPath)
         }
     }
 }
@@ -2110,17 +2124,16 @@ private fun AddSkillPage(
         mutableStateOf(TextFieldValue(""))
     }
     var isInstalling by remember { mutableStateOf(false) }
-    val strings = rememberAetherStrings()
 
     val tabOptions = listOf(
-        tr(strings, "Folder", "Folder"),
+        stringResource(R.string.settings_skill_source_folder),
         "Zip",
         "URL",
     )
 
     SubPageScaffold(title = title, onBack = onBack) {
         Text(
-            text = tr(strings, "Import Agent Skills from a local folder, zip file, or remote URL.", "Import Agent Skills from a local folder, zip file, or remote URL."),
+            text = stringResource(R.string.settings_add_skill_description),
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -2167,13 +2180,13 @@ private fun AddSkillPage(
                         )
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            tr(strings, "Select a folder containing SKILL.md", "选择包含 SKILL.md 的文件夹"),
+                            stringResource(R.string.settings_select_skill_folder_description),
                             style = MaterialTheme.typography.bodyMedium,
                             color = AetherOnSurfaceVariant,
                         )
                         Spacer(Modifier.height(16.dp))
                         SettingsActionButton(
-                            label = tr(strings, "Choose Folder", "Choose Folder"),
+                            label = stringResource(R.string.settings_choose_folder),
                             onClick = {
                                 onImportSkillFolder()
                                 // Will navigate back via callback on success
@@ -2200,13 +2213,13 @@ private fun AddSkillPage(
                         )
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            tr(strings, "Select a .zip file containing SKILL.md", "选择包含 SKILL.md 的 .zip 文件"),
+                            stringResource(R.string.settings_select_skill_zip_description),
                             style = MaterialTheme.typography.bodyMedium,
                             color = AetherOnSurfaceVariant,
                         )
                         Spacer(Modifier.height(16.dp))
                         SettingsActionButton(
-                            label = tr(strings, "Choose Zip", "选择 Zip"),
+                            label = stringResource(R.string.settings_choose_zip),
                             onClick = {
                                 onImportSkillZip {}
                             },
@@ -2219,7 +2232,7 @@ private fun AddSkillPage(
                 // URL import
                 SettingsCardGroup {
                     ChatGptTextField(
-                        label = tr(strings, "Remote skill URL", "远程技能 URL"),
+                        label = stringResource(R.string.settings_remote_skill_url),
                         value = skillUrlValue,
                         onValueChange = { skillUrlValue = it },
                     )
@@ -2227,7 +2240,7 @@ private fun AddSkillPage(
 
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = tr(strings, "GitHub repo/tree URLs and direct zip links are supported.", "GitHub repo/tree URLs and direct zip links are supported."),
+                    text = stringResource(R.string.settings_remote_skill_url_description),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 4.dp),
@@ -2246,11 +2259,11 @@ private fun AddSkillPage(
                             color = AetherPrimary,
                         )
                         Spacer(Modifier.width(12.dp))
-                        Text(tr(strings, "Installing...", "安装中..."), color = AetherOnSurfaceVariant)
+                        Text(stringResource(R.string.settings_installing), color = AetherOnSurfaceVariant)
                     }
                 } else {
                     SettingsActionButton(
-                        label = tr(strings, "Install from URL", "从 URL 安装"),
+                        label = stringResource(R.string.settings_install_from_url),
                         onClick = {
                             if (skillUrlValue.text.isNotBlank()) {
                                 isInstalling = true
@@ -2285,7 +2298,6 @@ private fun McpServersListPage(
     onAddNew: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     var testResultText by rememberSaveable { mutableStateOf("") }
     SubPageScaffold(
         title = title,
@@ -2294,7 +2306,7 @@ private fun McpServersListPage(
         onTrailingAction = onAddNew,
     ) {
         Text(
-            text = tr(strings, "Manage MCP servers, inspect each transport config, and keep only the connections you want active.", "Manage MCP servers, inspect each transport config, and keep only the connections you want active."),
+            text = stringResource(R.string.settings_mcp_servers_description),
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -2311,19 +2323,19 @@ private fun McpServersListPage(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        tr(strings, "No MCP servers", "No MCP servers"),
+                        stringResource(R.string.settings_no_mcp_servers),
                         style = MaterialTheme.typography.titleMedium,
                         color = AetherOnSurface,
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        tr(strings, "Add HTTP or stdio servers to extend capabilities.", "Add HTTP or stdio servers to extend capabilities."),
+                        stringResource(R.string.settings_add_mcp_server_description),
                         style = MaterialTheme.typography.bodyMedium,
                         color = AetherOnSurfaceVariant,
                     )
                     Spacer(Modifier.height(16.dp))
                     SettingsActionButton(
-                        label = tr(strings, "Add Server", "Add Server"),
+                        label = stringResource(R.string.settings_add_server),
                         onClick = onAddNew,
                     )
                 }
@@ -2365,7 +2377,6 @@ private fun McpServerCard(
     onRemove: () -> Unit,
     onTest: (McpServerTestOperation) -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     var expanded by rememberSaveable(server.id) { mutableStateOf(false) }
     Column(
         modifier = Modifier
@@ -2398,7 +2409,7 @@ private fun McpServerCard(
             IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(36.dp)) {
                 Icon(
                     if (expanded) Icons.Rounded.ArrowDropDown else Icons.AutoMirrored.Rounded.ArrowForwardIos,
-                    contentDescription = if (expanded) tr(strings, "Collapse", "收起") else tr(strings, "Expand", "展开"),
+                    contentDescription = if (expanded) stringResource(R.string.action_collapse) else stringResource(R.string.action_expand),
                     tint = AetherOnSurfaceVariant,
                     modifier = Modifier.size(20.dp),
                 )
@@ -2406,7 +2417,7 @@ private fun McpServerCard(
             IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
                 Icon(
                     Icons.Rounded.Edit,
-                    contentDescription = tr(strings, "Edit", "编辑"),
+                    contentDescription = stringResource(R.string.action_edit),
                     tint = AetherOnSurface,
                     modifier = Modifier.size(18.dp),
                 )
@@ -2414,7 +2425,7 @@ private fun McpServerCard(
             IconButton(onClick = onRemove, modifier = Modifier.size(36.dp)) {
                 Icon(
                     Icons.Rounded.Delete,
-                    contentDescription = tr(strings, "Remove", "移除"),
+                    contentDescription = stringResource(R.string.action_remove),
                     tint = Color(0xFFD25757),
                     modifier = Modifier.size(20.dp),
                 )
@@ -2432,41 +2443,41 @@ private fun McpServerCard(
             Spacer(Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Tools", "工具"),
+                    label = stringResource(R.string.settings_mcp_tools),
                     onClick = { onTest(McpServerTestOperation.ListTools) },
                     modifier = Modifier.weight(1f),
                 )
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Resources", "资源"),
+                    label = stringResource(R.string.settings_mcp_resources),
                     onClick = { onTest(McpServerTestOperation.ListResources) },
                     modifier = Modifier.weight(1f),
                 )
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Prompts", "提示词"),
+                    label = stringResource(R.string.settings_mcp_prompts),
                     onClick = { onTest(McpServerTestOperation.ListPrompts) },
                     modifier = Modifier.weight(1f),
                 )
             }
             Spacer(Modifier.height(14.dp))
-            DetailLine(tr(strings, "Server ID", "服务器 ID"), server.id)
-            DetailLine(tr(strings, "Quick action", "快捷操作"), server.quickActionLabel())
-            DetailLine(tr(strings, "Transport", "传输方式"), server.transport.transportType.storageValue.uppercase())
+            DetailLine(stringResource(R.string.settings_server_id), server.id)
+            DetailLine(stringResource(R.string.settings_quick_action), server.quickActionLabel())
+            DetailLine(stringResource(R.string.settings_transport), server.transport.transportType.storageValue.uppercase())
             when (val transport = server.transport) {
                 is com.zhousl.aether.data.McpTransportConfig.StreamableHttp -> {
                     DetailLine("URL", transport.url)
-                    DetailLine(tr(strings, "Headers", "Headers"), transport.headers.size.toString())
+                    DetailLine(stringResource(R.string.settings_headers), transport.headers.size.toString())
                 }
 
                 is com.zhousl.aether.data.McpTransportConfig.StdIo -> {
-                    DetailLine(tr(strings, "Command", "命令"), transport.command)
+                    DetailLine(stringResource(R.string.settings_command), transport.command)
                     if (transport.workingDirectory.isNotBlank()) {
-                        DetailLine(tr(strings, "Working dir", "工作目录"), transport.workingDirectory)
+                        DetailLine(stringResource(R.string.settings_working_dir), transport.workingDirectory)
                     }
-                    DetailLine(tr(strings, "Environment", "环境变量"), transport.environment.size.toString())
+                    DetailLine(stringResource(R.string.settings_environment), transport.environment.size.toString())
                 }
             }
-            DetailLine(tr(strings, "Connect timeout", "连接超时"), "${server.connectTimeoutMillis} ms")
-            DetailLine(tr(strings, "Request timeout", "请求超时"), "${server.requestTimeoutMillis} ms")
+            DetailLine(stringResource(R.string.settings_connect_timeout), "${server.connectTimeoutMillis} ms")
+            DetailLine(stringResource(R.string.settings_request_timeout), "${server.requestTimeoutMillis} ms")
         }
     }
 }
@@ -2484,19 +2495,14 @@ private fun ScheduledTasksPage(
     onAddNew: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     SubPageScaffold(
-        title = tr(strings, "Scheduled Tasks", "定时任务"),
+        title = stringResource(R.string.settings_scheduled_tasks),
         onBack = onBack,
         trailingIcon = Icons.Rounded.Add,
         onTrailingAction = onAddNew,
     ) {
         Text(
-            text = tr(
-                strings,
-                "Aether wakes at the next matching time and runs the task prompt as an automated Agent turn.",
-                "Aether 会在匹配的时间唤起，并把任务提示词作为一次自动 Agent 运行。",
-            ),
+            text = stringResource(R.string.settings_scheduled_tasks_description),
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -2512,19 +2518,19 @@ private fun ScheduledTasksPage(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        text = tr(strings, "No scheduled tasks", "暂无定时任务"),
+                        text = stringResource(R.string.settings_no_scheduled_tasks),
                         style = MaterialTheme.typography.titleMedium,
                         color = AetherOnSurface,
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = tr(strings, "Create one manually, or ask the Agent to create one with its scheduling tool.", "可以手动创建，也可以让 Agent 通过定时任务工具创建。"),
+                        text = stringResource(R.string.settings_create_scheduled_task_description),
                         style = MaterialTheme.typography.bodyMedium,
                         color = AetherOnSurfaceVariant,
                     )
                     Spacer(Modifier.height(16.dp))
                     SettingsActionButton(
-                        label = tr(strings, "Add Task", "新建任务"),
+                        label = stringResource(R.string.settings_add_task),
                         onClick = onAddNew,
                     )
                 }
@@ -2551,7 +2557,6 @@ private fun ScheduledTaskCard(
     onEdit: () -> Unit,
     onRemove: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -2580,7 +2585,7 @@ private fun ScheduledTaskCard(
             IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
                 Icon(
                     Icons.Rounded.Edit,
-                    contentDescription = strings.editMessage,
+                    contentDescription = stringResource(R.string.action_edit),
                     tint = AetherOnSurface,
                     modifier = Modifier.size(18.dp),
                 )
@@ -2588,7 +2593,7 @@ private fun ScheduledTaskCard(
             IconButton(onClick = onRemove, modifier = Modifier.size(36.dp)) {
                 Icon(
                     Icons.Rounded.Delete,
-                    contentDescription = strings.delete,
+                    contentDescription = stringResource(R.string.action_delete),
                     tint = Color(0xFFD25757),
                     modifier = Modifier.size(20.dp),
                 )
@@ -2608,16 +2613,16 @@ private fun ScheduledTaskCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = task.nextRunAtMillis?.formatScheduledTaskTime()
-                        ?.let { tr(strings, "Next run: $it", "下次运行：$it") }
-                        ?: tr(strings, "No next run scheduled", "未安排下次运行"),
+                        ?.let { stringResource(R.string.settings_next_run, it) }
+                        ?: stringResource(R.string.settings_no_next_run_scheduled),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                 )
                 Text(
                     text = if (task.createdBy == ScheduledTaskCreator.Agent) {
-                        tr(strings, "Created by Agent", "由 Agent 创建")
+                        stringResource(R.string.settings_created_by_agent)
                     } else {
-                        tr(strings, "Created manually", "手动创建")
+                        stringResource(R.string.settings_created_manually)
                     },
                     style = MaterialTheme.typography.labelSmall,
                     color = AetherOnSurfaceVariant,
@@ -2637,7 +2642,6 @@ private fun ScheduledTaskEditPage(
     onSave: (String, String, ScheduledTaskSchedule, Boolean) -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val existingInterval = existingTask?.schedule as? ScheduledTaskSchedule.Interval
     val existingDaily = existingTask?.schedule as? ScheduledTaskSchedule.Daily
     val existingWeekly = existingTask?.schedule as? ScheduledTaskSchedule.Weekly
@@ -2696,9 +2700,9 @@ private fun ScheduledTaskEditPage(
 
     SubPageScaffold(
         title = if (existingTask == null) {
-            tr(strings, "Add Scheduled Task", "新建定时任务")
+            stringResource(R.string.settings_add_scheduled_task)
         } else {
-            tr(strings, "Edit Scheduled Task", "编辑定时任务")
+            stringResource(R.string.settings_edit_scheduled_task)
         },
         onBack = onBack,
         trailingIcon = Icons.Rounded.Check,
@@ -2711,13 +2715,13 @@ private fun ScheduledTaskEditPage(
     ) {
         SettingsCardGroup {
             ChatGptTextField(
-                label = tr(strings, "Name", "名称"),
+                label = stringResource(R.string.settings_name),
                 value = nameValue,
                 onValueChange = { nameValue = it },
             )
             CardDivider()
             ChatGptTextField(
-                label = tr(strings, "Prompt", "提示词"),
+                label = stringResource(R.string.settings_prompt),
                 value = promptValue,
                 minLines = 4,
                 onValueChange = { promptValue = it },
@@ -2730,8 +2734,8 @@ private fun ScheduledTaskEditPage(
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 SettingsToggleRow(
-                    title = tr(strings, "Enabled", "启用"),
-                    subtitle = tr(strings, "Disabled tasks stay saved but do not wake Aether.", "关闭后任务仍会保存，但不会唤起 Aether。"),
+                    title = stringResource(R.string.settings_enabled),
+                    subtitle = stringResource(R.string.settings_disabled_tasks_saved_subtitle),
                     checked = enabledValue,
                     onCheckedChange = { enabledValue = it },
                 )
@@ -2740,9 +2744,9 @@ private fun ScheduledTaskEditPage(
         Spacer(Modifier.height(16.dp))
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
             listOf(
-                tr(strings, "Interval", "间隔"),
-                tr(strings, "Daily", "每天"),
-                tr(strings, "Weekly", "每周"),
+                stringResource(R.string.settings_schedule_interval),
+                stringResource(R.string.settings_schedule_daily),
+                stringResource(R.string.settings_schedule_weekly),
             ).forEachIndexed { index, label ->
                 SegmentedButton(
                     shape = SegmentedButtonDefaults.itemShape(index = index, count = 3),
@@ -2764,38 +2768,38 @@ private fun ScheduledTaskEditPage(
             when (scheduleMode) {
                 0 -> {
                     ChatGptTextField(
-                        label = tr(strings, "Every N minutes", "每隔多少分钟"),
+                        label = stringResource(R.string.settings_every_n_minutes),
                         value = intervalMinutesValue,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         onValueChange = { intervalMinutesValue = it.copy(text = it.text.filter(Char::isDigit)) },
                     )
                     CardDivider()
                     ChatGptTextField(
-                        label = tr(strings, "Active start HH:mm", "开始时间 HH:mm"),
+                        label = stringResource(R.string.settings_active_start_time),
                         value = activeStartValue,
                         onValueChange = { activeStartValue = it },
                     )
                     CardDivider()
                     ChatGptTextField(
-                        label = tr(strings, "Active end HH:mm", "结束时间 HH:mm"),
+                        label = stringResource(R.string.settings_active_end_time),
                         value = activeEndValue,
                         onValueChange = { activeEndValue = it },
                     )
                 }
                 1 -> ChatGptTextField(
-                    label = tr(strings, "Times HH:mm, comma separated", "时间 HH:mm，用逗号分隔"),
+                    label = stringResource(R.string.settings_times_comma_separated),
                     value = dailyTimesValue,
                     onValueChange = { dailyTimesValue = it },
                 )
                 else -> {
                     ChatGptTextField(
-                        label = tr(strings, "Days 1-7 or mon,tue", "星期 1-7 或 mon,tue"),
+                        label = stringResource(R.string.settings_days_of_week_input),
                         value = weeklyDaysValue,
                         onValueChange = { weeklyDaysValue = it },
                     )
                     CardDivider()
                     ChatGptTextField(
-                        label = tr(strings, "Time HH:mm", "时间 HH:mm"),
+                        label = stringResource(R.string.settings_time_hhmm),
                         value = weeklyTimeValue,
                         onValueChange = { weeklyTimeValue = it },
                     )
@@ -2804,11 +2808,7 @@ private fun ScheduledTaskEditPage(
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            text = tr(
-                strings,
-                "Interval windows are optional. Leave start and end blank to run all day.",
-                "间隔任务的时间窗口是可选的。开始和结束留空则全天运行。",
-            ),
+            text = stringResource(R.string.settings_interval_window_hint),
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -2828,7 +2828,6 @@ private fun AddMcpServerPage(
     onSaveStdIoMcpServer: (String?, String, String, String, String, String) -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val isEditing = existingServer != null
     val existingHttpTransport = existingServer?.transport as? com.zhousl.aether.data.McpTransportConfig.StreamableHttp
     val existingStdIoTransport = existingServer?.transport as? com.zhousl.aether.data.McpTransportConfig.StdIo
@@ -2874,14 +2873,14 @@ private fun AddMcpServerPage(
         )
     }
 
-    val tabOptions = listOf("HTTP", tr(strings, "Stdio", "标准输入输出"))
+    val tabOptions = listOf("HTTP", stringResource(R.string.settings_stdio))
 
     SubPageScaffold(title = title, onBack = onBack) {
         Text(
             text = if (isEditing) {
-                tr(strings, "Update the transport config and quick action source for this MCP server.", "Update the transport config and quick action source for this MCP server.")
+                stringResource(R.string.settings_update_mcp_server_description)
             } else {
-                tr(strings, "Add an HTTP server for remote APIs or a stdio server for local Termux processes.", "Add an HTTP server for remote APIs or a stdio server for local Termux processes.")
+                stringResource(R.string.settings_add_mcp_server_page_description)
             },
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
@@ -2915,22 +2914,22 @@ private fun AddMcpServerPage(
             0 -> {
                 // HTTP server
                 SettingsCardGroup {
-                    ChatGptTextField(tr(strings, "Server name", "Server name"), httpServerNameValue) { httpServerNameValue = it }
+                    ChatGptTextField(stringResource(R.string.settings_server_name), httpServerNameValue) { httpServerNameValue = it }
                     CardDivider()
-                    ChatGptTextField(tr(strings, "Server URL", "服务器 URL"), httpServerUrlValue) { httpServerUrlValue = it }
+                    ChatGptTextField(stringResource(R.string.settings_server_url), httpServerUrlValue) { httpServerUrlValue = it }
                     CardDivider()
-                    ChatGptTextField(tr(strings, "Headers", "Headers"), httpHeadersValue, minLines = 2) { httpHeadersValue = it }
+                    ChatGptTextField(stringResource(R.string.settings_headers), httpHeadersValue, minLines = 2) { httpHeadersValue = it }
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    tr(strings, "Optional headers, one KEY=VALUE per line.", "Optional headers, one KEY=VALUE per line."),
+                    stringResource(R.string.settings_optional_headers_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 4.dp),
                 )
                 Spacer(Modifier.height(16.dp))
                 SettingsActionButton(
-                    label = if (isEditing) tr(strings, "Save HTTP Server", "Save HTTP Server") else tr(strings, "Add HTTP Server", "Add HTTP Server"),
+                    label = if (isEditing) stringResource(R.string.settings_save_http_server) else stringResource(R.string.settings_add_http_server),
                     onClick = {
                         if (httpServerNameValue.text.isNotBlank() && httpServerUrlValue.text.isNotBlank()) {
                             onSaveHttpMcpServer(
@@ -2948,26 +2947,26 @@ private fun AddMcpServerPage(
             1 -> {
                 // Stdio server
                 SettingsCardGroup {
-                    ChatGptTextField(tr(strings, "Server name", "Server name"), stdioServerNameValue) { stdioServerNameValue = it }
+                    ChatGptTextField(stringResource(R.string.settings_server_name), stdioServerNameValue) { stdioServerNameValue = it }
                     CardDivider()
-                    ChatGptTextField(tr(strings, "Command", "命令"), stdioCommandValue, minLines = 2) { stdioCommandValue = it }
+                    ChatGptTextField(stringResource(R.string.settings_command), stdioCommandValue, minLines = 2) { stdioCommandValue = it }
                     CardDivider()
-                    ChatGptTextField(tr(strings, "Arguments", "参数"), stdioArgumentsValue, minLines = 2) { stdioArgumentsValue = it }
+                    ChatGptTextField(stringResource(R.string.settings_arguments), stdioArgumentsValue, minLines = 2) { stdioArgumentsValue = it }
                     CardDivider()
-                    ChatGptTextField(tr(strings, "Working directory", "工作目录"), stdioWorkingDirectoryValue) { stdioWorkingDirectoryValue = it }
+                    ChatGptTextField(stringResource(R.string.settings_working_directory), stdioWorkingDirectoryValue) { stdioWorkingDirectoryValue = it }
                     CardDivider()
-                    ChatGptTextField(tr(strings, "Environment", "环境变量"), stdioEnvValue, minLines = 2) { stdioEnvValue = it }
+                    ChatGptTextField(stringResource(R.string.settings_environment), stdioEnvValue, minLines = 2) { stdioEnvValue = it }
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    tr(strings, "Optional environment variables, one KEY=VALUE per line.", "Optional environment variables, one KEY=VALUE per line."),
+                    stringResource(R.string.settings_optional_environment_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 4.dp),
                 )
                 Spacer(Modifier.height(16.dp))
                 SettingsActionButton(
-                    label = if (isEditing) tr(strings, "Save Stdio Server", "Save Stdio Server") else tr(strings, "Add Stdio Server", "Add Stdio Server"),
+                    label = if (isEditing) stringResource(R.string.settings_save_stdio_server) else stringResource(R.string.settings_add_stdio_server),
                     onClick = {
                         if (stdioServerNameValue.text.isNotBlank() && stdioCommandValue.text.isNotBlank()) {
                             onSaveStdIoMcpServer(
@@ -3010,7 +3009,6 @@ private fun TermuxSettingsPage(
     onConfigureWithRoot: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     var showAlreadyConfiguredDialog by rememberSaveable { mutableStateOf(false) }
 
     fun requestRootSetup() {
@@ -3023,12 +3021,8 @@ private fun TermuxSettingsPage(
 
     if (showAlreadyConfiguredDialog) {
         RootSetupAlreadyConfiguredDialog(
-            title = tr(strings, "Termux is already configured", "Termux 已配置完成"),
-            body = tr(
-                strings,
-                "Termux command access is already working. You do not need to run Root automatic setup again.",
-                "Termux 命令访问已经正常，不需要再次执行 Root 自动配置。",
-            ),
+            title = stringResource(R.string.settings_termux_already_configured_title),
+            body = stringResource(R.string.settings_termux_already_configured_body),
             onDismiss = { showAlreadyConfiguredDialog = false },
             onContinue = {
                 showAlreadyConfiguredDialog = false
@@ -3052,7 +3046,7 @@ private fun TermuxSettingsPage(
         onTrailingAction = onRefreshTermuxSetup,
     ) {
         Text(
-            text = tr(strings, "Aether runs bash through Termux. Finish setup here so tool calls work for every user without manual adb steps.", "Aether runs bash through Termux. Finish setup here so tool calls work for every user without manual adb steps."),
+            text = stringResource(R.string.settings_termux_description),
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -3061,7 +3055,6 @@ private fun TermuxSettingsPage(
         Spacer(Modifier.height(16.dp))
 
         WorkspaceModeSettingsSection(
-            strings = strings,
             selectedWorkspaceMode = selectedWorkspaceMode,
             onWorkspaceModeSelected = onWorkspaceModeSelected,
         )
@@ -3077,9 +3070,9 @@ private fun TermuxSettingsPage(
 
         SettingsCardGroup {
             RootSetupSettingsSection(
-                title = tr(strings, "Root automatic setup", "Root 自动配置"),
+                title = stringResource(R.string.settings_root_automatic_setup),
                 rootSetupState = rootSetupState,
-                body = rootSetupSettingsBody(rootSetupState, strings),
+                body = rootSetupSettingsBody(rootSetupState),
                 onConfigureWithRoot = ::requestRootSetup,
             )
         }
@@ -3089,10 +3082,10 @@ private fun TermuxSettingsPage(
         if (termuxSetupState.isReady) {
             SettingsCardGroup {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(tr(strings, "Termux is connected", "Termux is connected"), style = MaterialTheme.typography.labelLarge, color = AetherOnSurface)
+                    Text(stringResource(R.string.settings_termux_connected), style = MaterialTheme.typography.labelLarge, color = AetherOnSurface)
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        tr(strings, "Permission is granted and the setup probe succeeded.", "Permission is granted and the setup probe succeeded."),
+                        stringResource(R.string.settings_termux_connected_description),
                         style = MaterialTheme.typography.bodySmall,
                         color = AetherOnSurfaceVariant,
                     )
@@ -3115,42 +3108,33 @@ private fun TermuxSettingsPage(
 
 @Composable
 private fun WorkspaceModeSettingsSection(
-    strings: AetherStrings,
     selectedWorkspaceMode: AgentWorkspaceMode,
     onWorkspaceModeSelected: (AgentWorkspaceMode) -> Unit,
 ) {
     SettingsCardGroup {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = strings.workspaceMode,
+                text = stringResource(R.string.settings_workspace_mode),
                 style = MaterialTheme.typography.titleMedium,
                 color = AetherOnSurface,
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                text = strings.workspaceModeDescription,
+                text = stringResource(R.string.settings_workspace_mode_description),
                 style = MaterialTheme.typography.bodySmall,
                 color = AetherOnSurfaceVariant,
             )
             Spacer(Modifier.height(14.dp))
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 SettingsChoiceRow(
-                    title = tr(strings, "Single Workspace", "单一 Workspace"),
-                    subtitle = tr(
-                        strings,
-                        "All sessions start in ~/.aether/workspace and uploads are kept under uploads/.",
-                        "所有 Session 默认从 ~/.aether/workspace 开始，上传文件保存在 uploads/ 下。",
-                    ),
+                    title = stringResource(R.string.settings_single_workspace),
+                    subtitle = stringResource(R.string.settings_single_workspace_description),
                     selected = selectedWorkspaceMode == AgentWorkspaceMode.Shared,
                     onClick = { onWorkspaceModeSelected(AgentWorkspaceMode.Shared) },
                 )
                 SettingsChoiceRow(
-                    title = tr(strings, "Independent Workspaces", "独立 Workspace"),
-                    subtitle = tr(
-                        strings,
-                        "Each session keeps using its own directory under ~/.aether/workspaces/.",
-                        "每个 Session 继续使用 ~/.aether/workspaces/ 下的独立目录。",
-                    ),
+                    title = stringResource(R.string.settings_independent_workspaces),
+                    subtitle = stringResource(R.string.settings_independent_workspaces_description),
                     selected = selectedWorkspaceMode == AgentWorkspaceMode.PerSession,
                     onClick = { onWorkspaceModeSelected(AgentWorkspaceMode.PerSession) },
                 )
@@ -3186,7 +3170,6 @@ private fun AgentModeSettingsPage(
     onRefreshAgentModeDisplays: (AgentModeAuthorizationMethod) -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     var showAlreadyConfiguredDialog by rememberSaveable { mutableStateOf(false) }
     val agentModeConfigured = agentModeAuthorizationEnabled && agentModeAuthorizationState.isReady
 
@@ -3219,17 +3202,13 @@ private fun AgentModeSettingsPage(
             SettingsCardGroup {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = tr(strings, "Agent Mode is unavailable", "Agent Mode is unavailable"),
+                        text = stringResource(R.string.settings_agent_mode_unavailable),
                         style = MaterialTheme.typography.labelLarge,
                         color = AetherOnSurface,
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        text = tr(
-                            strings,
-                            "Configure Termux first. Agent Mode uses the Termux bridge for its workspace and screenshot flow, so authorization cannot be enabled until Termux is ready.",
-                            "Configure Termux first. Agent Mode uses the Termux bridge for its workspace and screenshot flow, so authorization cannot be enabled until Termux is ready.",
-                        ),
+                        text = stringResource(R.string.settings_agent_mode_unavailable_body),
                         style = MaterialTheme.typography.bodySmall,
                         color = AetherOnSurfaceVariant,
                     )
@@ -3253,19 +3232,11 @@ private fun AgentModeSettingsPage(
     }
     if (showAlreadyConfiguredDialog) {
         RootSetupAlreadyConfiguredDialog(
-            title = tr(strings, "Agent Mode is already configured", "Agent Mode 已配置完成"),
+            title = stringResource(R.string.settings_agent_mode_already_configured),
             body = if (agentModeAuthorizationMethod == AgentModeAuthorizationMethod.Root) {
-                tr(
-                    strings,
-                    "Root Agent Mode authorization is already ready. You do not need to run Root automatic setup again.",
-                    "Root Agent Mode 授权已经正常，不需要再次执行 Root 自动配置。",
-                )
+                stringResource(R.string.settings_agent_mode_root_already_configured_body)
             } else {
-                tr(
-                    strings,
-                    "Agent Mode authorization is already ready. Root automatic setup is not required; continuing will reconfigure Agent Mode to Root.",
-                    "Agent Mode 授权已经正常，不需要执行 Root 自动配置；继续后会将 Agent Mode 重新配置为 Root。",
-                )
+                stringResource(R.string.settings_agent_mode_already_configured_body)
             },
             onDismiss = { showAlreadyConfiguredDialog = false },
             onContinue = {
@@ -3290,7 +3261,7 @@ private fun AgentModeSettingsPage(
         onTrailingAction = ::refreshAgentModeStatus,
     ) {
         Text(
-            text = tr(strings, "Authorize isolated virtual-display tools with Shizuku or Root. Skip this on devices without either option.", "Authorize isolated virtual-display tools with Shizuku or Root. Skip this on devices without either option."),
+            text = stringResource(R.string.settings_agent_mode_description),
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -3301,14 +3272,14 @@ private fun AgentModeSettingsPage(
         SettingsCardGroup {
             Column(modifier = Modifier.padding(16.dp)) {
                 SettingsToggleRow(
-                    title = tr(strings, "Agent Mode authorization", "Agent 模式授权"),
-                    subtitle = tr(strings, "Enables isolated virtual-display tools. Requires Shizuku or Root.", "Enables isolated virtual-display tools. Requires Shizuku or Root."),
+                    title = stringResource(R.string.settings_agent_mode_authorization),
+                    subtitle = stringResource(R.string.settings_agent_mode_authorization_subtitle),
                     checked = agentModeAuthorizationEnabled,
                     onCheckedChange = onAgentModeAuthorizationEnabledChanged,
                 )
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    text = tr(strings, "Authorization method", "授权方式"),
+                    text = stringResource(R.string.settings_authorization_method),
                     style = MaterialTheme.typography.labelLarge,
                     color = AetherOnSurface,
                 )
@@ -3318,8 +3289,8 @@ private fun AgentModeSettingsPage(
                         SettingsChoiceRow(
                             title = method.displayName,
                             subtitle = when (method) {
-                                AgentModeAuthorizationMethod.Shizuku -> tr(strings, "Uses an elevated Shizuku service.", "Uses an elevated Shizuku service.")
-                                AgentModeAuthorizationMethod.Root -> tr(strings, "Uses root shell for privileged input.", "Uses root shell for privileged input.")
+                                AgentModeAuthorizationMethod.Shizuku -> stringResource(R.string.settings_agent_mode_method_shizuku_subtitle)
+                                AgentModeAuthorizationMethod.Root -> stringResource(R.string.settings_agent_mode_method_root_subtitle)
                             },
                             selected = agentModeAuthorizationMethod == method,
                             onClick = { onAgentModeAuthorizationMethodChanged(method) },
@@ -3328,7 +3299,7 @@ private fun AgentModeSettingsPage(
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = tr(strings, "Shizuku mode creates the display from a Shizuku user service so apps can render off the main screen. Root mode remains experimental.", "Shizuku mode creates the display from a Shizuku user service so apps can render off the main screen. Root mode remains experimental."),
+                    text = stringResource(R.string.settings_agent_mode_method_description),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                 )
@@ -3343,13 +3314,9 @@ private fun AgentModeSettingsPage(
                 )
                 Spacer(Modifier.height(12.dp))
                 RootSetupSettingsSection(
-                    title = tr(strings, "Root automatic setup", "Root 自动配置"),
+                    title = stringResource(R.string.settings_root_automatic_setup),
                     rootSetupState = rootSetupState,
-                    body = tr(
-                        strings,
-                        "Use su to select Root mode and prepare local device control automatically.",
-                        "使用 su 自动选择 Root 模式，并准备本地设备控制。",
-                    ),
+                    body = stringResource(R.string.settings_agent_mode_root_setup_body),
                     onConfigureWithRoot = ::requestRootSetup,
                 )
             }
@@ -3360,16 +3327,21 @@ private fun AgentModeSettingsPage(
         SettingsCardGroup {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = tr(strings, "Virtual Display", "虚拟显示"),
+                    text = stringResource(R.string.settings_virtual_display),
                     style = MaterialTheme.typography.labelLarge,
                     color = AetherOnSurface,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
                     text = if (agentModeDisplayState.isActive) {
-                        tr(strings, "Display ${agentModeDisplayState.displayId ?: "-"} is active at ${agentModeDisplayState.width} x ${agentModeDisplayState.height}.", "Display ${agentModeDisplayState.displayId ?: "-"} is active at ${agentModeDisplayState.width} x ${agentModeDisplayState.height}.")
+                        stringResource(
+                            R.string.settings_agent_mode_display_active,
+                            agentModeDisplayState.displayId ?: "-",
+                            agentModeDisplayState.width,
+                            agentModeDisplayState.height,
+                        )
                     } else {
-                        tr(strings, "No Agent Mode virtual display is active.", "No Agent Mode virtual display is active.")
+                        stringResource(R.string.settings_agent_mode_no_virtual_display)
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
@@ -3386,14 +3358,14 @@ private fun AgentModeSettingsPage(
                 }
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    text = tr(strings, "Visible displays", "可见显示"),
+                    text = stringResource(R.string.settings_visible_displays),
                     style = MaterialTheme.typography.labelMedium,
                     color = AetherOnSurface,
                 )
                 Spacer(Modifier.height(8.dp))
                 if (agentModeDisplayState.displays.isEmpty()) {
                     Text(
-                        text = tr(strings, "No displays are currently visible to Aether.", "No displays are currently visible to Aether."),
+                        text = stringResource(R.string.settings_no_visible_displays),
                         style = MaterialTheme.typography.bodySmall,
                         color = AetherOnSurfaceVariant,
                     )
@@ -3416,13 +3388,13 @@ private fun AgentModeSettingsPage(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = tr(strings, "Display ${display.displayId}", "显示 ${display.displayId}"),
+                                        text = stringResource(R.string.agent_mode_display_id, display.displayId),
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = AetherOnSurface,
                                     )
                                     Text(
                                         text = listOf(
-                                            display.name.ifBlank { tr(strings, "Unnamed", "Unnamed") },
+                                            display.name.ifBlank { stringResource(R.string.settings_unnamed_display) },
                                             "${display.width} x ${display.height}",
                                             if (display.isAetherDisplay) "Aether" else "",
                                         ).filter { it.isNotBlank() }.joinToString(" · "),
@@ -3438,7 +3410,7 @@ private fun AgentModeSettingsPage(
                 }
                 Spacer(Modifier.height(16.dp))
                 SettingsActionButton(
-                    label = tr(strings, "Stop virtual display", "停止虚拟显示"),
+                    label = stringResource(R.string.settings_stop_virtual_display),
                     onClick = onStopAgentModeDisplay,
                     modifier = Modifier.fillMaxWidth(),
                     enabled = agentModeDisplayState.isActive,
@@ -3455,7 +3427,6 @@ private fun RootSetupAlreadyConfiguredDialog(
     onDismiss: () -> Unit,
     onContinue: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     Dialog(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
@@ -3483,12 +3454,12 @@ private fun RootSetupAlreadyConfiguredDialog(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Cancel", "取消"),
+                    label = stringResource(R.string.action_cancel),
                     onClick = onDismiss,
                     modifier = Modifier.weight(1f),
                 )
                 SettingsActionButton(
-                    label = tr(strings, "Continue", "继续"),
+                    label = stringResource(R.string.action_continue),
                     onClick = onContinue,
                     modifier = Modifier.weight(1f),
                 )
@@ -3514,7 +3485,6 @@ private fun RootSetupProgressPage(
     onRunRootSetup: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val rootAgentModeReady = agentModeAuthorizationEnabled &&
         agentModeAuthorizationMethod == AgentModeAuthorizationMethod.Root &&
         agentModeAuthorizationState.isReady
@@ -3540,7 +3510,7 @@ private fun RootSetupProgressPage(
     }
 
     SubPageScaffold(
-        title = tr(strings, "Root automatic setup", "Root 自动配置"),
+        title = stringResource(R.string.settings_root_automatic_setup),
         onBack = onBack,
     ) {
         SettingsCardGroup {
@@ -3574,13 +3544,13 @@ private fun RootSetupProgressPage(
                 }
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    text = rootSetupProgressTitle(rootSetupState.issue, strings),
+                    text = rootSetupProgressTitle(rootSetupState.issue),
                     style = MaterialTheme.typography.titleMedium,
                     color = AetherOnSurface,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = rootSetupProgressBody(rootSetupState.issue, strings),
+                    text = rootSetupProgressBody(rootSetupState.issue),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                 )
@@ -3605,18 +3575,18 @@ private fun RootSetupProgressPage(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 RootSetupProgressStep(
-                    title = tr(strings, "Root access", "Root 访问"),
-                    subtitle = tr(strings, "Detect su and wait for authorization.", "检测 su 并等待授权。"),
+                    title = stringResource(R.string.settings_root_setup_step_root_access),
+                    subtitle = stringResource(R.string.settings_root_setup_step_root_access_subtitle),
                     status = rootStepStatus,
                 )
                 RootSetupProgressStep(
-                    title = tr(strings, "Termux command access", "Termux 命令访问"),
-                    subtitle = tr(strings, "Enable external apps and grant command permission.", "启用外部应用并授予命令权限。"),
+                    title = stringResource(R.string.settings_root_setup_step_termux_access),
+                    subtitle = stringResource(R.string.settings_root_setup_step_termux_access_subtitle),
                     status = termuxStepStatus,
                 )
                 RootSetupProgressStep(
-                    title = tr(strings, "Root Agent Mode", "Root Agent Mode"),
-                    subtitle = tr(strings, "Select Root authorization for local device control.", "为本地设备控制选择 Root 授权。"),
+                    title = stringResource(R.string.settings_root_setup_step_agent_mode),
+                    subtitle = stringResource(R.string.settings_root_setup_step_agent_mode_subtitle),
                     status = agentModeStepStatus,
                 )
             }
@@ -3626,7 +3596,7 @@ private fun RootSetupProgressPage(
 
         when {
             rootSetupState.isRunning -> SettingsSubtleActionButton(
-                label = tr(strings, "Back", "返回"),
+                label = stringResource(R.string.action_back),
                 onClick = onBack,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -3636,12 +3606,12 @@ private fun RootSetupProgressPage(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Run again", "重新执行"),
+                    label = stringResource(R.string.settings_run_again),
                     onClick = onRunRootSetup,
                     modifier = Modifier.weight(1f),
                 )
                 SettingsActionButton(
-                    label = tr(strings, "Done", "完成"),
+                    label = stringResource(R.string.action_done),
                     onClick = onBack,
                     modifier = Modifier.weight(1f),
                 )
@@ -3652,12 +3622,12 @@ private fun RootSetupProgressPage(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Back", "返回"),
+                    label = stringResource(R.string.action_back),
                     onClick = onBack,
                     modifier = Modifier.weight(1f),
                 )
                 SettingsActionButton(
-                    label = tr(strings, "Try again", "重试"),
+                    label = stringResource(R.string.action_try_again),
                     onClick = onRunRootSetup,
                     modifier = Modifier.weight(1f),
                 )
@@ -3742,68 +3712,33 @@ private fun rootSetupProgressAccent(issue: RootSetupIssue): Color = when (issue)
     RootSetupIssue.Unavailable -> AetherOnSurfaceVariant
 }
 
+@Composable
 private fun rootSetupProgressTitle(
     issue: RootSetupIssue,
-    strings: AetherStrings,
 ): String = when (issue) {
-    RootSetupIssue.Running -> tr(strings, "Configuring Root setup", "正在执行 Root 自动配置")
-    RootSetupIssue.Ready -> tr(strings, "Root setup completed", "Root 自动配置已完成")
-    RootSetupIssue.Available -> tr(strings, "Ready to start", "准备开始")
-    RootSetupIssue.Unavailable -> tr(strings, "Root is unavailable", "Root 不可用")
-    RootSetupIssue.PermissionDenied -> tr(strings, "Root authorization was not granted", "未获得 Root 授权")
-    RootSetupIssue.TermuxNotInstalled -> tr(strings, "Termux is required", "需要安装 Termux")
-    RootSetupIssue.Failed -> tr(strings, "Setup did not complete", "配置未完成")
-    RootSetupIssue.Unknown -> tr(strings, "Preparing setup", "正在准备配置")
+    RootSetupIssue.Running -> stringResource(R.string.settings_root_setup_configuring)
+    RootSetupIssue.Ready -> stringResource(R.string.settings_root_setup_completed)
+    RootSetupIssue.Available -> stringResource(R.string.settings_root_setup_ready_to_start)
+    RootSetupIssue.Unavailable -> stringResource(R.string.settings_root_setup_root_unavailable)
+    RootSetupIssue.PermissionDenied -> stringResource(R.string.settings_root_setup_permission_denied)
+    RootSetupIssue.TermuxNotInstalled -> stringResource(R.string.settings_root_setup_termux_required)
+    RootSetupIssue.Failed -> stringResource(R.string.settings_root_setup_failed)
+    RootSetupIssue.Unknown -> stringResource(R.string.settings_root_setup_preparing)
 }
 
+@Composable
 private fun rootSetupProgressBody(
     issue: RootSetupIssue,
-    strings: AetherStrings,
 ): String = when (issue) {
-    RootSetupIssue.Running -> tr(
-        strings,
-        "Aether is requesting su, enabling Termux command access, and preparing Root Agent Mode.",
-        "Aether \u6b63\u5728\u8bf7\u6c42 su\u3001\u542f\u7528 Termux \u547d\u4ee4\u8bbf\u95ee\uff0c\u5e76\u51c6\u5907 Root Agent Mode\u3002",
-    )
-
-    RootSetupIssue.Ready -> tr(
-        strings,
-        "Termux command access and Root Agent Mode authorization are ready.",
-        "Termux \u547d\u4ee4\u8bbf\u95ee\u548c Root Agent Mode \u6388\u6743\u5df2\u7ecf\u5c31\u7eea\u3002",
-    )
-
+    RootSetupIssue.Running -> stringResource(R.string.settings_root_setup_progress_body_running)
+    RootSetupIssue.Ready -> stringResource(R.string.settings_root_setup_progress_body_ready)
     RootSetupIssue.Available,
-    RootSetupIssue.Unknown -> tr(
-        strings,
-        "Start setup to grant su and finish the local access configuration.",
-        "开始配置后会请求 su，并完成本地访问配置。",
-    )
-
-    RootSetupIssue.Unavailable -> tr(
-        strings,
-        "No su binary was detected on this device.",
-        "当前设备未检测到 su。",
-    )
-
-    RootSetupIssue.PermissionDenied -> tr(
-        strings,
-        "Grant su to Aether, then try Root automatic setup again.",
-        "请授予 Aether su 权限后重试 Root 自动配置。",
-    )
-
-    RootSetupIssue.TermuxNotInstalled -> tr(
-        strings,
-        "Install Termux first, then return to this setup.",
-        "请先安装 Termux，然后返回继续配置。",
-    )
-
-    RootSetupIssue.Failed -> tr(
-        strings,
-        "The setup command finished with an error. Review the detail above and retry when ready.",
-        "配置命令返回错误。请查看上方详情后重试。",
-    )
+    RootSetupIssue.Unknown -> stringResource(R.string.settings_root_setup_progress_body_available)
+    RootSetupIssue.Unavailable -> stringResource(R.string.settings_root_setup_progress_body_unavailable)
+    RootSetupIssue.PermissionDenied -> stringResource(R.string.settings_root_setup_progress_body_permission_denied)
+    RootSetupIssue.TermuxNotInstalled -> stringResource(R.string.settings_root_setup_progress_body_termux_not_installed)
+    RootSetupIssue.Failed -> stringResource(R.string.settings_root_setup_progress_body_failed)
 }
-
 @Composable
 private fun RootSetupSettingsSection(
     title: String,
@@ -3811,7 +3746,6 @@ private fun RootSetupSettingsSection(
     body: String,
     onConfigureWithRoot: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     Column(
         modifier = Modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -3851,10 +3785,10 @@ private fun RootSetupSettingsSection(
         }
         SettingsSubtleActionButton(
             label = when (rootSetupState.issue) {
-                RootSetupIssue.Running -> tr(strings, "Configuring...", "正在配置...")
-                RootSetupIssue.Ready -> tr(strings, "Run Root setup again", "重新执行 Root 配置")
-                RootSetupIssue.Unavailable -> tr(strings, "Try Root setup", "尝试 Root 配置")
-                else -> tr(strings, "Configure with Root", "使用 Root 配置")
+                RootSetupIssue.Running -> stringResource(R.string.settings_configuring)
+                RootSetupIssue.Ready -> stringResource(R.string.settings_run_root_setup_again)
+                RootSetupIssue.Unavailable -> stringResource(R.string.settings_try_root_setup)
+                else -> stringResource(R.string.settings_configure_with_root)
             },
             onClick = onConfigureWithRoot,
             modifier = Modifier.fillMaxWidth(),
@@ -3863,37 +3797,21 @@ private fun RootSetupSettingsSection(
     }
 }
 
+@Composable
 private fun rootSetupSettingsBody(
     rootSetupState: RootSetupState,
-    strings: AetherStrings,
 ): String = when (rootSetupState.issue) {
-    RootSetupIssue.Ready -> tr(
-        strings,
-        "Aether can silently wake Termux in the background with Root when Termux is not already running.",
-        "Termux \u672a\u8fd0\u884c\u65f6\uff0cAether \u53ef\u4ee5\u901a\u8fc7 Root \u5728\u540e\u53f0\u9759\u9ed8\u5524\u8d77 Termux\u3002",
-    )
+    RootSetupIssue.Ready -> stringResource(R.string.settings_root_setup_body_ready)
 
     RootSetupIssue.Available,
-    RootSetupIssue.Running -> tr(
-        strings,
-        "Aether can use su to enable Termux command access and background wake-up.",
-        "Aether \u53ef\u4ee5\u901a\u8fc7 su \u542f\u7528 Termux \u547d\u4ee4\u8bbf\u95ee\u548c\u540e\u53f0\u5524\u8d77\u80fd\u529b\u3002",
-    )
+    RootSetupIssue.Running -> stringResource(R.string.settings_root_setup_body_available)
 
     RootSetupIssue.Unavailable,
-    RootSetupIssue.Unknown -> tr(
-        strings,
-        "On rooted devices, this avoids the manual Termux permission and settings flow.",
-        "在已 Root 设备上，这可以避免手动配置 Termux 权限和设置。",
-    )
+    RootSetupIssue.Unknown -> stringResource(R.string.settings_root_setup_body_unavailable)
 
     RootSetupIssue.PermissionDenied,
     RootSetupIssue.TermuxNotInstalled,
-    RootSetupIssue.Failed -> tr(
-        strings,
-        "Retry after granting su to Aether, or continue with the manual setup actions below.",
-        "授予 Aether su 后重试，或继续使用下方的手动配置操作。",
-    )
+    RootSetupIssue.Failed -> stringResource(R.string.settings_root_setup_body_failed)
 }
 
 @Composable
@@ -3905,43 +3823,42 @@ private fun AgentModeAuthorizationNotice(
     onOpenShizuku: () -> Unit,
     onInstallShizuku: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val statusText = when {
         enabled && method == AgentModeAuthorizationMethod.Root -> when (state.issue) {
-            AgentModeAuthorizationIssue.Ready -> tr(strings, "Root authorization is ready.", "Root authorization is ready.")
-            AgentModeAuthorizationIssue.RootUnavailable -> tr(strings, "No su binary was detected on this device.", "No su binary was detected on this device.")
-            AgentModeAuthorizationIssue.RootPermissionMissing -> tr(strings, "Grant su to Aether, then refresh this status.", "Grant su to Aether, then refresh this status.")
-            AgentModeAuthorizationIssue.RootPermissionDenied -> tr(strings, "Root authorization was denied. Grant su to Aether, then refresh this status.", "Root authorization was denied. Grant su to Aether, then refresh this status.")
+            AgentModeAuthorizationIssue.Ready -> stringResource(R.string.settings_root_authorization_ready)
+            AgentModeAuthorizationIssue.RootUnavailable -> stringResource(R.string.settings_root_authorization_no_su)
+            AgentModeAuthorizationIssue.RootPermissionMissing -> stringResource(R.string.settings_root_authorization_grant_su)
+            AgentModeAuthorizationIssue.RootPermissionDenied -> stringResource(R.string.settings_root_authorization_denied)
             AgentModeAuthorizationIssue.Error -> state.detail.ifBlank {
-                tr(strings, "Unable to inspect Root status.", "Unable to inspect Root status.")
+                stringResource(R.string.settings_root_authorization_inspect_failed)
             }
             else -> state.detail.ifBlank {
-                tr(strings, "Refresh Root status before using Agent Mode.", "Refresh Root status before using Agent Mode.")
+                stringResource(R.string.settings_root_authorization_refresh_first)
             }
         }
-        !enabled -> tr(strings, "Agent Mode authorization is off.", "Agent 模式授权已关闭。")
-        method == AgentModeAuthorizationMethod.Root -> tr(strings, "Root mode will request su when Agent Mode starts.", "Root 模式会在启动 Agent 模式时请求 su。")
+        !enabled -> stringResource(R.string.settings_agent_mode_authorization_off)
+        method == AgentModeAuthorizationMethod.Root -> stringResource(R.string.settings_agent_mode_root_requests_su)
         else -> when (state.issue) {
-            AgentModeAuthorizationIssue.Ready -> tr(strings, "Shizuku is running and Aether is authorized.", "Shizuku 正在运行，Aether 已获得授权。")
-            AgentModeAuthorizationIssue.ShizukuNotInstalled -> tr(strings, "Install Shizuku before using Shizuku mode.", "使用 Shizuku 模式前，请先安装 Shizuku。")
-            AgentModeAuthorizationIssue.ShizukuNotRunning -> tr(strings, "Start Shizuku, then refresh this status.", "先启动 Shizuku，然后刷新此状态。")
-            AgentModeAuthorizationIssue.ShizukuPermissionMissing -> tr(strings, "Grant Aether permission in Shizuku before using Agent Mode.", "使用 Agent 模式前，请先在 Shizuku 中授予 Aether 权限。")
-            AgentModeAuthorizationIssue.ShizukuPermissionDenied -> tr(strings, "Shizuku permission was denied. Request it again or enable Aether inside Shizuku.", "Shizuku 权限被拒绝。请重新请求授权，或在 Shizuku 中启用 Aether。")
-            AgentModeAuthorizationIssue.Disabled -> tr(strings, "Save Agent Mode settings, then refresh Shizuku status.", "保存 Agent 模式设置后，再刷新 Shizuku 状态。")
+            AgentModeAuthorizationIssue.Ready -> stringResource(R.string.settings_shizuku_authorized)
+            AgentModeAuthorizationIssue.ShizukuNotInstalled -> stringResource(R.string.settings_shizuku_install_first)
+            AgentModeAuthorizationIssue.ShizukuNotRunning -> stringResource(R.string.settings_shizuku_start_first)
+            AgentModeAuthorizationIssue.ShizukuPermissionMissing -> stringResource(R.string.settings_shizuku_grant_permission)
+            AgentModeAuthorizationIssue.ShizukuPermissionDenied -> stringResource(R.string.settings_shizuku_permission_denied)
+            AgentModeAuthorizationIssue.Disabled -> stringResource(R.string.settings_shizuku_save_then_refresh)
             AgentModeAuthorizationIssue.RootUnavailable,
             AgentModeAuthorizationIssue.RootPermissionMissing,
             AgentModeAuthorizationIssue.RootPermissionDenied -> state.detail.ifBlank {
-                tr(strings, "Switch to Root mode to inspect Root status.", "Switch to Root mode to inspect Root status.")
+                stringResource(R.string.settings_switch_to_root_to_inspect)
             }
             AgentModeAuthorizationIssue.Error -> state.detail.ifBlank {
-                tr(strings, "Unable to inspect Shizuku status.", "无法检查 Shizuku 状态。")
+                stringResource(R.string.settings_shizuku_inspect_failed)
             }
         }
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
-            text = tr(strings, "Authorization status", "授权状态"),
+            text = stringResource(R.string.settings_authorization_status),
             style = MaterialTheme.typography.labelLarge,
             color = AetherOnSurface,
         )
@@ -3960,7 +3877,7 @@ private fun AgentModeAuthorizationNotice(
 
             state.issue == AgentModeAuthorizationIssue.ShizukuNotInstalled -> {
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Install Shizuku", "安装 Shizuku"),
+                    label = stringResource(R.string.settings_install_shizuku),
                     onClick = onInstallShizuku,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -3968,7 +3885,7 @@ private fun AgentModeAuthorizationNotice(
 
             state.issue == AgentModeAuthorizationIssue.ShizukuNotRunning -> {
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Open Shizuku", "打开 Shizuku"),
+                    label = stringResource(R.string.settings_open_shizuku),
                     onClick = onOpenShizuku,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -3977,7 +3894,7 @@ private fun AgentModeAuthorizationNotice(
             state.issue == AgentModeAuthorizationIssue.ShizukuPermissionMissing ||
                 state.issue == AgentModeAuthorizationIssue.ShizukuPermissionDenied -> {
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Grant access", "授予权限"),
+                    label = stringResource(R.string.settings_grant_access),
                     onClick = onRequestShizukuPermission,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -4000,10 +3917,9 @@ private fun DeveloperSettingsPage(
     onTermuxReadyForTestingChanged: (Boolean) -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     SubPageScaffold(title = title, onBack = onBack) {
         Text(
-            text = tr(strings, "Developer-only tools and replay controls.", "Developer-only tools and replay controls."),
+            text = stringResource(R.string.settings_developer_description),
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -4014,25 +3930,25 @@ private fun DeveloperSettingsPage(
         SettingsCardGroup {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = tr(strings, "App Data", "应用数据"),
+                    text = stringResource(R.string.settings_app_data),
                     style = MaterialTheme.typography.labelLarge,
                     color = AetherOnSurface,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = tr(strings, "Import or export the complete local Aether data set as JSON.", "Import or export the complete local Aether data set as JSON."),
+                    text = stringResource(R.string.settings_app_data_description),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                 )
                 Spacer(Modifier.height(16.dp))
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Import app data", "导入应用数据"),
+                    label = stringResource(R.string.settings_import_app_data),
                     onClick = onImportAppData,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(10.dp))
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Export app data", "导出应用数据"),
+                    label = stringResource(R.string.settings_export_app_data),
                     onClick = onExportAppData,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -4044,19 +3960,19 @@ private fun DeveloperSettingsPage(
         SettingsCardGroup {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = tr(strings, "Logs", "日志"),
+                    text = stringResource(R.string.settings_logs),
                     style = MaterialTheme.typography.labelLarge,
                     color = AetherOnSurface,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = tr(strings, "Export recent Aether logcat output and diagnostic metadata.", "导出近期 Aether logcat 输出和诊断信息。"),
+                    text = stringResource(R.string.settings_logs_description),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                 )
                 Spacer(Modifier.height(16.dp))
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Export logs", "导出日志"),
+                    label = stringResource(R.string.settings_export_logs),
                     onClick = onExportLogs,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -4068,23 +3984,19 @@ private fun DeveloperSettingsPage(
         SettingsCardGroup {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = tr(strings, "Update testing", "Update testing"),
+                    text = stringResource(R.string.settings_update_testing),
                     style = MaterialTheme.typography.labelLarge,
                     color = AetherOnSurface,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = tr(
-                        strings,
-                        "Fetch the latest GitHub Release and show the update prompt even when the installed version is current.",
-                        "Fetch the latest GitHub Release and show the update prompt even when the installed version is current.",
-                    ),
+                    text = stringResource(R.string.settings_update_testing_description),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                 )
                 Spacer(Modifier.height(16.dp))
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Force update prompt", "Force update prompt"),
+                    label = stringResource(R.string.settings_force_update_prompt),
                     onClick = onForceUpdateCheckForTesting,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -4096,24 +4008,20 @@ private fun DeveloperSettingsPage(
         SettingsCardGroup {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = tr(strings, "Termux readiness override", "Termux readiness override"),
+                    text = stringResource(R.string.settings_termux_readiness_override),
                     style = MaterialTheme.typography.labelLarge,
                     color = AetherOnSurface,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = tr(
-                        strings,
-                        "Testing switch for Agent Mode gating. On treats Termux as ready; off treats it as not ready.",
-                        "Testing switch for Agent Mode gating. On treats Termux as ready; off treats it as not ready.",
-                    ),
+                    text = stringResource(R.string.settings_termux_readiness_override_description),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                 )
                 Spacer(Modifier.height(16.dp))
                 SettingsToggleRow(
-                    title = tr(strings, "Treat Termux as ready", "Treat Termux as ready"),
-                    subtitle = tr(strings, "On = ready. Off = not ready.", "On = ready. Off = not ready."),
+                    title = stringResource(R.string.settings_treat_termux_as_ready),
+                    subtitle = stringResource(R.string.settings_termux_ready_toggle_subtitle),
                     checked = termuxReadyForTesting,
                     onCheckedChange = onTermuxReadyForTestingChanged,
                 )
@@ -4125,19 +4033,19 @@ private fun DeveloperSettingsPage(
         SettingsCardGroup {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = tr(strings, "Replay Follow-up Tour", "重播后续引导"),
+                    text = stringResource(R.string.settings_replay_follow_up_tour),
                     style = MaterialTheme.typography.labelLarge,
                     color = AetherOnSurface,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = tr(strings, "Starts from Termux, then goes through Agent Mode, Tavily, Skills, and MCP.", "Starts from Termux, then goes through Agent Mode, Tavily, Skills, and MCP."),
+                    text = stringResource(R.string.settings_replay_follow_up_tour_description),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                 )
                 Spacer(Modifier.height(16.dp))
                 SettingsSubtleActionButton(
-                    label = tr(strings, "Replay second part", "重播第二部分"),
+                    label = stringResource(R.string.settings_replay_second_part),
                     onClick = onReplayFollowUpOnboarding,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -4162,20 +4070,15 @@ private fun AboutPage(
     onDownloadAndInstallUpdate: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val updateSubtitle = when {
         appUpdate.isDownloading -> appUpdate.downloadProgress?.let { progress ->
-            tr(strings, "Downloading ${(progress * 100).toInt()}%", "Downloading ${(progress * 100).toInt()}%")
-        } ?: tr(strings, "Downloading update", "Downloading update")
-        appUpdate.isChecking -> tr(strings, "Checking GitHub Releases", "Checking GitHub Releases")
-        appUpdate.availableRelease != null -> tr(
-            strings,
-            "Aether ${appUpdate.availableRelease.versionName} is available",
-            "Aether ${appUpdate.availableRelease.versionName} is available",
-        )
-        else -> tr(strings, "Check GitHub Releases for a newer APK", "Check GitHub Releases for a newer APK")
+            stringResource(R.string.settings_update_downloading_percent, (progress * 100).toInt())
+        } ?: stringResource(R.string.settings_update_downloading)
+        appUpdate.isChecking -> stringResource(R.string.settings_update_checking_github_releases)
+        appUpdate.availableRelease != null -> stringResource(R.string.settings_update_available, appUpdate.availableRelease.versionName)
+        else -> stringResource(R.string.settings_update_check_newer_apk)
     }
-    val releaseLabel = tr(strings, "Release ${BuildConfig.VERSION_NAME}", "版本 ${BuildConfig.VERSION_NAME}")
+    val releaseLabel = stringResource(R.string.settings_release_summary, BuildConfig.VERSION_NAME)
     SubPageScaffold(title = title, onBack = onBack) {
         Column(
             modifier = Modifier
@@ -4185,7 +4088,7 @@ private fun AboutPage(
         ) {
             Image(
                 painter = painterResource(R.drawable.aether_mark),
-                contentDescription = tr(strings, "Aether logo", "Aether 标志"),
+                contentDescription = stringResource(R.string.settings_aether_logo),
                 modifier = Modifier.size(112.dp),
             )
             Spacer(Modifier.height(14.dp))
@@ -4205,27 +4108,27 @@ private fun AboutPage(
         Spacer(Modifier.height(24.dp))
 
         SettingsCardGroup {
-            AboutInfoRow(label = tr(strings, "Author", "Author"), value = "Zhou-Shilin")
+            AboutInfoRow(label = stringResource(R.string.settings_author), value = "Zhou-Shilin")
             CardDivider()
-            AboutInfoRow(label = tr(strings, "Version", "版本"), value = releaseLabel)
+            AboutInfoRow(label = stringResource(R.string.settings_version), value = releaseLabel)
             CardDivider()
             SettingsNavRow(
                 icon = Icons.Rounded.Refresh,
-                title = tr(strings, "Check for updates", "Check for updates"),
+                title = stringResource(R.string.settings_check_for_updates),
                 subtitle = updateSubtitle,
                 onClick = onCheckForUpdates,
             )
             CardDivider()
             SettingsNavRow(
                 icon = Icons.Rounded.Link,
-                title = tr(strings, "Website", "网站"),
+                title = stringResource(R.string.settings_website),
                 subtitle = AetherWebsiteUrl.removePrefix("https://"),
                 onClick = onOpenWebsite,
             )
             CardDivider()
             SettingsNavRow(
                 icon = Icons.Rounded.Link,
-                title = tr(strings, "Privacy Policy", "隐私政策"),
+                title = stringResource(R.string.settings_privacy_policy),
                 subtitle = AetherPrivacyPolicyUrl.removePrefix("https://"),
                 onClick = onOpenPrivacyPolicy,
             )
@@ -4237,7 +4140,7 @@ private fun AboutPage(
                 label = if (appUpdate.isDownloading) {
                     updateSubtitle
                 } else {
-                    tr(strings, "Download and install", "Download and install")
+                    stringResource(R.string.settings_download_and_install)
                 },
                 onClick = onDownloadAndInstallUpdate,
                 enabled = !appUpdate.isDownloading,
@@ -4383,7 +4286,7 @@ private fun SettingsTopBar(
     ) {
         SettingsCircleButton(
             icon = Icons.AutoMirrored.Rounded.ArrowBack,
-            contentDescription = "Back",
+            contentDescription = stringResource(R.string.common_back),
             onClick = onBack,
         )
         Text(

@@ -44,10 +44,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import com.zhousl.aether.R
 import com.zhousl.aether.data.LlmProvider
 import com.zhousl.aether.data.LlmProviderConfig
 import com.zhousl.aether.data.LlmCustomHeader
@@ -289,9 +291,9 @@ fun ProviderConfigurationForm(
     val selectedProvider = state.selectedProvider
     val providerIdAlreadyUsed = state.providerId.trim() in (existingProviderIds - setOf(state.buildConfig().providerId))
     val providerIdError = when {
-        state.providerId.isBlank() -> "Provider ID is required."
-        !isValidProviderId(state.providerId.trim()) -> "Use lowercase letters, numbers, and underscores only."
-        providerIdAlreadyUsed -> "This provider ID is already in use."
+        state.providerId.isBlank() -> stringResource(R.string.provider_form_provider_id_required)
+        !isValidProviderId(state.providerId.trim()) -> stringResource(R.string.provider_form_provider_id_invalid)
+        providerIdAlreadyUsed -> stringResource(R.string.provider_form_provider_id_in_use)
         else -> ""
     }
 
@@ -301,13 +303,13 @@ fun ProviderConfigurationForm(
     ) {
         ProviderFormCard(cardColor = cardColor) {
             ProviderFormTextField(
-                label = "Provider name",
+                label = stringResource(R.string.provider_form_provider_name),
                 value = state.name,
                 onValueChange = state::updateName,
             )
             ProviderFormDivider()
             ProviderFormTextField(
-                label = "Provider ID",
+                label = stringResource(R.string.provider_form_provider_id),
                 value = state.providerId,
                 onValueChange = state::setProviderIdFromUser,
             )
@@ -324,7 +326,7 @@ fun ProviderConfigurationForm(
 
         ProviderFormCard(cardColor = cardColor) {
             ProviderFormDropdownField(
-                label = "Request format",
+                label = stringResource(R.string.provider_form_request_format),
                 selectedValue = selectedProvider.displayName,
                 options = LlmProvider.entries,
                 onSelected = state::applyProviderDefaults,
@@ -333,10 +335,10 @@ fun ProviderConfigurationForm(
 
         Text(
             text = when (selectedProvider) {
-                LlmProvider.OpenAiResponses -> "Use OpenAI-compatible /responses endpoints."
-                LlmProvider.OpenAiCompatible -> "Use OpenAI-compatible /chat/completions endpoints."
-                LlmProvider.VertexExpress -> "Use Vertex AI Express Mode generateContent."
-                LlmProvider.AnthropicMessages -> "Use Anthropic-compatible /messages endpoints."
+                LlmProvider.OpenAiResponses -> stringResource(R.string.provider_form_request_format_openai_responses)
+                LlmProvider.OpenAiCompatible -> stringResource(R.string.provider_form_request_format_openai_chat_completions)
+                LlmProvider.VertexExpress -> stringResource(R.string.provider_form_request_format_vertex_express)
+                LlmProvider.AnthropicMessages -> stringResource(R.string.provider_form_request_format_anthropic_messages)
             },
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
@@ -351,7 +353,7 @@ fun ProviderConfigurationForm(
         }
 
         Text(
-            text = "Compatibility mode uses basic function calling and disables parallel or batch tool features for providers with limited tool support.",
+            text = stringResource(R.string.provider_form_compatibility_mode_description),
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
@@ -359,20 +361,20 @@ fun ProviderConfigurationForm(
 
         ProviderFormCard(cardColor = cardColor) {
             ProviderFormTextField(
-                label = "API Key",
+                label = stringResource(R.string.provider_form_api_key),
                 value = state.apiKey,
                 onValueChange = { state.apiKey = it },
             )
             ProviderFormDivider()
             ProviderFormTextField(
-                label = "Base URL",
+                label = stringResource(R.string.provider_form_base_url),
                 value = state.baseUrl,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                 onValueChange = { state.baseUrl = it },
             )
             ProviderFormDivider()
             ProviderFormTextField(
-                label = "Manual model IDs",
+                label = stringResource(R.string.provider_form_manual_model_ids),
                 value = state.modelId,
                 onValueChange = { state.modelId = it },
             )
@@ -401,9 +403,9 @@ fun ProviderConfigurationForm(
 
         Text(
             text = if (selectedProvider.requiresApiKey(state.baseUrl)) {
-                "Enabled models appear in the chat model picker. This request format requires an API key."
+                stringResource(R.string.provider_form_model_picker_requires_api_key)
             } else {
-                "Enabled models appear in the chat model picker. Refresh loads models from the provider API."
+                stringResource(R.string.provider_form_model_picker_refresh_hint)
             },
             style = MaterialTheme.typography.bodySmall,
             color = AetherOnSurfaceVariant,
@@ -492,13 +494,13 @@ private fun ProviderCompatibilityModeField(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "Basic tool compatibility",
+                text = stringResource(R.string.provider_form_basic_tool_compatibility),
                 style = MaterialTheme.typography.bodyLarge,
                 color = AetherOnSurface,
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = if (enabled) "On" else "Off",
+                text = if (enabled) stringResource(R.string.common_on) else stringResource(R.string.common_off),
                 style = MaterialTheme.typography.bodySmall,
                 color = AetherOnSurfaceVariant,
             )
@@ -617,7 +619,7 @@ private fun ProviderFormDropdownField(
             )
             Icon(
                 imageVector = Icons.Rounded.ArrowDropDown,
-                contentDescription = "Choose provider",
+                contentDescription = stringResource(R.string.provider_form_choose_provider),
                 tint = AetherOnSurfaceVariant,
             )
         }
@@ -664,16 +666,16 @@ private fun ProviderModelListField(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Model list",
+                    text = stringResource(R.string.provider_form_model_list),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = if (models.isEmpty()) {
-                        "No models loaded yet."
+                        stringResource(R.string.provider_form_no_models_loaded)
                     } else {
-                        "${enabledModelIds.size}/${models.size} enabled"
+                        stringResource(R.string.provider_form_models_enabled_count, enabledModelIds.size, models.size)
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = AetherOnSurface,
@@ -689,7 +691,7 @@ private fun ProviderModelListField(
                 IconButton(onClick = onFetchModels) {
                     Icon(
                         imageVector = Icons.Rounded.Refresh,
-                        contentDescription = "Fetch models",
+                        contentDescription = stringResource(R.string.provider_form_fetch_models),
                         tint = ProviderFormPrimary,
                     )
                 }
@@ -743,13 +745,13 @@ private fun ProviderCustomHeadersField(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Custom request headers",
+                    text = stringResource(R.string.provider_form_custom_request_headers),
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = if (headers.isEmpty()) "Optional" else "${headers.size} configured",
+                    text = if (headers.isEmpty()) stringResource(R.string.common_optional) else stringResource(R.string.provider_form_headers_configured_count, headers.size),
                     style = MaterialTheme.typography.bodyMedium,
                     color = AetherOnSurface,
                 )
@@ -757,7 +759,7 @@ private fun ProviderCustomHeadersField(
             IconButton(onClick = onAddHeader) {
                 Icon(
                     imageVector = Icons.Rounded.Add,
-                    contentDescription = "Add header",
+                    contentDescription = stringResource(R.string.provider_form_add_header),
                     tint = ProviderFormPrimary,
                 )
             }
@@ -792,13 +794,13 @@ private fun ProviderCustomHeaderRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         ProviderFormTextField(
-            label = "Header",
+            label = stringResource(R.string.provider_form_header_name),
             value = header.name,
             onValueChange = onNameChange,
             modifier = Modifier.weight(0.42f),
         )
         ProviderFormTextField(
-            label = "Value",
+            label = stringResource(R.string.provider_form_header_value),
             value = header.value,
             onValueChange = onValueChange,
             modifier = Modifier.weight(0.58f),
@@ -806,7 +808,7 @@ private fun ProviderCustomHeaderRow(
         IconButton(onClick = onRemove) {
             Icon(
                 imageVector = Icons.Rounded.Delete,
-                contentDescription = "Remove header",
+                contentDescription = stringResource(R.string.provider_form_remove_header),
                 tint = AetherOnSurfaceVariant,
             )
         }
