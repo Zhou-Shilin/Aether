@@ -834,63 +834,64 @@ private fun AssistantMessageBlock(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        val context = LocalContext.current
-        val agentModeFrames = remember(context, message.toolInvocations) {
-            buildAgentModeReplayFrames(context, message.toolInvocations)
-        }
-        val workContent: @Composable () -> Unit = {
-            AssistantMessageWorkContent(
-                message = message,
-                agentModeFrames = agentModeFrames,
-                workspaceDirectory = workspaceDirectory,
-                allowRootImageRead = allowRootImageRead,
-                onOpenAttachment = onOpenAttachment,
-                onOpenLink = onOpenLink,
-            )
-        }
         if (shouldFoldWorkBeforeFinalText) {
             AgentWorkSummaryDisclosure(
                 title = formatWorkedSummaryTitle(
                     message.thoughtDurationMillis
-                        ?: workDurationMillisForMessages(listOf(message), endAtMillis = message.createdAtMillis),
+                        ?: workDurationMillisForMessage(message, endAtMillis = message.createdAtMillis),
                 ),
                 stateKey = "message-work-${message.id}",
-                content = workContent,
-            )
-        }
-        if (!shouldFoldWorkBeforeFinalText) {
-        if (message.reasoningTrace != null) {
-            ReasoningTraceStatus(
-                trace = message.reasoningTrace,
-                onOpenLink = onOpenLink,
-            )
-        } else {
-            message.thoughtDurationMillis?.let { duration ->
-                Text(
-                    text = stringResource(R.string.chat_thought_for_duration, formatThoughtDuration(duration)),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AetherOnSurfaceVariant,
+            ) {
+                val context = LocalContext.current
+                val agentModeFrames = remember(context, message.toolInvocations) {
+                    buildAgentModeReplayFrames(context, message.toolInvocations)
+                }
+                AssistantMessageWorkContent(
+                    message = message,
+                    agentModeFrames = agentModeFrames,
+                    workspaceDirectory = workspaceDirectory,
+                    allowRootImageRead = allowRootImageRead,
+                    onOpenAttachment = onOpenAttachment,
+                    onOpenLink = onOpenLink,
                 )
             }
-        }
-        if (message.reasoningTrace == null && agentModeFrames.isNotEmpty()) {
-            AgentModeReplayPanel(
-                frames = agentModeFrames,
-                stateKey = "agent-mode-replay-${message.id}",
-                workspaceDirectory = workspaceDirectory,
-                allowRootImageRead = allowRootImageRead,
-                onOpenLink = onOpenLink,
+        } else {
+            val context = LocalContext.current
+            val agentModeFrames = remember(context, message.toolInvocations) {
+                buildAgentModeReplayFrames(context, message.toolInvocations)
+            }
+            if (message.reasoningTrace != null) {
+                ReasoningTraceStatus(
+                    trace = message.reasoningTrace,
+                    onOpenLink = onOpenLink,
+                )
+            } else {
+                message.thoughtDurationMillis?.let { duration ->
+                    Text(
+                        text = stringResource(R.string.chat_thought_for_duration, formatThoughtDuration(duration)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AetherOnSurfaceVariant,
+                    )
+                }
+            }
+            if (message.reasoningTrace == null && agentModeFrames.isNotEmpty()) {
+                AgentModeReplayPanel(
+                    frames = agentModeFrames,
+                    stateKey = "agent-mode-replay-${message.id}",
+                    workspaceDirectory = workspaceDirectory,
+                    allowRootImageRead = allowRootImageRead,
+                    onOpenLink = onOpenLink,
+                )
+            } else if (message.reasoningTrace == null) {
+                ToolInvocationList(
+                    toolInvocations = message.toolInvocations,
+                    stateKey = "message-tools-${message.id}",
+                )
+            }
+            AssistantAttachments(
+                attachments = message.attachments,
+                onOpenAttachment = onOpenAttachment,
             )
-        } else if (message.reasoningTrace == null) {
-            ToolInvocationList(
-                toolInvocations = message.toolInvocations,
-                stateKey = "message-tools-${message.id}",
-            )
-        }
-        AssistantAttachments(
-            attachments = message.attachments,
-            onOpenAttachment = onOpenAttachment,
-        )
         }
         if (message.text.isNotBlank()) {
             MarkdownContent(
@@ -965,154 +966,6 @@ private fun AssistantMessageWorkContent(
         attachments = message.attachments,
         onOpenAttachment = onOpenAttachment,
     )
-}
-
-@Composable
-fun ConversationAssistantGroupBubble(
-    messages: List<ChatMessage>,
-    actionsEnabled: Boolean,
-    workspaceDirectory: String?,
-    allowRootImageRead: Boolean = false,
-    onOpenAttachment: (ChatAttachment) -> Unit,
-    onOpenLink: (String) -> Unit,
-    onCopy: () -> Unit,
-    onRedo: () -> Unit,
-    onDelete: () -> Unit,
-) {
-    if (messages.isEmpty()) return
-    val thoughtDurationMillis = messages.lastOrNull()?.thoughtDurationMillis
-    val hasReasoningTrace = messages.any { it.reasoningTrace != null }
-    val showActions = messages.none { it.assistantActionsHidden }
-    val context = LocalContext.current
-    val agentModeReplayTimeline = remember(context, messages) {
-        buildAgentModeReplayTimeline(context, messages)
-    }
-    val groupAgentModeFrames = agentModeReplayTimeline.frames
-    val interleavedAgentModeTextIds = agentModeReplayTimeline.interleavedTextMessageIds
-    val firstAgentModeMessageIndex = agentModeReplayTimeline.firstFrameMessageIndex
-    val finalTextMessageIndex = messages.indexOfLast { message ->
-        message.text.isNotBlank() && message.id !in interleavedAgentModeTextIds
-    }
-    val shouldFoldWorkBeforeFinalText = finalTextMessageIndex > 0
-    val workMessages = if (shouldFoldWorkBeforeFinalText) {
-        messages.take(finalTextMessageIndex)
-    } else {
-        emptyList()
-    }
-    val visibleMessages = if (shouldFoldWorkBeforeFinalText) {
-        messages.drop(finalTextMessageIndex)
-    } else {
-        messages
-    }
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        if (!shouldFoldWorkBeforeFinalText && !hasReasoningTrace) thoughtDurationMillis?.let { duration ->
-            Text(
-                text = stringResource(R.string.chat_thought_for_duration, formatThoughtDuration(duration)),
-                style = MaterialTheme.typography.bodySmall,
-                color = AetherOnSurfaceVariant,
-            )
-        }
-        if (shouldFoldWorkBeforeFinalText) {
-            AgentWorkSummaryDisclosure(
-                title = formatWorkedSummaryTitle(
-                    thoughtDurationMillis
-                        ?: workDurationMillisForMessages(
-                            workMessages,
-                            endAtMillis = messages[finalTextMessageIndex].createdAtMillis,
-                        ),
-                ),
-                stateKey = "assistant-work-${messages.first().responseGroupId ?: messages.first().id}",
-            ) {
-                if (groupAgentModeFrames.isNotEmpty()) {
-                    AgentModeReplayPanel(
-                        frames = groupAgentModeFrames,
-                        stateKey = "agent-mode-replay-${messages.first().responseGroupId ?: messages.first().id}-folded",
-                        workspaceDirectory = workspaceDirectory,
-                        allowRootImageRead = allowRootImageRead,
-                        onOpenLink = onOpenLink,
-                    )
-                }
-                workMessages.forEachIndexed { index, message ->
-                    AssistantGroupMessageContent(
-                        message = message,
-                        groupAgentModeFrames = if (groupAgentModeFrames.isNotEmpty() && index >= firstAgentModeMessageIndex) {
-                            groupAgentModeFrames
-                        } else {
-                            emptyList()
-                        },
-                        interleavedAgentModeTextIds = interleavedAgentModeTextIds,
-                        workspaceDirectory = workspaceDirectory,
-                        allowRootImageRead = allowRootImageRead,
-                        onOpenAttachment = onOpenAttachment,
-                        onOpenLink = onOpenLink,
-                    )
-                }
-            }
-        }
-        if (!shouldFoldWorkBeforeFinalText && groupAgentModeFrames.isNotEmpty() && firstAgentModeMessageIndex > 0) {
-            messages.take(firstAgentModeMessageIndex).forEach { message ->
-                AssistantGroupMessageContent(
-                    message = message,
-                    groupAgentModeFrames = emptyList(),
-                    interleavedAgentModeTextIds = emptySet(),
-                    workspaceDirectory = workspaceDirectory,
-                    allowRootImageRead = allowRootImageRead,
-                    onOpenAttachment = onOpenAttachment,
-                    onOpenLink = onOpenLink,
-                )
-            }
-        }
-        if (!shouldFoldWorkBeforeFinalText && groupAgentModeFrames.isNotEmpty()) {
-            AgentModeReplayPanel(
-                frames = groupAgentModeFrames,
-                stateKey = "agent-mode-replay-${messages.first().responseGroupId ?: messages.first().id}",
-                workspaceDirectory = workspaceDirectory,
-                allowRootImageRead = allowRootImageRead,
-                onOpenLink = onOpenLink,
-            )
-        }
-        messages.forEachIndexed { index, message ->
-            if (shouldFoldWorkBeforeFinalText && message !in visibleMessages) {
-                return@forEachIndexed
-            }
-            if (groupAgentModeFrames.isNotEmpty() && index < firstAgentModeMessageIndex) {
-                return@forEachIndexed
-            }
-            AssistantGroupMessageContent(
-                message = message,
-                groupAgentModeFrames = groupAgentModeFrames,
-                interleavedAgentModeTextIds = interleavedAgentModeTextIds,
-                workspaceDirectory = workspaceDirectory,
-                allowRootImageRead = allowRootImageRead,
-                onOpenAttachment = onOpenAttachment,
-                onOpenLink = onOpenLink,
-            )
-        }
-        if (showActions) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AssistantMessageAction(
-                icon = LucideIcons.Copy,
-                contentDescription = stringResource(R.string.common_copy_reply),
-                onClick = onCopy,
-            )
-            AssistantMessageAction(
-                icon = LucideIcons.RotateCcw,
-                contentDescription = stringResource(R.string.common_redo_reply),
-                enabled = actionsEnabled,
-                onClick = onRedo,
-            )
-            AssistantMessageAction(
-                icon = LucideIcons.Trash2,
-                contentDescription = stringResource(R.string.common_delete_reply),
-                enabled = actionsEnabled,
-                onClick = onDelete,
-            )
-            }
-        }
-    }
 }
 
 @Composable
@@ -3401,31 +3254,68 @@ fun workDurationMillisForMessages(
     messages: List<ChatMessage>,
     endAtMillis: Long? = null,
 ): Long {
-    val timestamps = mutableListOf<Long>()
+    var minStartedAt = Long.MAX_VALUE
+    var maxCompletedAt = Long.MIN_VALUE
+    var hasTimestamp = false
+
+    fun record(timestamp: Long) {
+        if (timestamp < MinimumEpochMillis) return
+        if (timestamp < minStartedAt) minStartedAt = timestamp
+        if (timestamp > maxCompletedAt) maxCompletedAt = timestamp
+        hasTimestamp = true
+    }
+
     messages.forEach { message ->
-        if (message.createdAtMillis > 0L) {
-            timestamps += message.createdAtMillis
-        }
+        record(message.createdAtMillis)
         message.reasoningTrace?.let { trace ->
-            if (trace.startedAtMillis > 0L) timestamps += trace.startedAtMillis
-            trace.completedAtMillis?.takeIf { it > 0L }?.let { timestamps += it }
-            trace.chunks.forEach { chunk ->
-                if (chunk.createdAtMillis > 0L) timestamps += chunk.createdAtMillis
-            }
+            record(trace.startedAtMillis)
+            trace.completedAtMillis?.let(::record)
+            trace.chunks.forEach { chunk -> record(chunk.createdAtMillis) }
         }
         message.toolInvocations.forEach { invocation ->
-            if (invocation.startedAtMillis > 0L) timestamps += invocation.startedAtMillis
-            invocation.completedAtMillis?.takeIf { it > 0L }?.let { timestamps += it }
+            record(invocation.startedAtMillis)
+            invocation.completedAtMillis?.let(::record)
         }
     }
-    endAtMillis?.takeIf { it > 0L }?.let { timestamps += it }
+    endAtMillis?.let(::record)
 
-    val wallClockTimestamps = timestamps.filter { it >= MinimumEpochMillis }
-    if (wallClockTimestamps.size < 2) {
+    if (!hasTimestamp || maxCompletedAt <= minStartedAt) {
         return messages.lastOrNull()?.thoughtDurationMillis ?: 1_000L
     }
-    return (wallClockTimestamps.maxOrNull()!! - wallClockTimestamps.minOrNull()!!)
-        .coerceAtLeast(1_000L)
+    return (maxCompletedAt - minStartedAt).coerceAtLeast(1_000L)
+}
+
+fun workDurationMillisForMessage(
+    message: ChatMessage,
+    endAtMillis: Long? = null,
+): Long {
+    var minStartedAt = Long.MAX_VALUE
+    var maxCompletedAt = Long.MIN_VALUE
+    var hasTimestamp = false
+
+    fun record(timestamp: Long) {
+        if (timestamp < MinimumEpochMillis) return
+        if (timestamp < minStartedAt) minStartedAt = timestamp
+        if (timestamp > maxCompletedAt) maxCompletedAt = timestamp
+        hasTimestamp = true
+    }
+
+    record(message.createdAtMillis)
+    message.reasoningTrace?.let { trace ->
+        record(trace.startedAtMillis)
+        trace.completedAtMillis?.let(::record)
+        trace.chunks.forEach { chunk -> record(chunk.createdAtMillis) }
+    }
+    message.toolInvocations.forEach { invocation ->
+        record(invocation.startedAtMillis)
+        invocation.completedAtMillis?.let(::record)
+    }
+    endAtMillis?.let(::record)
+
+    if (!hasTimestamp || maxCompletedAt <= minStartedAt) {
+        return message.thoughtDurationMillis ?: 1_000L
+    }
+    return (maxCompletedAt - minStartedAt).coerceAtLeast(1_000L)
 }
 
 fun workDurationMillisForBlocks(
@@ -4000,38 +3890,6 @@ private fun summarizeAgentDisplayCommand(arguments: JSONObject?): String {
     }.trim()
 }
 
-private fun buildAgentModeReplayTimeline(
-    context: Context,
-    messages: List<ChatMessage>,
-): AgentModeReplayTimeline {
-    val frames = mutableListOf<AgentModeReplayFrame>()
-    val interleavedTextMessageIds = mutableSetOf<String>()
-    var firstFrameMessageIndex = -1
-    messages.forEachIndexed { index, message ->
-        val messageFrames = buildAgentModeReplayFrames(context, message.toolInvocations)
-        if (messageFrames.isNotEmpty()) {
-            if (firstFrameMessageIndex < 0) {
-                firstFrameMessageIndex = index
-            }
-            frames += messageFrames
-        }
-        if (message.text.isNotBlank() && frames.isNotEmpty() && messages.hasFutureAgentModeFrame(context, index + 1)) {
-            frames[frames.lastIndex] = frames.last().copy(overlayText = message.text)
-            interleavedTextMessageIds += message.id
-        }
-    }
-    return AgentModeReplayTimeline(
-        frames = frames,
-        interleavedTextMessageIds = interleavedTextMessageIds,
-        firstFrameMessageIndex = firstFrameMessageIndex,
-    )
-}
-
-private fun List<ChatMessage>.hasFutureAgentModeFrame(context: Context, startIndex: Int): Boolean =
-    drop(startIndex).any { message ->
-        buildAgentModeReplayFrames(context, message.toolInvocations).isNotEmpty()
-    }
-
 private fun buildAgentModeReplayFrames(
     context: Context,
     toolInvocations: List<ChatToolInvocation>,
@@ -4181,10 +4039,4 @@ private data class AgentModeReplayFrame(
     val overlayText: String,
     val completedAtUptimeMillis: Long,
     val toolTitle: String,
-)
-
-private data class AgentModeReplayTimeline(
-    val frames: List<AgentModeReplayFrame>,
-    val interleavedTextMessageIds: Set<String>,
-    val firstFrameMessageIndex: Int,
 )

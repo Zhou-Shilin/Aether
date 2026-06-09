@@ -185,6 +185,25 @@ internal data class MarkdownCodeFenceHeader(
     val attributes: Map<String, String>,
 )
 
+private object MarkdownParsedBlockCache {
+    private const val MaxEntries = 96
+    private val entries = LinkedHashMap<String, List<MarkdownBlock>>(MaxEntries, 0.75f, true)
+
+    fun get(markdown: String): List<MarkdownBlock> {
+        entries[markdown]?.let { return it }
+        val blocks = parseMarkdown(markdown)
+        entries[markdown] = blocks
+        if (entries.size > MaxEntries) {
+            val iterator = entries.keys.iterator()
+            if (iterator.hasNext()) {
+                iterator.next()
+                iterator.remove()
+            }
+        }
+        return blocks
+    }
+}
+
 @Composable
 fun MarkdownContent(
     markdown: String,
@@ -196,7 +215,7 @@ fun MarkdownContent(
     fadeSpan: MarkdownFadeSpan? = null,
 ) {
     val normalizedMarkdown = remember(markdown) { markdown.replace("\r\n", "\n") }
-    val blocks = remember(normalizedMarkdown) { parseMarkdown(normalizedMarkdown) }
+    val blocks = remember(normalizedMarkdown) { MarkdownParsedBlockCache.get(normalizedMarkdown) }
 
     SelectionContainer {
         Column(

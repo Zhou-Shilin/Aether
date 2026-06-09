@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -91,7 +92,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
+
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
@@ -125,6 +126,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.LineHeightStyle
@@ -161,36 +163,23 @@ import com.zhousl.aether.ui.theme.AetherSurface
 import com.zhousl.aether.ui.theme.AetherSurfaceHigh
 import com.zhousl.aether.ui.theme.AetherSurfaceHigher
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 import org.json.JSONObject
 
-private sealed interface ConversationListItem {
-    val key: String
-
-    data class Message(
-        val message: ChatMessage,
-    ) : ConversationListItem {
-        override val key: String = message.id
-    }
-
-    data class AssistantGroup(
-        val messages: List<ChatMessage>,
-    ) : ConversationListItem {
-        override val key: String = messages.firstOrNull()?.responseGroupId
-            ?: messages.firstOrNull()?.id
-            ?: "assistant-group"
-    }
-
-    data class CompactStatus(
-        val message: ChatMessage,
-    ) : ConversationListItem {
-        override val key: String = message.id
-    }
-}
+private data class ConversationAutoFollowKey(
+    val lastMessageId: String,
+    val visibleMessageCount: Int,
+    val pendingInputCount: Int,
+    val pendingResponseBlockCount: Int,
+    val pendingAssistantTextLength: Int,
+    val pendingToolCount: Int,
+    val pendingStatusTextLength: Int,
+    val pendingStatusDetailLength: Int,
+    val isCompacting: Boolean,
+    val isSending: Boolean,
+)
 
 private val ConversationTopFadeHeight = 42.dp
 private val ComposerCardShape = RoundedCornerShape(26.dp)
@@ -344,7 +333,9 @@ fun ConversationScreen(
     ) {
         LazyListState()
     }
-    val conversationItems = remember(messages) { buildConversationListItems(messages) }
+    val visibleMessages = remember(messages) {
+        messages.filterNot { message -> message.displayKind == MessageDisplayKind.HiddenContext }
+    }
     val compactSuggestionText = remember(messages) { compactCommandSuggestionText(messages) }
     val lastVisibleMessageAuthor = remember(messages) {
         messages.lastOrNull { message ->
@@ -389,14 +380,16 @@ fun ConversationScreen(
                 available: Offset,
                 source: NestedScrollSource,
             ): Offset {
-                if (source == NestedScrollSource.UserInput) {
-                    shouldAutoFollow = listState.isAtConversationBottom()
+                if (source == NestedScrollSource.UserInput && consumed.y != 0f) {
+                    shouldAutoFollow = false
                 }
                 return Offset.Zero
             }
 
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-                shouldAutoFollow = listState.isAtConversationBottom()
+                if (listState.isAtConversationBottom()) {
+                    shouldAutoFollow = true
+                }
                 return Velocity.Zero
             }
         }
@@ -409,91 +402,29 @@ fun ConversationScreen(
         }
     }
 
-    LaunchedEffect(listState, shouldAutoFollow, animatedImeBottomPx, composerBodyHeightPx) {
-        if (!shouldAutoFollow) return@LaunchedEffect
-        snapshotFlow {
-            val layoutInfo = listState.layoutInfo
-            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
-            listOf(
-                layoutInfo.totalItemsCount,
-                lastVisibleItem?.index ?: -1,
-                lastVisibleItem?.offset ?: 0,
-                lastVisibleItem?.size ?: 0,
-            )
-        }
-            .distinctUntilChanged()
-            .collect {
-                if (
-                    shouldAutoFollow &&
-                    !listState.isScrollInProgress &&
-                    listState.layoutInfo.totalItemsCount > 0
-                ) {
-                    scrollToConversationBottom()
-                }
-            }
-    }
     val autoFollowContentKey = remember(
-        conversationItems,
-        pendingInputs,
-        pendingResponseBlocks,
-        pendingAssistantText,
-        pendingToolInvocations,
-        pendingStatusText,
-        pendingStatusDetail,
+        visibleMessages,
+        pendingInputs.size,
+        pendingResponseBlocks.size,
+        pendingAssistantText.length,
+        pendingToolInvocations.size,
+        pendingStatusText.length,
+        pendingStatusDetail.length,
         isCompacting,
         isSending,
     ) {
-        buildString {
-            append(conversationItems.lastOrNull()?.key.orEmpty())
-            append('|')
-            append(pendingInputs.joinToString("|") { "${it.id}:${it.preview.length}:${it.attachmentCount}" })
-            append('|')
-            append(
-                pendingResponseBlocks.joinToString("|") { block ->
-                    when (block) {
-                        is AssistantResponseBlock.Text -> "${block.id}:text:${block.text.length}"
-                        is AssistantResponseBlock.ToolGroup -> block.toolInvocations.joinToString(
-                            prefix = "${block.id}:tools:",
-                            separator = ",",
-                        ) { invocation ->
-                            "${invocation.id}:${invocation.isRunning}:${invocation.outputJson.length}"
-                        }
-                        is AssistantResponseBlock.Reasoning -> buildString {
-                            append("${block.id}:reasoning:")
-                            append(block.trace.rawText.length)
-                            append(':')
-                            append(block.trace.latestStatusText.length)
-                            append(':')
-                            append(block.trace.completedAtMillis ?: 0L)
-                            append(':')
-                            append(block.trace.chunks.joinToString(",") { chunk ->
-                                "${chunk.id}:${chunk.title.length}:${chunk.detail.length}:${chunk.isPending}:${chunk.timelineOrder}"
-                            })
-                            append(':')
-                            append(block.trace.toolInvocations.joinToString(",") { invocation ->
-                                "${invocation.id}:${invocation.isRunning}:${invocation.outputJson.length}:${invocation.startedAtMillis}:${invocation.completedAtMillis ?: 0L}:${invocation.timelineOrder}"
-                            })
-                        }
-                    }
-                }
-            )
-            append('|')
-            append(pendingAssistantText.length)
-            append('|')
-            append(
-                pendingToolInvocations.joinToString("|") { invocation ->
-                    "${invocation.id}:${invocation.isRunning}:${invocation.outputJson.length}"
-                }
-            )
-            append('|')
-            append(pendingStatusText)
-            append('|')
-            append(pendingStatusDetail)
-            append('|')
-            append(isCompacting)
-            append('|')
-            append(isSending)
-        }
+        ConversationAutoFollowKey(
+            lastMessageId = visibleMessages.lastOrNull()?.id.orEmpty(),
+            visibleMessageCount = visibleMessages.size,
+            pendingInputCount = pendingInputs.size,
+            pendingResponseBlockCount = pendingResponseBlocks.size,
+            pendingAssistantTextLength = pendingAssistantText.length,
+            pendingToolCount = pendingToolInvocations.size,
+            pendingStatusTextLength = pendingStatusText.length,
+            pendingStatusDetailLength = pendingStatusDetail.length,
+            isCompacting = isCompacting,
+            isSending = isSending,
+        )
     }
     LaunchedEffect(
         autoFollowContentKey,
@@ -547,10 +478,17 @@ fun ConversationScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(22.dp),
                 ) {
-                    items(conversationItems, key = { it.key }) { item ->
-                        when (item) {
-                            is ConversationListItem.Message -> {
-                                val message = item.message
+                    items(
+                        items = visibleMessages,
+                        key = { message -> message.id },
+                        contentType = { "conversation-message" },
+                    ) { message ->
+                        when (message.displayKind) {
+                            MessageDisplayKind.CompactStatus -> {
+                                CompactStatusDivider(text = message.text.ifBlank { stringResource(R.string.chat_context_compacted) })
+                            }
+
+                            MessageDisplayKind.Standard -> {
                                 ConversationMessageBubble(
                                     message = message,
                                     actionsEnabled = !isSending,
@@ -567,31 +505,7 @@ fun ConversationScreen(
                                 )
                             }
 
-                            is ConversationListItem.AssistantGroup -> {
-                                val lastMessage = item.messages.last()
-                                ConversationAssistantGroupBubble(
-                                    messages = item.messages,
-                                    actionsEnabled = !isSending,
-                                    workspaceDirectory = workspaceDirectory,
-                                    allowRootImageRead = allowRootImageRead,
-                                    onOpenAttachment = { previewAttachment = it },
-                                    onOpenLink = onOpenLink,
-                                    onCopy = {
-                                        onCopyMessage(
-                                            lastMessage.copy(
-                                                text = item.messages.joinToString("\n\n") { message -> message.text }
-                                                    .trim(),
-                                            )
-                                        )
-                                    },
-                                    onRedo = { onRedoAgentMessage(lastMessage.id) },
-                                    onDelete = { onDeleteMessage(lastMessage.id) },
-                                )
-                            }
-
-                            is ConversationListItem.CompactStatus -> {
-                                CompactStatusDivider(text = item.message.text.ifBlank { stringResource(R.string.chat_context_compacted) })
-                            }
+                            MessageDisplayKind.HiddenContext -> Unit
                         }
                     }
                     if (isCompacting) {
@@ -1079,13 +993,12 @@ private fun PendingAssistantTimeline(
     onDetachAgentModePreviewSurface: (Surface) -> Unit,
 ) {
     val visiblePendingInvocations = pendingToolInvocations.filterNot { it.isAgentModeDisplayInvocation() }
-    val blockAgentModeInvocations = blocks.flatMap { it.agentModeToolInvocations() }
-    val pendingAgentModeInvocations = pendingToolInvocations.filter { it.isAgentModeDisplayInvocation() }
+    val agentModePreviewToolInvocation = blocks.lastAgentModeToolInvocation()
+        ?: pendingToolInvocations.lastOrNull { it.isAgentModeDisplayInvocation() }
     val agentModePreviewVisible =
         agentModeSelected &&
             agentModeDisplayState.isActive &&
-            (blockAgentModeInvocations.isNotEmpty() ||
-                pendingAgentModeInvocations.isNotEmpty() ||
+            (agentModePreviewToolInvocation != null ||
                 agentModeDisplayState.latestPreviewPath.isNotBlank())
     val firstAgentModeBlockIndex = blocks.firstAgentModeBlockIndex().let { index ->
         if (index >= 0) index else if (agentModePreviewVisible) blocks.size else -1
@@ -1101,11 +1014,10 @@ private fun PendingAssistantTimeline(
                 initialValue = workDurationMillisForToolInvocations(visiblePendingInvocations),
                 visiblePendingInvocations,
             ) {
-                val recordedStartedAtMillis = visiblePendingInvocations
-                    .mapNotNull { it.startedAtMillis.takeIf { timestamp -> timestamp > 0L } }
-                    .plus(listOfNotNull(activeTurnStartedAtMillis?.takeIf { it > 0L }))
-                    .filter { it >= MinimumWallClockMillis }
-                    .minOrNull()
+                val recordedStartedAtMillis = earliestStartedAtMillis(
+                    visiblePendingInvocations,
+                    activeTurnStartedAtMillis,
+                )
                 val startedRealtimeMillis = SystemClock.elapsedRealtime()
                 while (true) {
                     value = if (recordedStartedAtMillis != null) {
@@ -1132,10 +1044,10 @@ private fun PendingAssistantTimeline(
     }
 
     val workingDurationMillis by produceState(initialValue = workDurationMillisForBlocks(blocks), blocks.firstOrNull()?.id) {
-        val recordedStartedAtMillis = listOfNotNull(
+        val recordedStartedAtMillis = minStartedAtMillis(
             blocks.workStartedAtMillis(),
             activeTurnStartedAtMillis?.takeIf { it >= MinimumWallClockMillis },
-        ).minOrNull()
+        )
         val startedRealtimeMillis = SystemClock.elapsedRealtime()
         while (true) {
             value = if (recordedStartedAtMillis != null) {
@@ -1162,8 +1074,7 @@ private fun PendingAssistantTimeline(
             if (agentModePreviewVisible && index == firstAgentModeBlockIndex) {
                 AgentModePreviewPanel(
                     displayState = agentModeDisplayState,
-                    toolInvocation = (blockAgentModeInvocations + pendingAgentModeInvocations).lastOrNull()
-                        ?: pendingToolInvocations.lastOrNull(),
+                    toolInvocation = agentModePreviewToolInvocation ?: pendingToolInvocations.lastOrNull(),
                     overlayText = agentModeOverlayText,
                     workspaceDirectory = workspaceDirectory,
                     allowRootImageRead = allowRootImageRead,
@@ -1269,18 +1180,35 @@ private fun AssistantResponseBlock.agentModeToolInvocations(): List<ChatToolInvo
 private fun ChatToolInvocation.isAgentModeDisplayInvocation(): Boolean =
     toolName.equals("agent_display", ignoreCase = true)
 
-private fun List<AssistantResponseBlock>.firstAgentModeBlockIndex(): Int =
-    indexOfFirst { it.agentModeToolInvocations().isNotEmpty() }
+private fun List<AssistantResponseBlock>.firstAgentModeBlockIndex(): Int {
+    forEachIndexed { index, block ->
+        if (block.hasAgentModeToolInvocation()) {
+            return index
+        }
+    }
+    return -1
+}
+
+private fun AssistantResponseBlock.hasAgentModeToolInvocation(): Boolean = when (this) {
+    is AssistantResponseBlock.ToolGroup -> toolInvocations.any { it.isAgentModeDisplayInvocation() }
+    is AssistantResponseBlock.Reasoning -> trace.toolInvocations.any { it.isAgentModeDisplayInvocation() }
+    is AssistantResponseBlock.Text -> false
+}
 
 private fun List<AssistantResponseBlock>.lastTextBlockAfterAgentMode(): String? {
     val firstAgentModeBlockIndex = firstAgentModeBlockIndex()
     if (firstAgentModeBlockIndex < 0) {
         return null
     }
-    return drop(firstAgentModeBlockIndex + 1)
-        .filterIsInstance<AssistantResponseBlock.Text>()
-        .lastOrNull { it.text.isNotBlank() }
-        ?.text
+    var index = lastIndex
+    while (index > firstAgentModeBlockIndex) {
+        val block = this[index]
+        if (block is AssistantResponseBlock.Text && block.text.isNotBlank()) {
+            return block.text
+        }
+        index -= 1
+    }
+    return null
 }
 
 private fun List<AssistantResponseBlock>.visibleText(): String =
@@ -1296,102 +1224,105 @@ private fun List<AssistantResponseBlock>.hasVisiblePendingWork(): Boolean =
         }
     }
 
-private fun List<AssistantResponseBlock>.workStartedAtMillis(): Long? =
-    flatMap { block ->
+private fun List<AssistantResponseBlock>.workStartedAtMillis(): Long? {
+    var earliest: Long? = null
+    fun record(timestamp: Long) {
+        if (timestamp < MinimumWallClockMillis) {
+            return
+        }
+        val currentEarliest = earliest
+        if (currentEarliest == null || timestamp < currentEarliest) {
+            earliest = timestamp
+        }
+    }
+    forEach { block ->
         when (block) {
-            is AssistantResponseBlock.Text -> emptyList()
-            is AssistantResponseBlock.ToolGroup -> block.toolInvocations.mapNotNull {
-                it.startedAtMillis.takeIf { timestamp -> timestamp > 0L }
+            is AssistantResponseBlock.Text -> Unit
+            is AssistantResponseBlock.ToolGroup -> block.toolInvocations.forEach { invocation ->
+                record(invocation.startedAtMillis)
             }
-            is AssistantResponseBlock.Reasoning -> buildList {
-                block.trace.startedAtMillis.takeIf { it > 0L }?.let(::add)
-                block.trace.chunks.forEach { chunk ->
-                    chunk.createdAtMillis.takeIf { it > 0L }?.let(::add)
-                }
-                block.trace.toolInvocations.forEach { invocation ->
-                    invocation.startedAtMillis.takeIf { it > 0L }?.let(::add)
-                }
+            is AssistantResponseBlock.Reasoning -> {
+                record(block.trace.startedAtMillis)
+                block.trace.chunks.forEach { chunk -> record(chunk.createdAtMillis) }
+                block.trace.toolInvocations.forEach { invocation -> record(invocation.startedAtMillis) }
             }
         }
     }
-        .filter { it >= MinimumWallClockMillis }
-        .minOrNull()
+    return earliest
+}
 
+
+private fun List<AssistantResponseBlock>.lastAgentModeToolInvocation(): ChatToolInvocation? {
+    var blockIndex = lastIndex
+    while (blockIndex >= 0) {
+        when (val block = this[blockIndex]) {
+            is AssistantResponseBlock.ToolGroup -> {
+                var invocationIndex = block.toolInvocations.lastIndex
+                while (invocationIndex >= 0) {
+                    val invocation = block.toolInvocations[invocationIndex]
+                    if (invocation.isAgentModeDisplayInvocation()) {
+                        return invocation
+                    }
+                    invocationIndex -= 1
+                }
+            }
+            is AssistantResponseBlock.Reasoning -> {
+                var invocationIndex = block.trace.toolInvocations.lastIndex
+                while (invocationIndex >= 0) {
+                    val invocation = block.trace.toolInvocations[invocationIndex]
+                    if (invocation.isAgentModeDisplayInvocation()) {
+                        return invocation
+                    }
+                    invocationIndex -= 1
+                }
+            }
+            is AssistantResponseBlock.Text -> Unit
+        }
+        blockIndex -= 1
+    }
+    return null
+}
+
+private fun earliestStartedAtMillis(
+    invocations: List<ChatToolInvocation>,
+    fallbackStartedAtMillis: Long?,
+): Long? {
+    var earliest = fallbackStartedAtMillis?.takeIf { it >= MinimumWallClockMillis }
+    invocations.forEach { invocation ->
+        earliest = minStartedAtMillis(earliest, invocation.startedAtMillis.takeIf { it >= MinimumWallClockMillis })
+    }
+    return earliest
+}
+
+private fun minStartedAtMillis(first: Long?, second: Long?): Long? = when {
+    first == null -> second
+    second == null -> first
+    first <= second -> first
+    else -> second
+}
 private fun fallbackDurationMillis(startedRealtimeMillis: Long): Long =
     (SystemClock.elapsedRealtime() - startedRealtimeMillis).coerceAtLeast(1_000L)
 
-private fun buildConversationListItems(
-    messages: List<ChatMessage>,
-): List<ConversationListItem> = buildList {
-    var index = 0
-    while (index < messages.size) {
-        val message = messages[index]
-        when (message.displayKind) {
-            MessageDisplayKind.HiddenContext -> {
-                index += 1
-                continue
-            }
-
-            MessageDisplayKind.CompactStatus -> {
-                add(ConversationListItem.CompactStatus(message))
-                index += 1
-                continue
-            }
-
-            MessageDisplayKind.Standard -> Unit
-        }
-        val responseGroupId = message.responseGroupId
-        if (
-            message.author == MessageAuthor.Agent &&
-            (!responseGroupId.isNullOrBlank() || isLegacyAssistantGroupStart(messages, index))
-        ) {
-            val groupedMessages = buildList {
-                var groupIndex = index
-                while (groupIndex < messages.size) {
-                    val candidate = messages[groupIndex]
-                    if (candidate.author != MessageAuthor.Agent) {
-                        break
-                    }
-                    val matchesGroup = if (!responseGroupId.isNullOrBlank()) {
-                        candidate.responseGroupId == responseGroupId
-                    } else {
-                        val offset = groupIndex - index
-                        candidate.responseGroupId.isNullOrBlank() &&
-                            candidate.createdAtMillis == message.createdAtMillis + offset
-                    }
-                    if (!matchesGroup) {
-                        break
-                    }
-                    add(candidate)
-                    groupIndex += 1
-                }
-            }
-            if (groupedMessages.isNotEmpty()) {
-                add(ConversationListItem.AssistantGroup(groupedMessages))
-                index += groupedMessages.size
-                continue
-            }
-        }
-        add(ConversationListItem.Message(message))
-        index += 1
-    }
-}
-
 private fun compactCommandSuggestionText(messages: List<ChatMessage>): String {
-    val visibleMessages = messages.filter {
-        it.displayKind != MessageDisplayKind.HiddenContext &&
-            it.displayKind != MessageDisplayKind.CompactStatus
+    var visibleCount = 0
+    var estimatedChars = 0
+    messages.forEach { message ->
+        if (
+            message.displayKind == MessageDisplayKind.HiddenContext ||
+            message.displayKind == MessageDisplayKind.CompactStatus
+        ) {
+            return@forEach
+        }
+        visibleCount += 1
+        estimatedChars += message.text.length
+        message.attachments.forEach { attachment ->
+            estimatedChars += attachment.name.length + attachment.mimeType.length + attachment.workspacePath.length
+        }
+        message.toolInvocations.forEach { invocation ->
+            estimatedChars += invocation.toolName.length + invocation.argumentsJson.length + invocation.outputJson.length
+        }
     }
-    if (visibleMessages.size < 2) return "Compact this thread's context"
-    val estimatedChars = visibleMessages.sumOf { message ->
-        message.text.length +
-            message.attachments.sumOf { attachment ->
-                attachment.name.length + attachment.mimeType.length + attachment.workspacePath.length
-            } +
-            message.toolInvocations.sumOf { invocation ->
-                invocation.toolName.length + invocation.argumentsJson.length + invocation.outputJson.length
-            }
-    }
+    if (visibleCount < 2) return "Compact this thread's context"
     val percent = ((estimatedChars * 100L) / 120_000L).toInt().coerceIn(1, 100)
     return "Compact this thread's context (${percent}% full)"
 }
@@ -1494,23 +1425,6 @@ private fun CompactCommandSuggestion(
             modifier = Modifier.weight(1f),
         )
     }
-}
-
-private fun isLegacyAssistantGroupStart(
-    messages: List<ChatMessage>,
-    index: Int,
-): Boolean {
-    val message = messages.getOrNull(index) ?: return false
-    if (
-        message.author != MessageAuthor.Agent ||
-        !message.responseGroupId.isNullOrBlank()
-    ) {
-        return false
-    }
-    val next = messages.getOrNull(index + 1) ?: return false
-    return next.author == MessageAuthor.Agent &&
-        next.responseGroupId.isNullOrBlank() &&
-        next.createdAtMillis == message.createdAtMillis + 1
 }
 
 @Composable
@@ -1960,51 +1874,27 @@ private fun ConversationComposerBar(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = fieldControlAlignment,
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = measuredTextHeight.coerceAtLeast(22.dp)),
+                        ComposerTextInput(
+                            value = value,
+                            placeholder = composerPlaceholder,
+                            textStyle = composerTextStyle,
+                            measuredTextHeight = measuredTextHeight,
                             contentAlignment = fieldTextAlignment,
-                        ) {
-                            if (value.isBlank()) {
-                                Text(
-                                    text = composerPlaceholder,
-                                    style = composerTextStyle,
-                                    color = Color(0xFF8C8C8C),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                            BasicTextField(
-                                value = value,
-                                onValueChange = onValueChange,
-                                enabled = true,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .onFocusChanged { focusState ->
-                                        if (textFieldFocused != focusState.isFocused) {
-                                            textFieldFocused = focusState.isFocused
-                                        }
-                                    },
-                                textStyle = composerTextStyle,
-                                maxLines = 5,
-                                onTextLayout = { textLayoutResult ->
-                                    val lineCount = textLayoutResult.lineCount.coerceIn(1, 5)
-                                    if (measuredTextLineCount != lineCount) {
-                                        measuredTextLineCount = lineCount
-                                    }
-                                    val visibleLineBottom = textLayoutResult.getLineBottom(lineCount - 1)
-                                    val visibleLineTop = textLayoutResult.getLineTop(0)
-                                    val textHeight = with(density) {
-                                        (visibleLineBottom - visibleLineTop).toDp()
-                                    }
-                                    if (measuredTextHeight != textHeight) {
-                                        measuredTextHeight = textHeight
-                                    }
-                                },
-                                cursorBrush = SolidColor(AetherOnSurface),
-                            )
-                        }
+                            onValueChange = onValueChange,
+                            onFocusChanged = { focused ->
+                                if (textFieldFocused != focused) {
+                                    textFieldFocused = focused
+                                }
+                            },
+                            onTextMeasured = { lineCount, textHeight ->
+                                if (measuredTextLineCount != lineCount) {
+                                    measuredTextLineCount = lineCount
+                                }
+                                if (measuredTextHeight != textHeight) {
+                                    measuredTextHeight = textHeight
+                                }
+                            },
+                        )
                         Spacer(modifier = Modifier.width(8.dp))
                         if (showPauseButton) {
                             ComposerPauseButton(
@@ -2229,6 +2119,58 @@ private fun ConversationComposerBar(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun RowScope.ComposerTextInput(
+    value: String,
+    placeholder: String,
+    textStyle: TextStyle,
+    measuredTextHeight: Dp,
+    contentAlignment: Alignment,
+    onValueChange: (String) -> Unit,
+    onFocusChanged: (Boolean) -> Unit,
+    onTextMeasured: (Int, Dp) -> Unit,
+) {
+    val density = LocalDensity.current
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .heightIn(min = measuredTextHeight.coerceAtLeast(22.dp)),
+        contentAlignment = contentAlignment,
+    ) {
+        if (value.isBlank()) {
+            Text(
+                text = placeholder,
+                style = textStyle,
+                color = Color(0xFF8C8C8C),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            enabled = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { focusState ->
+                    onFocusChanged(focusState.isFocused)
+                },
+            textStyle = textStyle,
+            maxLines = 5,
+            onTextLayout = { textLayoutResult ->
+                val lineCount = textLayoutResult.lineCount.coerceIn(1, 5)
+                val visibleLineBottom = textLayoutResult.getLineBottom(lineCount - 1)
+                val visibleLineTop = textLayoutResult.getLineTop(0)
+                val textHeight = with(density) {
+                    (visibleLineBottom - visibleLineTop).toDp()
+                }
+                onTextMeasured(lineCount, textHeight)
+            },
+            cursorBrush = SolidColor(AetherOnSurface),
+        )
     }
 }
 
