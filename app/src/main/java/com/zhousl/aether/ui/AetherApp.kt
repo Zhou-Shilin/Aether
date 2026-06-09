@@ -170,7 +170,7 @@ fun AetherApp(
 ) {
     val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
 
-    LaunchedEffect(uiState.settings.language) {
+    LaunchedEffect(Unit) {
         val currentLanguage = AetherLocaleManager.currentLanguage()
         if (uiState.settings.language != currentLanguage) {
             viewModel.updateAppLanguage(currentLanguage)
