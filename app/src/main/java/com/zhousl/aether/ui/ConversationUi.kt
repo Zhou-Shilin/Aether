@@ -121,6 +121,7 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.PlatformTextStyle
@@ -344,7 +345,10 @@ fun ConversationScreen(
         LazyListState()
     }
     val conversationItems = remember(messages) { buildConversationListItems(messages) }
-    val compactSuggestionText = remember(messages) { compactCommandSuggestionText(messages) }
+    val compactSuggestion = remember(messages) { compactCommandSuggestion(messages) }
+    val compactSuggestionText = compactSuggestion.percent?.let { percent ->
+        stringResource(R.string.chat_compact_thread_context_percent, percent)
+    } ?: stringResource(R.string.chat_compact_thread_context)
     val lastVisibleMessageAuthor = remember(messages) {
         messages.lastOrNull { message ->
             message.displayKind == MessageDisplayKind.Standard
@@ -589,14 +593,14 @@ fun ConversationScreen(
                             }
 
                             is ConversationListItem.CompactStatus -> {
-                                CompactStatusDivider(text = item.message.text.ifBlank { "Context compacted" })
+                                CompactStatusDivider(text = item.message.text.ifBlank { stringResource(R.string.chat_context_compacted) })
                             }
                         }
                     }
                     if (isCompacting) {
                         item(key = "compact-running-status") {
                             CompactStatusDivider(
-                                text = "Compacting context",
+                                text = stringResource(R.string.chat_compacting_context),
                                 isRunning = true,
                             )
                         }
@@ -790,7 +794,6 @@ private fun ConversationTopBar(
     onModelSelected: (String) -> Unit,
     onNewChat: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -800,7 +803,7 @@ private fun ConversationTopBar(
     ) {
         HeaderCircleButton(
             icon = Icons.Rounded.Menu,
-            contentDescription = strings.menu,
+            contentDescription = stringResource(R.string.common_menu),
             onClick = onMenu,
             size = 44.dp,
             containerColor = AetherSurface.copy(alpha = 0.96f),
@@ -815,7 +818,7 @@ private fun ConversationTopBar(
         )
         HeaderCircleButton(
             icon = LucideIcons.SquarePen,
-            contentDescription = strings.newChat,
+            contentDescription = stringResource(R.string.common_new_chat),
             onClick = onNewChat,
             size = 44.dp,
             containerColor = AetherSurface.copy(alpha = 0.96f),
@@ -834,15 +837,10 @@ private fun ConversationModelSelector(
     var anchorBottomPx by remember { mutableIntStateOf(0) }
     val menuVisibility = remember { MutableTransitionState(false) }
     menuVisibility.targetState = expanded
-    val strings = rememberAetherStrings()
     val density = LocalDensity.current
     val menuWidth = 276.dp
     val selectedOption = options.firstOrNull { it.key == selectedModelKey } ?: options.firstOrNull()
-    val fallbackLabel = if (strings.appLanguage == AppLanguage.SimplifiedChinese) {
-        "选择模型"
-    } else {
-        "Select model"
-    }
+    val fallbackLabel = stringResource(R.string.chat_select_model)
 
     Box(
         modifier = modifier,
@@ -970,7 +968,6 @@ private fun ConversationEmptyState(
     inputFocused: Boolean,
     onStarterPromptSelected: (String) -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val titleOffset by animateDpAsState(
         targetValue = if (inputFocused) (-34).dp else (-24).dp,
         animationSpec = tween(durationMillis = 260, easing = ChatGptMotionEasing),
@@ -985,7 +982,7 @@ private fun ConversationEmptyState(
         verticalArrangement = Arrangement.Center,
     ) {
         Text(
-            text = strings.whatCanIHelpWith,
+            text = stringResource(R.string.chat_welcome_help),
             style = MaterialTheme.typography.titleLarge.copy(
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 24.sp,
@@ -1002,13 +999,13 @@ private fun ConversationEmptyState(
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 EmptyStateChip(
                     icon = Icons.Rounded.Image,
-                    label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "分析图片" else "Analyze image",
+                    label = stringResource(R.string.chat_analyze_image_chip),
                     iconTint = Color(0xFF38A961),
                     onClick = { onStarterPromptSelected("Analyze this image and describe the important details.") },
                 )
                 EmptyStateChip(
                     icon = Icons.Rounded.Terminal,
-                    label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "代码" else "Code",
+                    label = stringResource(R.string.chat_code_chip),
                     iconTint = Color(0xFF7D70DD),
                     onClick = { onStarterPromptSelected("Help me write or debug this code: ") },
                 )
@@ -1016,13 +1013,13 @@ private fun ConversationEmptyState(
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 EmptyStateChip(
                     icon = Icons.Rounded.AutoAwesome,
-                    label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "帮我写" else "Help me write",
+                    label = stringResource(R.string.chat_help_me_write_chip),
                     iconTint = Color(0xFFE48AAE),
                     onClick = { onStarterPromptSelected("Help me write a clear, polished message about ") },
                 )
                 EmptyStateChip(
                     icon = Icons.Rounded.AttachFile,
-                    label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "总结文件" else "Summarize file",
+                    label = stringResource(R.string.chat_summarize_file_chip),
                     iconTint = Color(0xFF66C7D4),
                     onClick = { onStarterPromptSelected("Summarize this file and list the key points.") },
                 )
@@ -1038,7 +1035,6 @@ private fun EmptyStateChip(
     iconTint: Color,
     onClick: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     Row(
         modifier = Modifier
             .shadow(6.dp, RoundedCornerShape(999.dp), ambientColor = ChatGptControlShadow, spotColor = ChatGptControlShadow)
@@ -1065,9 +1061,8 @@ private fun EmptyStateChip(
 
 @Composable
 private fun ConversationThinkingIndicator() {
-    val strings = rememberAetherStrings()
     ShimmerStatusText(
-        text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "思考中" else "Thinking",
+        text = stringResource(R.string.chat_thinking),
         modifier = Modifier.padding(top = 6.dp),
     )
 }
@@ -1385,12 +1380,16 @@ private fun buildConversationListItems(
     }
 }
 
-private fun compactCommandSuggestionText(messages: List<ChatMessage>): String {
+private data class CompactCommandSuggestion(
+    val percent: Int?,
+)
+
+private fun compactCommandSuggestion(messages: List<ChatMessage>): CompactCommandSuggestion {
     val visibleMessages = messages.filter {
         it.displayKind != MessageDisplayKind.HiddenContext &&
             it.displayKind != MessageDisplayKind.CompactStatus
     }
-    if (visibleMessages.size < 2) return "Compact this thread's context"
+    if (visibleMessages.size < 2) return CompactCommandSuggestion(percent = null)
     val estimatedChars = visibleMessages.sumOf { message ->
         message.text.length +
             message.attachments.sumOf { attachment ->
@@ -1401,7 +1400,7 @@ private fun compactCommandSuggestionText(messages: List<ChatMessage>): String {
             }
     }
     val percent = ((estimatedChars * 100L) / 120_000L).toInt().coerceIn(1, 100)
-    return "Compact this thread's context (${percent}% full)"
+    return CompactCommandSuggestion(percent = percent)
 }
 
 @Composable
@@ -1488,7 +1487,7 @@ private fun CompactCommandSuggestion(
             )
         }
         Text(
-            text = "Compact",
+            text = stringResource(R.string.chat_compact),
             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
             color = AetherOnSurface,
             maxLines = 1,
@@ -1525,16 +1524,15 @@ private fun isLegacyAssistantGroupStart(
 private fun PendingSessionInputBubble(
     pendingInput: PendingSessionInput,
 ) {
-    val strings = rememberAetherStrings()
     val modeLabel = when (pendingInput.mode) {
-        SessionFollowUpMode.Queue -> strings.pendingInputModeLabel(true)
-        SessionFollowUpMode.Steer -> strings.pendingInputModeLabel(false)
+        SessionFollowUpMode.Queue -> stringResource(R.string.chat_pending_input_queued)
+        SessionFollowUpMode.Steer -> stringResource(R.string.chat_pending_input_steering)
     }
     val attachmentLabel = when (pendingInput.attachmentCount) {
         0 -> null
-        else -> strings.attachmentCountLabel(pendingInput.attachmentCount)
+        1 -> stringResource(R.string.chat_attachment_count_one)
+        else -> stringResource(R.string.chat_attachment_count_other, pendingInput.attachmentCount)
     }
-
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.End,
@@ -1569,7 +1567,7 @@ private fun PendingSessionInputBubble(
             }
             Text(
                 text = pendingInput.preview.ifBlank {
-                    if (strings.appLanguage == AppLanguage.SimplifiedChinese) "补充上下文" else "Additional context"
+                    stringResource(R.string.chat_additional_context)
                 },
                 style = MaterialTheme.typography.bodyLarge,
                 color = AetherOnSurface,
@@ -1722,7 +1720,6 @@ private fun ConversationComposerBar(
     onQueueFollowUp: () -> Unit,
     onSteerFollowUp: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     var attachmentMenuExpanded by remember(conversationStateKey) { mutableStateOf(false) }
     val attachmentMenuVisibility = remember(conversationStateKey) { MutableTransitionState(false) }
     attachmentMenuVisibility.targetState = attachmentMenuExpanded
@@ -1746,16 +1743,16 @@ private fun ConversationComposerBar(
     val hasSelectedActions = selectedSkillActions.isNotEmpty() || selectedMcpActions.isNotEmpty() || agentModeSelected
     val composerPlaceholder = when {
         value.isNotBlank() -> ""
-        attachments.isNotEmpty() -> if (strings.appLanguage == AppLanguage.SimplifiedChinese) "添加备注" else "Add a note"
+        attachments.isNotEmpty() -> stringResource(R.string.chat_add_note)
         agentModeSelected && selectedSkillActions.isEmpty() && selectedMcpActions.isEmpty() ->
-            if (strings.appLanguage == AppLanguage.SimplifiedChinese) "询问 Agent 模式" else "Ask Agent Mode"
+            stringResource(R.string.chat_ask_agent_mode)
         selectedSkillActions.size + selectedMcpActions.size == 1 && !agentModeSelected -> {
             selectedSkillActions.firstOrNull()?.quickActionLabel()
                 ?: selectedMcpActions.firstOrNull()?.quickActionLabel()
-                ?: strings.replyToAether
+                ?: stringResource(R.string.chat_reply_to_aether)
         }
-        hasSelectedActions -> if (strings.appLanguage == AppLanguage.SimplifiedChinese) "使用所选工具提问" else "Ask with selected tools"
-        else -> strings.askAether
+        hasSelectedActions -> stringResource(R.string.chat_ask_with_selected_tools)
+        else -> stringResource(R.string.chat_ask_aether)
     }
     val hasDraft = value.isNotBlank() || attachments.isNotEmpty()
     val showCompactSuggestion = compactSuggestionText.isNotBlank() &&
@@ -1858,18 +1855,18 @@ private fun ConversationComposerBar(
         }
         if (showStarterPromptHint) {
             SurfaceNotice(
-                title = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "你的第一条提示已准备好" else "Your first prompt is ready",
-                subtitle = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "点击发送来测试 Aether。" else "Tap send to test Aether.",
-                actionLabel = strings.hide,
+                title = stringResource(R.string.chat_first_prompt_ready_title),
+                subtitle = stringResource(R.string.chat_first_prompt_ready_subtitle),
+                actionLabel = stringResource(R.string.common_hide),
                 onAction = onDismissStarterPromptHint,
                 actionEnabled = true,
             )
         }
         if (isEditing) {
             SurfaceNotice(
-                title = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "正在编辑较早的消息" else "Editing earlier message",
-                subtitle = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "发送后会替换它之后的回复。" else "Sending will replace the replies that came after it.",
-                actionLabel = strings.cancel,
+                title = stringResource(R.string.chat_editing_earlier_message_title),
+                subtitle = stringResource(R.string.chat_editing_earlier_message_subtitle),
+                actionLabel = stringResource(R.string.common_cancel),
                 onAction = onCancelEdit,
                 actionEnabled = true,
             )
@@ -2075,7 +2072,7 @@ private fun ConversationComposerBar(
                                                 verticalArrangement = Arrangement.spacedBy(2.dp),
                                             ) {
                                                 ComposerPlusMenuRow(
-                                                    title = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "引导当前运行" else "Steer current run",
+                                                    title = stringResource(R.string.branch_steer_current_run),
                                                     icon = Icons.Rounded.AutoAwesome,
                                                     iconTint = Color(0xFF8D6C2F),
                                                     iconContainerColor = Color(0xFFFFF3DE),
@@ -2085,7 +2082,7 @@ private fun ConversationComposerBar(
                                                     },
                                                 )
                                                 ComposerPlusMenuRow(
-                                                    title = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "排队下一轮" else "Queue next turn",
+                                                    title = stringResource(R.string.branch_queue_next_turn),
                                                     icon = Icons.Rounded.ArrowUpward,
                                                     iconTint = Color(0xFF2F6DA3),
                                                     iconContainerColor = Color(0xFFEAF2FF),
@@ -2118,7 +2115,7 @@ private fun ConversationComposerBar(
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Add,
-                        contentDescription = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "添加附件或工具" else "Add attachment or tool",
+                        contentDescription = stringResource(R.string.chat_add_attachment_or_tool),
                         tint = AetherOnSurface,
                         modifier = Modifier.size(27.dp),
                     )
@@ -2167,7 +2164,7 @@ private fun ConversationComposerBar(
                                     verticalArrangement = Arrangement.spacedBy(2.dp),
                                 ) {
                                     ComposerPlusMenuRow(
-                                        title = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "照片" else "Photos",
+                                        title = stringResource(R.string.chat_photos),
                                         icon = Icons.Rounded.Image,
                                         iconTint = Color(0xFF4E8D5A),
                                         iconContainerColor = AetherSurfaceHigh,
@@ -2176,7 +2173,7 @@ private fun ConversationComposerBar(
                                         },
                                     )
                                     ComposerPlusMenuRow(
-                                        title = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "文件" else "Files",
+                                        title = stringResource(R.string.chat_files),
                                         icon = Icons.Rounded.AttachFile,
                                         iconTint = AetherOnSurface,
                                         iconContainerColor = AetherSurfaceHigh,
@@ -2189,7 +2186,7 @@ private fun ConversationComposerBar(
                                     }
                                     if (agentModeAvailable) {
                                         ComposerPlusMenuRow(
-                                            title = strings.agentMode,
+                                            title = stringResource(R.string.agent_mode_label),
                                             icon = LucideIcons.MousePointer2,
                                             selected = agentModeSelected,
                                             iconTint = Color(0xFF6D5CFF),
@@ -2271,7 +2268,6 @@ private fun ComposerSubmitButton(
     isSending: Boolean,
     onClick: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val enabled = hasDraft && canSendDraft
     val buttonColor = if (enabled) {
         ChatGptPurple
@@ -2292,9 +2288,9 @@ private fun ComposerSubmitButton(
         Icon(
             imageVector = Icons.Rounded.ArrowUpward,
             contentDescription = if (isSending) {
-                if (strings.appLanguage == AppLanguage.SimplifiedChinese) "发送跟进" else "Send follow-up"
+                stringResource(R.string.common_send_follow_up)
             } else {
-                strings.send
+                stringResource(R.string.common_send)
             },
             tint = Color.White,
             modifier = Modifier.size(21.dp),
@@ -2312,7 +2308,6 @@ private fun ComposerActionTray(
     onRemoveMcpServer: (String) -> Unit,
     onRemoveAgentMode: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -2322,7 +2317,7 @@ private fun ComposerActionTray(
     ) {
         if (agentModeSelected) {
             ComposerActionChip(
-                label = strings.agentMode,
+                label = stringResource(R.string.agent_mode_label),
                 icon = LucideIcons.MousePointer2,
                 onRemove = onRemoveAgentMode,
             )
@@ -2359,7 +2354,6 @@ private fun AgentModePreviewPanel(
     onAttachSurface: (Surface) -> Unit,
     onDetachSurface: (Surface) -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val bitmap = remember(displayState.latestPreviewPath, displayState.lastUpdatedMillis) {
         displayState.latestPreviewPath
             .takeIf { it.isNotBlank() }
@@ -2431,7 +2425,7 @@ private fun AgentModePreviewPanel(
                 } else if (bitmap != null) {
                     Image(
                     bitmap = bitmap.asImageBitmap(),
-                    contentDescription = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "Agent 模式虚拟显示" else "Agent Mode virtual display",
+                    contentDescription = stringResource(R.string.chat_agent_mode_virtual_display),
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(10.dp)
@@ -2481,7 +2475,7 @@ private fun AgentModePreviewPanel(
             }
         } else {
             Text(
-                text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "代理启动后会显示虚拟屏幕预览。" else "Virtual display preview will appear after the agent starts.",
+                text = stringResource(R.string.chat_agent_mode_preview_pending),
                 style = MaterialTheme.typography.bodySmall,
                 color = AetherOnSurfaceVariant,
             )
@@ -2668,7 +2662,6 @@ private fun resolveAgentModeBubbleOffset(
 private fun AgentModePreviewHeader(
     displayState: AgentModeDisplayState,
 ) {
-    val strings = rememberAetherStrings()
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -2681,7 +2674,7 @@ private fun AgentModePreviewHeader(
             modifier = Modifier.size(16.dp),
         )
         Text(
-            text = strings.agentMode,
+            text = stringResource(R.string.agent_mode_label),
             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
             color = AetherOnSurface,
         )
@@ -2701,7 +2694,7 @@ private fun AgentModePreviewHeader(
                         .background(Color(0xFF20A564)),
                 )
                 Text(
-                    text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "实时" else "Live",
+                    text = stringResource(R.string.chat_live),
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
                     color = Color(0xFF137A49),
                 )
@@ -2710,8 +2703,8 @@ private fun AgentModePreviewHeader(
         Spacer(modifier = Modifier.weight(1f))
         Text(
             text = displayState.displayId?.let {
-                if (strings.appLanguage == AppLanguage.SimplifiedChinese) "显示 $it" else "display $it"
-            } ?: if (strings.appLanguage == AppLanguage.SimplifiedChinese) "待机" else "standby",
+                stringResource(R.string.agent_mode_display_id, it)
+            } ?: stringResource(R.string.chat_standby),
             style = MaterialTheme.typography.labelSmall,
             color = AetherOnSurfaceVariant,
         )
@@ -2764,13 +2757,184 @@ private fun AgentModePreviewToolStatus(
 
 @Composable
 private fun formatPendingAgentModeToolLabel(toolInvocation: ChatToolInvocation): String {
-    val strings = rememberAetherStrings()
     val arguments = parseJsonObject(toolInvocation.argumentsJson)
-    return strings.toolInvocationTitleLabel(
+    return formatPendingToolTitle(
         toolName = toolInvocation.toolName,
         isRunning = toolInvocation.isRunning,
         arguments = arguments,
     )
+}
+
+@Composable
+private fun formatPendingToolTitle(
+    toolName: String,
+    isRunning: Boolean,
+    arguments: JSONObject?,
+): String = when (toolName.lowercase()) {
+    "bash" -> toolStatusLabel(isRunning, R.string.tool_title_bash_running, R.string.tool_title_bash_done)
+    "fetch_bash_output" -> toolStatusLabel(isRunning, R.string.tool_title_fetch_bash_output_running, R.string.tool_title_fetch_bash_output_done)
+    "kill_bash" -> toolStatusLabel(isRunning, R.string.tool_title_kill_bash_running, R.string.tool_title_kill_bash_done)
+    "sleep" -> toolStatusLabel(isRunning, R.string.tool_title_sleep_running, R.string.tool_title_sleep_done)
+    "read" -> toolStatusLabel(isRunning, R.string.tool_title_read_running, R.string.tool_title_read_done)
+    "edit" -> toolStatusLabel(isRunning, R.string.tool_title_edit_running, R.string.tool_title_edit_done)
+    "write" -> toolStatusLabel(isRunning, R.string.tool_title_write_running, R.string.tool_title_write_done)
+    "grep" -> toolStatusLabel(isRunning, R.string.tool_title_grep_running, R.string.tool_title_grep_done)
+    "find" -> toolStatusLabel(isRunning, R.string.tool_title_find_running, R.string.tool_title_find_done)
+    "ls" -> toolStatusLabel(isRunning, R.string.tool_title_ls_running, R.string.tool_title_ls_done)
+    "analyze_image" -> toolStatusLabel(isRunning, R.string.tool_title_analyze_image_running, R.string.tool_title_analyze_image_done)
+    "tavily_search" -> formatArgumentDrivenToolTitle(
+        isRunning = isRunning,
+        runningVerbRes = R.string.tool_title_searching,
+        doneVerbRes = R.string.tool_title_searched,
+        subject = arguments?.optString("query").orEmpty(),
+        fallbackRes = R.string.tool_title_tavily_search_fallback,
+    )
+    "fetch_web_url" -> formatArgumentDrivenToolTitle(
+        isRunning = isRunning,
+        runningVerbRes = R.string.tool_title_fetching,
+        doneVerbRes = R.string.tool_title_fetched,
+        subject = arguments?.optString("url").orEmpty(),
+        fallbackRes = R.string.tool_title_web_page_fallback,
+    )
+    "aether_config_get",
+    "aether_config_set",
+    "aether_skill_manage",
+    "aether_mcp_manage",
+    "aether_termux_manage",
+    "aether_agent_mode_manage",
+    "aether_scheduled_task_manage",
+    "aether_developer_manage" -> formatAetherToolTitle(toolName, isRunning, arguments)
+    "agent_display" -> formatAgentDisplayToolTitle(isRunning, arguments)
+    else -> if (isRunning) {
+        stringResource(R.string.tool_title_using_tool, toolName)
+    } else {
+        stringResource(R.string.tool_title_used_tool, toolName)
+    }
+}
+
+@Composable
+private fun toolStatusLabel(
+    isRunning: Boolean,
+    runningRes: Int,
+    doneRes: Int,
+): String = stringResource(if (isRunning) runningRes else doneRes)
+
+@Composable
+private fun formatArgumentDrivenToolTitle(
+    isRunning: Boolean,
+    runningVerbRes: Int,
+    doneVerbRes: Int,
+    subject: String,
+    fallbackRes: Int,
+): String {
+    val action = stringResource(if (isRunning) runningVerbRes else doneVerbRes)
+    val normalizedSubject = subject.trim()
+    if (normalizedSubject.isBlank()) {
+        return stringResource(R.string.tool_title_action_subject, action, stringResource(fallbackRes))
+    }
+    val clipped = normalizedSubject.take(72)
+    val displaySubject = if (normalizedSubject.length > 72) "$clipped..." else clipped
+    return stringResource(R.string.tool_title_action_subject, action, displaySubject)
+}
+
+@Composable
+private fun formatAetherToolTitle(
+    toolName: String,
+    isRunning: Boolean,
+    arguments: JSONObject?,
+): String {
+    val action = arguments?.optString("action").orEmpty().trim()
+    return when (toolName.lowercase()) {
+        "aether_config_get" -> formatArgumentDrivenToolTitle(isRunning, R.string.tool_title_reading, R.string.tool_title_read, formatAetherCategories(arguments), R.string.tool_title_aether_settings_fallback)
+        "aether_config_set" -> formatArgumentDrivenToolTitle(isRunning, R.string.tool_title_updating, R.string.tool_title_updated, arguments?.optString("category").orEmpty(), R.string.tool_title_aether_settings_fallback)
+        "aether_skill_manage" -> when (action.lowercase()) {
+            "install_remote" -> formatArgumentDrivenToolTitle(isRunning, R.string.tool_title_installing, R.string.tool_title_installed, arguments?.optString("url").orEmpty(), R.string.tool_title_agent_skill_fallback)
+            "remove" -> formatArgumentDrivenToolTitle(isRunning, R.string.tool_title_removing, R.string.tool_title_removed, optAetherString(arguments, "skill_id", "skillId"), R.string.tool_title_agent_skill_fallback)
+            "set_enabled" -> formatArgumentDrivenToolTitle(isRunning, R.string.tool_title_updating, R.string.tool_title_updated, optAetherString(arguments, "skill_id", "skillId"), R.string.tool_title_agent_skill_fallback)
+            else -> toolStatusLabel(isRunning, R.string.tool_title_reading_agent_skills, R.string.tool_title_read_agent_skills)
+        }
+        "aether_mcp_manage" -> when (action.lowercase()) {
+            "upsert_streamable_http", "upsert_stdio" -> formatArgumentDrivenToolTitle(isRunning, R.string.tool_title_saving, R.string.tool_title_saved, optAetherString(arguments, "display_name", "displayName"), R.string.tool_title_mcp_server_fallback)
+            "remove" -> formatArgumentDrivenToolTitle(isRunning, R.string.tool_title_removing, R.string.tool_title_removed, optAetherString(arguments, "server_id", "serverId"), R.string.tool_title_mcp_server_fallback)
+            "set_enabled" -> formatArgumentDrivenToolTitle(isRunning, R.string.tool_title_updating, R.string.tool_title_updated, optAetherString(arguments, "server_id", "serverId"), R.string.tool_title_mcp_server_fallback)
+            else -> toolStatusLabel(isRunning, R.string.tool_title_reading_mcp_servers, R.string.tool_title_read_mcp_servers)
+        }
+        "aether_termux_manage" -> when (action.lowercase()) {
+            "configure_root_access" -> toolStatusLabel(isRunning, R.string.tool_title_configuring_termux_root, R.string.tool_title_configured_termux_root)
+            "inspect_root_setup" -> toolStatusLabel(isRunning, R.string.tool_title_checking_root_setup, R.string.tool_title_checked_root_setup)
+            else -> toolStatusLabel(isRunning, R.string.tool_title_checking_termux_setup, R.string.tool_title_checked_termux_setup)
+        }
+        "aether_agent_mode_manage" -> when (action.lowercase()) {
+            "set_authorization" -> toolStatusLabel(isRunning, R.string.tool_title_updating_agent_mode_authorization, R.string.tool_title_updated_agent_mode_authorization)
+            "request_shizuku_permission" -> toolStatusLabel(isRunning, R.string.tool_title_requesting_shizuku_permission, R.string.tool_title_requested_shizuku_permission)
+            "stop_display" -> toolStatusLabel(isRunning, R.string.tool_title_stopping_agent_mode_display, R.string.tool_title_stopped_agent_mode_display)
+            "refresh_displays" -> toolStatusLabel(isRunning, R.string.tool_title_refreshing_agent_mode_displays, R.string.tool_title_refreshed_agent_mode_displays)
+            else -> toolStatusLabel(isRunning, R.string.tool_title_checking_agent_mode_authorization, R.string.tool_title_checked_agent_mode_authorization)
+        }
+        "aether_scheduled_task_manage" -> when (action.lowercase()) {
+            "create" -> formatArgumentDrivenToolTitle(isRunning, R.string.tool_title_creating, R.string.tool_title_created, arguments?.optString("name").orEmpty(), R.string.tool_title_scheduled_task_fallback)
+            "update" -> formatArgumentDrivenToolTitle(isRunning, R.string.tool_title_updating, R.string.tool_title_updated, optAetherString(arguments, "task_id", "taskId"), R.string.tool_title_scheduled_task_fallback)
+            "remove" -> formatArgumentDrivenToolTitle(isRunning, R.string.tool_title_removing, R.string.tool_title_removed, optAetherString(arguments, "task_id", "taskId"), R.string.tool_title_scheduled_task_fallback)
+            "set_enabled" -> formatArgumentDrivenToolTitle(isRunning, R.string.tool_title_updating, R.string.tool_title_updated, optAetherString(arguments, "task_id", "taskId"), R.string.tool_title_scheduled_task_fallback)
+            else -> toolStatusLabel(isRunning, R.string.tool_title_reading_scheduled_tasks, R.string.tool_title_read_scheduled_tasks)
+        }
+        "aether_developer_manage" -> toolStatusLabel(isRunning, R.string.tool_title_reading_aether_diagnostics, R.string.tool_title_read_aether_diagnostics)
+        else -> toolStatusLabel(isRunning, R.string.tool_title_managing_aether, R.string.tool_title_managed_aether)
+    }
+}
+
+@Composable
+private fun formatAgentDisplayToolTitle(
+    isRunning: Boolean,
+    arguments: JSONObject?,
+): String = when (arguments?.optString("action").orEmpty().lowercase()) {
+    "list_apps", "apps", "installed_apps" -> formatArgumentDrivenToolTitle(
+        isRunning = isRunning,
+        runningVerbRes = R.string.tool_title_reading,
+        doneVerbRes = R.string.tool_title_read,
+        subject = arguments?.optString("query").orEmpty(),
+        fallbackRes = R.string.tool_title_installed_apps_fallback,
+    )
+    "start" -> toolStatusLabel(isRunning, R.string.tool_title_starting_agent_mode_display, R.string.tool_title_started_agent_mode_display)
+    "status" -> toolStatusLabel(isRunning, R.string.tool_title_checking_agent_mode_display, R.string.tool_title_checked_agent_mode_display)
+    "launch" -> formatArgumentDrivenToolTitle(
+        isRunning = isRunning,
+        runningVerbRes = R.string.tool_title_launching,
+        doneVerbRes = R.string.tool_title_launched,
+        subject = arguments?.optString("target").orEmpty(),
+        fallbackRes = R.string.tool_title_agent_mode_app_fallback,
+    )
+    "tap" -> toolStatusLabel(isRunning, R.string.tool_title_tapping_agent_mode_display, R.string.tool_title_tapped_agent_mode_display)
+    "swipe" -> toolStatusLabel(isRunning, R.string.tool_title_swiping_agent_mode_display, R.string.tool_title_swiped_agent_mode_display)
+    "key" -> formatArgumentDrivenToolTitle(
+        isRunning = isRunning,
+        runningVerbRes = R.string.tool_title_pressing,
+        doneVerbRes = R.string.tool_title_pressed,
+        subject = arguments?.optString("key").orEmpty(),
+        fallbackRes = R.string.tool_title_agent_mode_key_fallback,
+    )
+    "text" -> toolStatusLabel(isRunning, R.string.tool_title_typing_agent_mode, R.string.tool_title_typed_agent_mode)
+    "screenshot" -> toolStatusLabel(isRunning, R.string.tool_title_capturing_agent_mode_display, R.string.tool_title_captured_agent_mode_display)
+    "stop" -> toolStatusLabel(isRunning, R.string.tool_title_stopping_agent_mode_display, R.string.tool_title_stopped_agent_mode_display)
+    else -> toolStatusLabel(isRunning, R.string.tool_title_using_agent_mode_display, R.string.tool_title_used_agent_mode_display)
+}
+
+private fun formatAetherCategories(arguments: JSONObject?): String {
+    val categories = arguments?.optJSONArray("categories") ?: return ""
+    return buildList {
+        for (index in 0 until categories.length()) {
+            val value = categories.optString(index).trim()
+            if (value.isNotBlank()) add(value)
+        }
+    }.joinToString(",")
+}
+
+private fun optAetherString(
+    arguments: JSONObject?,
+    primary: String,
+    secondary: String,
+): String = arguments?.optString(primary).orEmpty().ifBlank {
+    arguments?.optString(secondary).orEmpty()
 }
 
 private fun parseJsonObject(rawValue: String): JSONObject? =
@@ -2825,7 +2989,7 @@ private fun ComposerActionChip(
         ) {
             Icon(
                 imageVector = Icons.Rounded.Close,
-                contentDescription = "Remove",
+                contentDescription = stringResource(R.string.common_remove),
                 tint = Color(0xFF4F8CFF),
                 modifier = Modifier.size(14.dp),
             )

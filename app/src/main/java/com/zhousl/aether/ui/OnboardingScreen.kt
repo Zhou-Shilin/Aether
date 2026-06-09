@@ -72,6 +72,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
@@ -81,7 +82,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.zhousl.aether.data.AgentModeAuthorizationMethod
-import com.zhousl.aether.data.AppLanguage
 import com.zhousl.aether.data.AutomaticModelPurpose
 import com.zhousl.aether.data.LlmProvider
 import com.zhousl.aether.data.LlmProviderConfig
@@ -150,8 +150,6 @@ private val TourGold: Color
 private val TourPurple: Color
     get() = AetherPrimary
 
-private fun tr(strings: AetherStrings, english: String, chinese: String): String =
-    if (strings.appLanguage == AppLanguage.SimplifiedChinese) chinese else english
 
 private enum class ProviderTourStage {
     PickProvider,
@@ -199,7 +197,7 @@ fun OnboardingScreen(
     onCompleteFollowUp: () -> Unit,
     onExploreSettings: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
+
     var currentStep by rememberSaveable(initialStep, replayMode) {
         mutableStateOf(initialStep)
     }
@@ -325,20 +323,20 @@ fun OnboardingScreen(
             OnboardingStep.SkillsOverview -> SummaryStep(
                 stepIndex = stepIndex,
                 stepCount = steps.size,
-                message = tr(strings, "Later, you can add Skills so Aether remembers reusable workflows you like.", "之后你可以添加技能，让 Aether 记住你喜欢的可复用工作流。"),
-                title = tr(strings, "Skills", "技能"),
+                message = stringResource(R.string.onboarding_skills_message),
+                title = stringResource(R.string.onboarding_skills_title),
                 icon = Icons.Rounded.Extension,
                 accent = TourGold,
                 lineOne = if (installedSkillCount == 0) {
-                    tr(strings, "You do not need this now.", "现在不需要也没关系。")
+                    stringResource(R.string.onboarding_skills_not_needed)
                 } else {
-                    tr(strings, "$installedSkillCount Skills are already installed.", "已经安装了 $installedSkillCount 个技能。")
+                    stringResource(R.string.onboarding_skills_installed_count, installedSkillCount)
                 },
-                lineTwo = tr(strings, "Use them for prompts, checks, and templates.", "它们可以用来放提示词、检查项和模板。"),
-                chips = listOf(tr(strings, "Prompts", "提示词"), tr(strings, "Checks", "检查项"), tr(strings, "Templates", "模板")),
-                primaryLabel = strings.continueLabel,
+                lineTwo = stringResource(R.string.onboarding_skills_line_two),
+                chips = listOf(stringResource(R.string.onboarding_skill_chip_prompts), stringResource(R.string.onboarding_skill_chip_checks), stringResource(R.string.onboarding_skill_chip_templates)),
+                primaryLabel = stringResource(R.string.common_continue),
                 onPrimary = { currentStep = OnboardingStep.McpOverview },
-                secondaryLabel = strings.back,
+                secondaryLabel = stringResource(R.string.common_back),
                 onSecondary = { currentStep = OnboardingStep.TavilySetup },
                 onClose = onClose,
             )
@@ -346,22 +344,22 @@ fun OnboardingScreen(
             OnboardingStep.McpOverview -> SummaryStep(
                 stepIndex = stepIndex,
                 stepCount = steps.size,
-                message = tr(strings, "If you want live docs, search, or APIs later, you can connect MCP servers in Settings.", "如果之后你想接入实时文档、搜索或 API，可以在设置里连接 MCP 服务器。"),
+                message = stringResource(R.string.onboarding_mcp_message),
                 title = "MCP",
                 icon = Icons.Rounded.Cloud,
                 accent = TourBlue,
                 lineOne = if (mcpServerCount == 0) {
-                    tr(strings, "You can leave this for later.", "这一步也可以留到以后。")
+                    stringResource(R.string.onboarding_mcp_later)
                 } else {
-                    tr(strings, "$mcpServerCount MCP servers are already available.", "已经有 $mcpServerCount 个 MCP 服务器可用。")
+                    stringResource(R.string.onboarding_mcp_available_count, mcpServerCount)
                 },
-                lineTwo = tr(strings, "This is where Aether grows beyond local tools.", "这里是 Aether 超出本地工具能力的入口。"),
-                chips = listOf(tr(strings, "Docs", "文档"), tr(strings, "Search", "搜索"), "APIs"),
-                primaryLabel = strings.done,
+                lineTwo = stringResource(R.string.onboarding_mcp_line_two),
+                chips = listOf(stringResource(R.string.onboarding_chip_docs), stringResource(R.string.onboarding_chip_search), "APIs"),
+                primaryLabel = stringResource(R.string.common_done),
                 onPrimary = onCompleteFollowUp,
-                secondaryLabel = tr(strings, "Open settings", "打开设置"),
+                secondaryLabel = stringResource(R.string.onboarding_open_settings),
                 onSecondary = onExploreSettings,
-                tertiaryLabel = strings.back,
+                tertiaryLabel = stringResource(R.string.common_back),
                 onTertiary = { currentStep = OnboardingStep.SkillsOverview },
                 onClose = onClose,
             )
@@ -377,7 +375,7 @@ private fun LandingStep(
     onPrimary: () -> Unit,
     onSecondary: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
+
     var visible by remember(stepIndex, replayMode) { mutableStateOf(false) }
     LaunchedEffect(stepIndex, replayMode) {
         delay(180)
@@ -398,7 +396,7 @@ private fun LandingStep(
                 stepIndex = stepIndex,
                 stepCount = stepCount,
                 onBack = null,
-                topRightLabel = if (replayMode) if (strings.appLanguage == AppLanguage.SimplifiedChinese) "关闭" else "Close" else if (strings.appLanguage == AppLanguage.SimplifiedChinese) "跳过" else "Skip",
+                topRightLabel = if (replayMode) stringResource(R.string.common_close) else stringResource(R.string.common_skip),
                 onTopRight = onSecondary,
             )
             Column(
@@ -423,13 +421,13 @@ private fun LandingStep(
                     ) {
                         Image(
                             painter = painterResource(id = R.drawable.aether_mark),
-                            contentDescription = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "Aether 图标" else "Aether icon",
+                            contentDescription = stringResource(R.string.onboarding_aether_icon),
                             modifier = Modifier
                                 .size(104.dp),
                         )
                         Spacer(modifier = Modifier.height(28.dp))
                         Text(
-                            text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "欢迎使用 Aether" else "Welcome to Aether",
+                            text = stringResource(R.string.onboarding_welcome_title),
                             modifier = Modifier.fillMaxWidth(),
                             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold),
                             color = TourTextPrimary,
@@ -437,7 +435,7 @@ private fun LandingStep(
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "在设备上运行、可与一切协作的智能体。" else "The on-device agent that works with everything.",
+                            text = stringResource(R.string.onboarding_welcome_subtitle),
                             modifier = Modifier.fillMaxWidth(),
                             style = MaterialTheme.typography.bodyMedium,
                             color = TourTextSecondary,
@@ -466,7 +464,7 @@ private fun LandingStep(
                             contentColor = Color.White,
                         ),
                     ) {
-                        Text(if (strings.appLanguage == AppLanguage.SimplifiedChinese) "开始使用" else "Get started")
+                        Text(stringResource(R.string.onboarding_get_started))
                     }
                 }
             }
@@ -607,7 +605,7 @@ private fun ProviderSetupStep(
     onReturnToLanding: () -> Unit,
     onComplete: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
+
     var stage by rememberSaveable(stepIndex, replayMode) { mutableStateOf(ProviderTourStage.PickProvider) }
     var isFinishing by rememberSaveable(stepIndex, replayMode) { mutableStateOf(false) }
     val provider = selectedProvider
@@ -624,9 +622,9 @@ private fun ProviderSetupStep(
         (!provider.requiresApiKey(formState.baseUrl) || formState.apiKey.trim().isNotBlank())
 
     val message = when (stage) {
-        ProviderTourStage.PickProvider -> if (strings.appLanguage == AppLanguage.SimplifiedChinese) "首先，我们来选择你的模型提供方。" else "First, let's choose your model provider."
-        ProviderTourStage.Credentials -> if (strings.appLanguage == AppLanguage.SimplifiedChinese) "很好。填入密钥和基础 URL，然后我会获取模型。" else "Great. Add your key and base URL. I'll fetch the models after this."
-        ProviderTourStage.Model -> if (strings.appLanguage == AppLanguage.SimplifiedChinese) "选好模型后，我们就可以直接进入聊天。" else "Pick the model you want, and then we can go straight into chat."
+        ProviderTourStage.PickProvider -> stringResource(R.string.onboarding_provider_pick_message)
+        ProviderTourStage.Credentials -> stringResource(R.string.onboarding_provider_credentials_message)
+        ProviderTourStage.Model -> stringResource(R.string.onboarding_provider_model_message)
     }
     val backAction: (() -> Unit)? = when (stage) {
         ProviderTourStage.PickProvider -> onReturnToLanding
@@ -646,7 +644,7 @@ private fun ProviderSetupStep(
         stepCount = stepCount,
         message = message,
         onBack = backAction,
-        topRightLabel = if (replayMode) if (strings.appLanguage == AppLanguage.SimplifiedChinese) "关闭" else "Close" else if (strings.appLanguage == AppLanguage.SimplifiedChinese) "跳过" else "Skip",
+        topRightLabel = if (replayMode) stringResource(R.string.common_close) else stringResource(R.string.common_skip),
         onTopRight = if (replayMode) onClose else onExit,
         isExiting = isFinishing,
     ) {
@@ -712,7 +710,7 @@ private fun ProviderSetupStep(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "你以后可以在设置中更改。" else "You can change this later in Settings.",
+                            text = stringResource(R.string.onboarding_change_later_settings),
                             style = MaterialTheme.typography.bodySmall,
                             color = TourTextSecondary,
                         )
@@ -726,11 +724,11 @@ private fun ProviderSetupStep(
                     ) {
                         TinyLabel(
                             text = when (provider) {
-                                LlmProvider.OpenAiResponses -> if (strings.appLanguage == AppLanguage.SimplifiedChinese) "正在使用 OpenAI Responses" else "Using OpenAI Responses"
-                                LlmProvider.OpenAiCompatible -> if (strings.appLanguage == AppLanguage.SimplifiedChinese) "正在使用 OpenAI Chat Completions" else "Using OpenAI Chat Completions"
-                                LlmProvider.VertexExpress -> if (strings.appLanguage == AppLanguage.SimplifiedChinese) "正在使用 Vertex" else "Using Vertex"
-                                LlmProvider.AnthropicMessages -> if (strings.appLanguage == AppLanguage.SimplifiedChinese) "正在使用 Anthropic" else "Using Anthropic"
-                                null -> if (strings.appLanguage == AppLanguage.SimplifiedChinese) "选择请求格式" else "Choose a request format"
+                                LlmProvider.OpenAiResponses -> stringResource(R.string.onboarding_using_openai_responses)
+                                LlmProvider.OpenAiCompatible -> stringResource(R.string.onboarding_using_openai_chat_completions)
+                                LlmProvider.VertexExpress -> stringResource(R.string.onboarding_using_vertex)
+                                LlmProvider.AnthropicMessages -> stringResource(R.string.onboarding_using_anthropic)
+                                null -> stringResource(R.string.onboarding_choose_request_format)
                             },
                             color = when (provider) {
                                 LlmProvider.VertexExpress -> TourBlue
@@ -739,24 +737,24 @@ private fun ProviderSetupStep(
                             },
                         )
                         MinimalInputField(
-                            label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "API 密钥" else "API key",
+                            label = stringResource(R.string.onboarding_api_key),
                             value = formState.apiKey,
                             placeholder = if (provider?.requiresApiKey(formState.baseUrl) == true) {
-                                if (strings.appLanguage == AppLanguage.SimplifiedChinese) "此格式需要" else "Required for this format"
+                                stringResource(R.string.onboarding_required_for_this_format)
                             } else {
-                                if (strings.appLanguage == AppLanguage.SimplifiedChinese) "可选" else "Optional"
+                                stringResource(R.string.onboarding_optional)
                             },
                             onValueChange = { formState.apiKey = it },
                         )
                         MinimalInputField(
-                            label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "基础 URL" else "Base URL",
+                            label = stringResource(R.string.onboarding_base_url),
                             value = formState.baseUrl,
                             placeholder = "https://...",
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                             onValueChange = { formState.baseUrl = it },
                         )
                         PrimaryActionButton(
-                            label = if (isLoadingModels) if (strings.appLanguage == AppLanguage.SimplifiedChinese) "正在加载模型..." else "Loading models..." else if (strings.appLanguage == AppLanguage.SimplifiedChinese) "下一步" else "Next",
+                            label = if (isLoadingModels) stringResource(R.string.onboarding_loading_models) else stringResource(R.string.common_next),
                             enabled = canContinueFromCredentials && !isLoadingModels,
                             onClick = {
                                 formState.isFetchingModelsLocally = true
@@ -786,7 +784,7 @@ private fun ProviderSetupStep(
                         verticalArrangement = Arrangement.spacedBy(18.dp),
                     ) {
                         Text(
-                            text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "如果我能找到更合适的模型，我会把它们排在前面。" else "I'll place the best matches first when I can find them.",
+                            text = stringResource(R.string.onboarding_best_models_first),
                             style = MaterialTheme.typography.bodySmall,
                             color = TourTextSecondary,
                         )
@@ -809,13 +807,13 @@ private fun ProviderSetupStep(
                             }
                         }
                         MinimalInputField(
-                            label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "模型" else "Model",
+                            label = stringResource(R.string.onboarding_model),
                             value = if (modelChoices.any { it.equals(formState.modelId.trim(), ignoreCase = true) }) {
                                 ""
                             } else {
                                 formState.modelId
                             },
-                            placeholder = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "或者输入你自己的模型" else "Or type your own model",
+                            placeholder = stringResource(R.string.onboarding_or_type_your_own_model),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                             onValueChange = { value ->
                                 formState.modelId = value
@@ -829,7 +827,7 @@ private fun ProviderSetupStep(
                             },
                         )
                         PrimaryActionButton(
-                            label = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "开始聊天" else "Start chat",
+                            label = stringResource(R.string.common_start_chat),
                             enabled = provider != null && formState.isValid(emptySet()),
                             onClick = { isFinishing = true },
                         )
@@ -858,16 +856,17 @@ private fun TermuxStep(
     onRefreshRootSetup: () -> Unit,
     onConfigureWithRoot: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
+
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
+    val setupCommandCopiedLabel = stringResource(R.string.onboarding_termux_setup_command_copied)
     var shouldAutoContinue by rememberSaveable(stepIndex) { mutableStateOf(!setupState.isReady) }
     var showRootSetupPrompt by rememberSaveable(stepIndex) { mutableStateOf(true) }
     fun copyTermuxSetupCommand() {
         clipboardManager.setText(AnnotatedString(TermuxContract.ExternalAppsSetupCommand))
         Toast.makeText(
             context,
-            if (strings.appLanguage == AppLanguage.SimplifiedChinese) "已复制 Termux 配置命令" else "Termux setup command copied",
+            setupCommandCopiedLabel,
             Toast.LENGTH_SHORT,
         ).show()
     }
@@ -896,9 +895,9 @@ private fun TermuxStep(
     ConversationStepPage(
         stepIndex = stepIndex,
         stepCount = stepCount,
-        message = "Great. Now let’s give Aether access to your device so tools can run locally.",
+        message = stringResource(R.string.onboarding_termux_message),
         onBack = null,
-        topRightLabel = strings.close,
+        topRightLabel = stringResource(R.string.common_close),
         onTopRight = onClose,
     ) {
         Column(
@@ -917,53 +916,53 @@ private fun TermuxStep(
                 StepLead(
                     icon = Icons.Rounded.Terminal,
                     accent = termuxStatusColor(setupState.issue),
-                    title = strings.termux,
-                    body = termuxStatusSentence(setupState, strings.appLanguage),
+                    title = stringResource(R.string.settings_termux),
+                    body = termuxStatusSentence(setupState),
                 )
                 when (setupState.issue) {
                     TermuxSetupIssue.Ready -> TourActionRow(
-                        primaryLabel = strings.continueLabel,
+                        primaryLabel = stringResource(R.string.common_continue),
                         onPrimary = onContinue,
-                        secondaryLabel = strings.refresh,
+                        secondaryLabel = stringResource(R.string.common_refresh),
                         onSecondary = onRefresh,
                     )
 
                     TermuxSetupIssue.NotInstalled -> TourActionRow(
-                        primaryLabel = strings.install,
+                        primaryLabel = stringResource(R.string.common_install),
                         onPrimary = onInstallTermux,
-                        secondaryLabel = strings.skip,
+                        secondaryLabel = stringResource(R.string.common_skip),
                         onSecondary = onContinue,
                     )
 
                     TermuxSetupIssue.PermissionMissing -> {
                         TourActionRow(
-                            primaryLabel = strings.grantAccess,
+                            primaryLabel = stringResource(R.string.common_grant_access),
                             onPrimary = onRequestPermission,
-                            secondaryLabel = strings.skip,
+                            secondaryLabel = stringResource(R.string.common_skip),
                             onSecondary = onContinue,
                         )
-                        SecondaryTextAction(label = tr(strings, "App settings", "应用设置"), onClick = onOpenAppPermissions)
+                        SecondaryTextAction(label = stringResource(R.string.onboarding_app_settings), onClick = onOpenAppPermissions)
                     }
 
                     TermuxSetupIssue.ExternalAppsDisabled -> {
                         TourActionRow(
-                            primaryLabel = if (setupState.previouslyConfigured) tr(strings, "Open", "\u6253\u5f00") else tr(strings, "Copy and Open Termux", "复制并打开 Termux"),
+                            primaryLabel = if (setupState.previouslyConfigured) stringResource(R.string.common_open) else stringResource(R.string.onboarding_copy_and_open_termux),
                             onPrimary = if (setupState.previouslyConfigured) onOpenTermux else ::copyTermuxSetupCommandAndOpenTermux,
-                            secondaryLabel = strings.skip,
+                            secondaryLabel = stringResource(R.string.common_skip),
                             onSecondary = onContinue,
                         )
                     }
 
                     TermuxSetupIssue.DispatchFailed -> {
                         TourActionRow(
-                            primaryLabel = if (setupState.previouslyConfigured) tr(strings, "Open", "\u6253\u5f00") else strings.openTermux,
+                            primaryLabel = if (setupState.previouslyConfigured) stringResource(R.string.common_open) else stringResource(R.string.common_open_termux),
                             onPrimary = onOpenTermux,
-                            secondaryLabel = strings.skip,
+                            secondaryLabel = stringResource(R.string.common_skip),
                             onSecondary = onContinue,
                         )
                         if (!setupState.previouslyConfigured) {
-                            SecondaryTextAction(label = tr(strings, "Copy setup command", "复制配置命令"), onClick = ::copyTermuxSetupCommand)
-                            SecondaryTextAction(label = tr(strings, "Termux settings", "Termux 设置"), onClick = onOpenTermuxSettings)
+                            SecondaryTextAction(label = stringResource(R.string.onboarding_copy_setup_command), onClick = ::copyTermuxSetupCommand)
+                            SecondaryTextAction(label = stringResource(R.string.onboarding_termux_settings), onClick = onOpenTermuxSettings)
                         }
                     }
                 }
@@ -980,7 +979,7 @@ private fun RootSetupPrompt(
     onRootConfigured: () -> Unit,
     onInstallTermux: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
+
     StepLead(
         icon = Icons.Rounded.VerifiedUser,
         accent = when (rootSetupState.issue) {
@@ -993,8 +992,8 @@ private fun RootSetupPrompt(
             RootSetupIssue.Unknown,
             RootSetupIssue.Unavailable -> TourTextSecondary
         },
-        title = tr(strings, "Root shortcut", "Root 快捷配置"),
-        body = rootSetupPromptBody(rootSetupState, strings),
+        title = stringResource(R.string.onboarding_root_shortcut),
+        body = rootSetupPromptBody(rootSetupState),
     )
 
     when (rootSetupState.issue) {
@@ -1010,36 +1009,36 @@ private fun RootSetupPrompt(
                     color = TourBlue,
                 )
                 Text(
-                    text = tr(strings, "Waiting for root authorization...", "正在等待 Root 授权..."),
+                    text = stringResource(R.string.onboarding_waiting_root_authorization),
                     style = MaterialTheme.typography.bodyMedium,
                     color = TourTextSecondary,
                 )
             }
             SecondaryTextAction(
-                label = tr(strings, "Continue manual setup", "继续手动配置"),
+                label = stringResource(R.string.onboarding_continue_manual_setup),
                 onClick = onContinueManual,
             )
         }
 
         RootSetupIssue.Ready -> TourActionRow(
-            primaryLabel = strings.continueLabel,
+            primaryLabel = stringResource(R.string.common_continue),
             onPrimary = onRootConfigured,
-            secondaryLabel = tr(strings, "Manual setup", "手动配置"),
+            secondaryLabel = stringResource(R.string.onboarding_manual_setup),
             onSecondary = onContinueManual,
         )
 
         RootSetupIssue.TermuxNotInstalled -> TourActionRow(
-            primaryLabel = strings.install,
+            primaryLabel = stringResource(R.string.common_install),
             onPrimary = onInstallTermux,
-            secondaryLabel = tr(strings, "Continue manual setup", "继续手动配置"),
+            secondaryLabel = stringResource(R.string.onboarding_continue_manual_setup),
             onSecondary = onContinueManual,
         )
 
         RootSetupIssue.Available -> {
             TourActionRow(
-                primaryLabel = tr(strings, "Use Root setup", "使用 Root 配置"),
+                primaryLabel = stringResource(R.string.onboarding_use_root_setup),
                 onPrimary = onUseRoot,
-                secondaryLabel = tr(strings, "Continue manual setup", "继续手动配置"),
+                secondaryLabel = stringResource(R.string.onboarding_continue_manual_setup),
                 onSecondary = onContinueManual,
             )
         }
@@ -1048,60 +1047,27 @@ private fun RootSetupPrompt(
         RootSetupIssue.Unavailable,
         RootSetupIssue.PermissionDenied,
         RootSetupIssue.Failed -> TourActionRow(
-            primaryLabel = tr(strings, "Use Root setup", "使用 Root 配置"),
+            primaryLabel = stringResource(R.string.onboarding_use_root_setup),
             onPrimary = onUseRoot,
-            secondaryLabel = tr(strings, "Continue manual setup", "继续手动配置"),
+            secondaryLabel = stringResource(R.string.onboarding_continue_manual_setup),
             onSecondary = onContinueManual,
         )
     }
 }
 
-private fun rootSetupPromptBody(
-    rootSetupState: RootSetupState,
-    strings: AetherStrings,
-): String = when (rootSetupState.issue) {
-    RootSetupIssue.Unknown -> tr(
-        strings,
-        "If this phone has Root, Aether can configure Termux and Agent Mode automatically.",
-        "如果这台手机有 Root，Aether 可以自动配置 Termux 和 Agent Mode。",
-    )
-
-    RootSetupIssue.Available -> tr(
-        strings,
-        "Root is available. Grant su to Aether to skip the manual Termux and Agent Mode steps.",
-        "已检测到 Root。授予 Aether su 后，可以跳过后续 Termux 和 Agent Mode 手动步骤。",
-    )
-
-    RootSetupIssue.Running -> tr(
-        strings,
-        "Aether is enabling Termux external apps, granting command permission, and selecting Root Agent Mode.",
-        "Aether 正在启用 Termux 外部应用、授予命令权限，并选择 Root Agent Mode。",
-    )
-
-    RootSetupIssue.Ready -> tr(
-        strings,
-        "Root setup is complete. Termux and Agent Mode are ready.",
-        "Root 配置已完成，Termux 和 Agent Mode 已就绪。",
-    )
-
-    RootSetupIssue.Unavailable -> tr(
-        strings,
-        "If you have Root, try the automatic setup. Otherwise continue with the existing manual flow.",
-        "如果你有 Root，可以尝试自动配置；否则继续现有的手动流程。",
-    )
-
+@Composable
+private fun rootSetupPromptBody(rootSetupState: RootSetupState): String = when (rootSetupState.issue) {
+    RootSetupIssue.Unknown -> stringResource(R.string.onboarding_root_body_unknown)
+    RootSetupIssue.Available -> stringResource(R.string.onboarding_root_body_available)
+    RootSetupIssue.Running -> stringResource(R.string.onboarding_root_body_running)
+    RootSetupIssue.Ready -> stringResource(R.string.onboarding_root_body_ready)
+    RootSetupIssue.Unavailable -> stringResource(R.string.onboarding_root_body_unavailable)
     RootSetupIssue.PermissionDenied -> rootSetupState.detail.ifBlank {
-        tr(strings, "Root access was denied or timed out.", "Root 权限被拒绝或请求超时。")
+        stringResource(R.string.onboarding_root_body_permission_denied)
     }
-
-    RootSetupIssue.TermuxNotInstalled -> tr(
-        strings,
-        "Install Termux first, then Aether can finish this setup with Root.",
-        "请先安装 Termux，之后 Aether 可以通过 Root 完成配置。",
-    )
-
+    RootSetupIssue.TermuxNotInstalled -> stringResource(R.string.onboarding_root_body_termux_not_installed)
     RootSetupIssue.Failed -> rootSetupState.detail.ifBlank {
-        tr(strings, "Root setup did not complete. You can retry or continue manually.", "Root 配置未完成。你可以重试，或继续手动配置。")
+        stringResource(R.string.onboarding_root_body_failed)
     }
 }
 
@@ -1114,13 +1080,13 @@ private fun AgentModeAuthorizationStep(
     onClose: () -> Unit,
     onContinue: (Boolean, AgentModeAuthorizationMethod) -> Unit,
 ) {
-    val strings = rememberAetherStrings()
+
     ConversationStepPage(
         stepIndex = stepIndex,
         stepCount = stepCount,
-        message = tr(strings, "Agent Mode is optional. It needs Root or Shizuku to control an isolated Android display.", "Agent 模式是可选项。它需要 Root 或 Shizuku 来控制隔离的 Android 显示。"),
+        message = stringResource(R.string.onboarding_agent_mode_message),
         onBack = onBack,
-        topRightLabel = strings.close,
+        topRightLabel = stringResource(R.string.common_close),
         onTopRight = onClose,
     ) {
         Column(
@@ -1130,8 +1096,8 @@ private fun AgentModeAuthorizationStep(
             StepLead(
                 icon = Icons.Rounded.SmartToy,
                 accent = TourGreen,
-                title = strings.agentMode,
-                body = tr(strings, "Choose an authorization method, or skip this for now.", "选择一种授权方式，或者暂时先跳过。"),
+                title = stringResource(R.string.settings_agent_mode),
+                body = stringResource(R.string.onboarding_agent_mode_choose_method),
             )
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -1139,19 +1105,19 @@ private fun AgentModeAuthorizationStep(
             ) {
                 AgentModeStageButton(
                     label = "Shizuku",
-                    subtitle = tr(strings, "Use the elevated Shizuku service when the app is installed.", "安装应用后使用提权的 Shizuku 服务。"),
+                    subtitle = stringResource(R.string.onboarding_agent_mode_shizuku_subtitle),
                     drawableRes = R.drawable.shizuku_mark,
                     onClick = { onContinue(true, AgentModeAuthorizationMethod.Shizuku) },
                 )
                 AgentModeStageButton(
                     label = "Root",
-                    subtitle = tr(strings, "Use a root shell for privileged input on rooted devices.", "在已 root 的设备上使用 root shell 进行特权输入。"),
+                    subtitle = stringResource(R.string.onboarding_agent_mode_root_subtitle),
                     drawableRes = R.drawable.root_mark,
                     onClick = { onContinue(true, AgentModeAuthorizationMethod.Root) },
                 )
                 AgentModeStageButton(
-                    label = strings.skip,
-                    subtitle = tr(strings, "Leave Agent Mode off and enable it later from Settings.", "先关闭 Agent 模式，之后再到设置中启用。"),
+                    label = stringResource(R.string.common_skip),
+                    subtitle = stringResource(R.string.onboarding_agent_mode_skip_subtitle),
                     drawableRes = R.drawable.skip_mark,
                     onClick = { onContinue(false, initialMethod) },
                 )
@@ -1170,13 +1136,13 @@ private fun TavilyStep(
     onClose: () -> Unit,
     onContinue: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
+
     ConversationStepPage(
         stepIndex = stepIndex,
         stepCount = stepCount,
-        message = tr(strings, "If you want fresher web answers later, you can add search here.", "如果你之后想获得更新鲜的网页答案，可以在这里补上搜索能力。"),
+        message = stringResource(R.string.onboarding_tavily_message),
         onBack = onBack,
-        topRightLabel = strings.close,
+        topRightLabel = stringResource(R.string.common_close),
         onTopRight = onClose,
     ) {
         Column(
@@ -1186,16 +1152,16 @@ private fun TavilyStep(
             BrandStepLead(
                 drawableRes = R.drawable.tavily_mark,
                 title = "Tavily",
-                body = tr(strings, "This is optional. URL fetch already works without it.", "这是可选项。即使不填，URL 抓取也已经可以使用。"),
+                body = stringResource(R.string.onboarding_tavily_optional_body),
             )
             MinimalInputField(
-                label = tr(strings, "API key", "API 密钥"),
+                label = stringResource(R.string.onboarding_api_key),
                 value = value,
-                placeholder = tr(strings, "Paste it here", "粘贴到这里"),
+                placeholder = stringResource(R.string.onboarding_paste_it_here),
                 onValueChange = onValueChange,
             )
             PrimaryActionButton(
-                label = strings.continueLabel,
+                label = stringResource(R.string.common_continue),
                 onClick = onContinue,
             )
         }
@@ -1221,13 +1187,13 @@ private fun SummaryStep(
     onTertiary: (() -> Unit)? = null,
     onClose: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
+
     ConversationStepPage(
         stepIndex = stepIndex,
         stepCount = stepCount,
         message = message,
         onBack = onTertiary,
-        topRightLabel = strings.close,
+        topRightLabel = stringResource(R.string.common_close),
         onTopRight = onClose,
     ) {
         Column(
@@ -1310,7 +1276,7 @@ private fun StepTopBar(
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                    contentDescription = "Back",
+                    contentDescription = stringResource(R.string.common_back),
                     tint = TourTextPrimary,
                 )
             }
@@ -1911,28 +1877,24 @@ private fun providerModelRank(
     null -> 5
 }
 
-private fun termuxStatusSentence(
-    setupState: TermuxSetupState,
-    appLanguage: AppLanguage,
-): String = setupState.detail.ifBlank {
-    when (setupState.issue) {
-        TermuxSetupIssue.Ready -> if (appLanguage == AppLanguage.SimplifiedChinese) "本地工具已就绪。" else "Local tools are ready."
-        TermuxSetupIssue.NotInstalled -> if (appLanguage == AppLanguage.SimplifiedChinese) "先安装 Termux，然后再回到这里。" else "Install Termux first, then come back here."
-        TermuxSetupIssue.PermissionMissing -> if (appLanguage == AppLanguage.SimplifiedChinese) "在系统权限中授予“在 Termux 环境中运行命令”。" else "Grant the \"Run commands in Termux environment\" permission in Android settings."
-        TermuxSetupIssue.ExternalAppsDisabled -> if (setupState.previouslyConfigured) {
-            if (appLanguage == AppLanguage.SimplifiedChinese) {
-                "Termux \u4f3c\u4e4e\u4e0d\u5728\u540e\u53f0\u8fd0\u884c\u3002\u6253\u5f00 Termux \u5e76\u4fdd\u6301\u5b83\u5728\u540e\u53f0\u8fd0\u884c\uff0c\u7136\u540e\u56de\u5230 Aether \u5237\u65b0\u72b6\u6001\u3002"
-            } else {
-                "Termux seems to be not running in the background. Open Termux and keep it running in the background, then return to Aether and refresh."
-            }
-        } else if (appLanguage == AppLanguage.SimplifiedChinese) "复制配置命令，在 Termux 中粘贴运行后再回来刷新。" else "Copy the setup command, paste it in Termux, then return and refresh."
-        TermuxSetupIssue.DispatchFailed -> if (setupState.previouslyConfigured) {
-            if (appLanguage == AppLanguage.SimplifiedChinese) {
-                "Termux \u4f3c\u4e4e\u4e0d\u5728\u540e\u53f0\u8fd0\u884c\u3002\u6253\u5f00 Termux \u5e76\u4fdd\u6301\u5b83\u5728\u540e\u53f0\u8fd0\u884c\uff0c\u7136\u540e\u56de\u5230 Aether \u5237\u65b0\u72b6\u6001\u3002"
-            } else {
-                "Termux seems to be not running in the background. Open Termux and keep it running in the background, then return to Aether and refresh."
-            }
-        } else if (appLanguage == AppLanguage.SimplifiedChinese) "先打开一次 Termux，然后回到这里刷新。" else "Open Termux once, then refresh here."
+@Composable
+private fun termuxStatusSentence(setupState: TermuxSetupState): String = when (setupState.issue) {
+    TermuxSetupIssue.Ready -> stringResource(R.string.onboarding_termux_status_ready)
+    TermuxSetupIssue.NotInstalled -> stringResource(R.string.onboarding_termux_status_not_installed)
+    TermuxSetupIssue.PermissionMissing -> stringResource(R.string.onboarding_termux_status_permission_missing)
+    TermuxSetupIssue.ExternalAppsDisabled -> {
+        if (setupState.previouslyConfigured) {
+            stringResource(R.string.onboarding_termux_status_external_apps_disabled_configured)
+        } else {
+            stringResource(R.string.onboarding_termux_status_external_apps_disabled)
+        }
+    }
+    TermuxSetupIssue.DispatchFailed -> {
+        if (setupState.previouslyConfigured) {
+            stringResource(R.string.onboarding_termux_status_dispatch_failed_configured)
+        } else {
+            stringResource(R.string.onboarding_termux_status_dispatch_failed)
+        }
     }
 }
 

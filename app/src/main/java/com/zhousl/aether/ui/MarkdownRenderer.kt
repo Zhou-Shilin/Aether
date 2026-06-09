@@ -55,6 +55,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -69,7 +70,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.ViewCompat
-import com.zhousl.aether.data.AppLanguage
+import com.zhousl.aether.R
 import com.zhousl.aether.data.WorkspaceFileBridge
 import com.zhousl.aether.termux.TermuxContract
 import com.zhousl.aether.ui.theme.AetherOnSurface
@@ -602,9 +603,8 @@ private fun MarkdownImageBlock(
             )
         }
         if (!originalLinkTarget.isNullOrBlank()) {
-            val strings = rememberAetherStrings()
             Text(
-                text = if (strings.appLanguage == AppLanguage.SimplifiedChinese) "打开原图" else "Open original",
+                text = stringResource(R.string.markdown_open_original),
                 style = MaterialTheme.typography.bodySmall,
                 color = AetherPrimary,
                 modifier = Modifier.clickable { onLinkClick(originalLinkTarget) },
@@ -627,6 +627,8 @@ private fun MarkdownImageBlock(
 private fun MarkdownMermaidBlock(
     diagram: MarkdownMermaidSpec,
 ) {
+    val renderErrorTitle = stringResource(R.string.markdown_mermaid_error_render)
+    val invalidSyntaxError = stringResource(R.string.markdown_mermaid_error_invalid_syntax)
     val previewLayout = remember(diagram.layout) {
         diagram.layout.copy(
             heightDp = null,
@@ -639,8 +641,13 @@ private fun MarkdownMermaidBlock(
     var showPreview by remember(diagram.code.text, diagram.layout) { mutableStateOf(false) }
     MarkdownMediaWidthContainer(layout = diagram.layout) { widthModifier ->
         MarkdownHtmlBlock(
-            html = remember(diagram.code.text, diagram.layout.scroll) {
-                buildMermaidHtml(diagram.code.text, diagram.layout)
+            html = remember(diagram.code.text, diagram.layout) {
+                buildMermaidHtml(
+                    code = diagram.code.text,
+                    layout = diagram.layout,
+                    renderErrorTitle = renderErrorTitle,
+                    invalidSyntaxError = invalidSyntaxError,
+                )
             },
             layout = diagram.layout,
             defaultMinHeightDp = DefaultMermaidMinHeightDp,
@@ -655,7 +662,12 @@ private fun MarkdownMermaidBlock(
     if (showPreview) {
         MarkdownMermaidPreviewDialog(
             html = remember(diagram.code.text, previewLayout) {
-                buildMermaidHtml(diagram.code.text, previewLayout)
+                buildMermaidHtml(
+                    code = diagram.code.text,
+                    layout = previewLayout,
+                    renderErrorTitle = renderErrorTitle,
+                    invalidSyntaxError = invalidSyntaxError,
+                )
             },
             onDismiss = { showPreview = false },
         )
@@ -886,8 +898,9 @@ private fun MarkdownImagePreviewDialog(
     onDismiss: () -> Unit,
     onOpenLink: (String) -> Unit,
 ) {
+    val fallbackTitle = stringResource(R.string.markdown_image_preview_title)
     MarkdownPreviewDialogFrame(
-        title = altText.ifBlank { "Image preview" },
+        title = altText.ifBlank { fallbackTitle },
         onDismiss = onDismiss,
     ) {
         when {
@@ -918,7 +931,7 @@ private fun MarkdownImagePreviewDialog(
             )
 
             else -> Text(
-                text = imageState.error ?: "Preview unavailable.",
+                text = imageState.error ?: stringResource(R.string.markdown_preview_unavailable),
                 style = MaterialTheme.typography.bodyMedium,
                 color = AetherOnSurfaceVariant,
             )
@@ -926,7 +939,7 @@ private fun MarkdownImagePreviewDialog(
 
         if (!originalLinkTarget.isNullOrBlank()) {
             Text(
-                text = "Open original",
+                text = stringResource(R.string.markdown_open_original),
                 style = MaterialTheme.typography.bodyMedium,
                 color = AetherPrimary,
                 modifier = Modifier.clickable { onOpenLink(originalLinkTarget) },
@@ -941,7 +954,7 @@ private fun MarkdownMermaidPreviewDialog(
     onDismiss: () -> Unit,
 ) {
     MarkdownPreviewDialogFrame(
-        title = "Mermaid preview",
+        title = stringResource(R.string.markdown_mermaid_preview_title),
         onDismiss = onDismiss,
     ) {
         MarkdownHtmlBlock(
@@ -994,7 +1007,7 @@ private fun MarkdownPreviewDialogFrame(
                     modifier = Modifier.weight(1f),
                 )
                 Text(
-                    text = "Close",
+                    text = stringResource(R.string.common_close),
                     style = MaterialTheme.typography.bodyMedium,
                     color = AetherPrimary,
                     modifier = Modifier.clickable(onClick = onDismiss),
@@ -2026,16 +2039,19 @@ private suspend fun loadMarkdownImage(
     workspaceDirectory: String?,
     allowRootImageRead: Boolean,
 ): MarkdownImageLoadResult = runCatching {
+    val loadPreviewError = context.getString(R.string.markdown_image_error_load_preview)
+    val readDataError = context.getString(R.string.markdown_image_error_read_data)
+    val readWorkspaceError = context.getString(R.string.markdown_image_error_read_workspace)
     val normalizedUrl = normalizeMarkdownImageUrl(rawUrl)
-        ?: error("Couldn't load image preview.")
+        ?: error(loadPreviewError)
     val imageBinary = when {
         normalizedUrl.startsWith("http://", ignoreCase = true) ||
             normalizedUrl.startsWith("https://", ignoreCase = true) -> {
-            fetchRemoteMarkdownImage(normalizedUrl)
+            fetchRemoteMarkdownImage(context, normalizedUrl)
         }
 
         normalizedUrl.startsWith("data:", ignoreCase = true) -> {
-            decodeDataUrl(normalizedUrl)
+            decodeDataUrl(context, normalizedUrl)
         }
 
         normalizedUrl.startsWith("content://", ignoreCase = true) -> {
@@ -2045,6 +2061,7 @@ private suspend fun loadMarkdownImage(
         else -> {
             val localFilePath = parseAssistantLocalFileLink(normalizedUrl)
             loadWorkspaceImageBinary(
+                context = context,
                 workspaceFileBridge = workspaceFileBridge,
                 rawPath = localFilePath ?: normalizedUrl,
                 workingDirectory = workspaceDirectory
@@ -2052,9 +2069,11 @@ private suspend fun loadMarkdownImage(
                     ?.ifBlank { TermuxContract.HomeDirectory }
                     ?: TermuxContract.HomeDirectory,
                 allowRootImageRead = allowRootImageRead,
-            ) ?: readLocalMarkdownImage(normalizedUrl)
+                readDataError = readDataError,
+                readWorkspaceError = readWorkspaceError,
+            ) ?: readLocalMarkdownImage(context, normalizedUrl)
         }
-    } ?: error("Couldn't load image preview.")
+    } ?: error(loadPreviewError)
 
     decodeMarkdownImageResult(
         context = context,
@@ -2063,15 +2082,18 @@ private suspend fun loadMarkdownImage(
     )
 }.getOrElse { throwable ->
     MarkdownImageLoadResult(
-        error = throwable.message ?: "Couldn't load image preview.",
+        error = throwable.message ?: context.getString(R.string.markdown_image_error_load_preview),
     )
 }
 
 private suspend fun loadWorkspaceImageBinary(
+    context: Context,
     workspaceFileBridge: WorkspaceFileBridge,
     rawPath: String,
     workingDirectory: String,
     allowRootImageRead: Boolean,
+    readDataError: String,
+    readWorkspaceError: String,
 ) : MarkdownImageBinary? {
     val resolvedPath = if (rawPath.startsWith("file://", ignoreCase = true)) {
         workspaceFileBridge.resolveLinkPath(rawPath)
@@ -2084,11 +2106,11 @@ private suspend fun loadWorkspaceImageBinary(
     val localFile = File(resolvedPath)
     var localReadFailure: Throwable? = null
     if (localFile.exists() && localFile.isFile) {
-        val localResult = runCatching { readLocalMarkdownImage(localFile.absolutePath) }
+        val localResult = runCatching { readLocalMarkdownImage(context, localFile.absolutePath) }
         localResult.getOrNull()?.let { return it }
         localReadFailure = localResult.exceptionOrNull()
         if (!allowRootImageRead) {
-            error(localReadFailure?.message ?: "Couldn't read image data.")
+            error(localReadFailure?.message ?: readDataError)
         }
     }
     val workspaceResult = workspaceFileBridge.readWorkspaceFile(
@@ -2100,7 +2122,7 @@ private suspend fun loadWorkspaceImageBinary(
             error(
                 localReadFailure?.message
                     ?: workspaceThrowable.message
-                    ?: "Couldn't read image data from the workspace."
+                    ?: readWorkspaceError
             )
         }
         workspaceFileBridge.readRootImageFile(
@@ -2108,7 +2130,7 @@ private suspend fun loadWorkspaceImageBinary(
             workingDirectory = workingDirectory,
             byteLimit = MaxMarkdownImageBytes,
         ).getOrElse { rootThrowable ->
-            error(rootThrowable.message ?: workspaceThrowable.message ?: "Couldn't read image data.")
+            error(rootThrowable.message ?: workspaceThrowable.message ?: readDataError)
         }
     }
     return MarkdownImageBinary(
@@ -2118,13 +2140,14 @@ private suspend fun loadWorkspaceImageBinary(
 }
 
 private fun readLocalMarkdownImage(
+    context: Context,
     rawPath: String,
 ): MarkdownImageBinary? {
     val file = File(rawPath)
     if (!file.exists() || !file.isFile) return null
     val byteLimit = MaxMarkdownImageBytes + 1
-    val bytes = file.inputStream().use { readBytesWithLimit(it, byteLimit) }
-    ensureMarkdownImageWithinLimit(bytes.size)
+    val bytes = file.inputStream().use { readBytesWithLimit(context, it, byteLimit) }
+    ensureMarkdownImageWithinLimit(context, bytes.size)
     return MarkdownImageBinary(
         bytes = bytes,
         mimeType = inferMarkdownImageMimeType(
@@ -2141,9 +2164,9 @@ private fun readContentMarkdownImage(
 ): MarkdownImageBinary? {
     val uri = Uri.parse(rawUrl)
     val bytes = context.contentResolver.openInputStream(uri)?.use { input ->
-        readBytesWithLimit(input, MaxMarkdownImageBytes + 1)
+        readBytesWithLimit(context, input, MaxMarkdownImageBytes + 1)
     } ?: return null
-    ensureMarkdownImageWithinLimit(bytes.size)
+    ensureMarkdownImageWithinLimit(context, bytes.size)
     return MarkdownImageBinary(
         bytes = bytes,
         mimeType = inferMarkdownImageMimeType(
@@ -2155,6 +2178,7 @@ private fun readContentMarkdownImage(
 }
 
 private fun fetchRemoteMarkdownImage(
+    context: Context,
     url: String,
 ): MarkdownImageBinary {
     val request = Request.Builder()
@@ -2164,11 +2188,11 @@ private fun fetchRemoteMarkdownImage(
         .build()
     return MarkdownImageHttpClient.newCall(request).execute().use { response ->
         if (!response.isSuccessful) {
-            error("Couldn't load image preview (HTTP ${response.code}).")
+            error(context.getString(R.string.markdown_image_error_load_preview_http, response.code))
         }
-        val body = response.body ?: error("Couldn't load image preview.")
-        val bytes = body.byteStream().use { readBytesWithLimit(it, MaxMarkdownImageBytes + 1) }
-        ensureMarkdownImageWithinLimit(bytes.size)
+        val body = response.body ?: error(context.getString(R.string.markdown_image_error_load_preview))
+        val bytes = body.byteStream().use { readBytesWithLimit(context, it, MaxMarkdownImageBytes + 1) }
+        ensureMarkdownImageWithinLimit(context, bytes.size)
         MarkdownImageBinary(
             bytes = bytes,
             mimeType = inferMarkdownImageMimeType(
@@ -2181,10 +2205,11 @@ private fun fetchRemoteMarkdownImage(
 }
 
 private fun decodeDataUrl(
+    context: Context,
     dataUrl: String,
 ): MarkdownImageBinary {
     val commaIndex = dataUrl.indexOf(',')
-    require(commaIndex > "data:".length) { "Couldn't load image preview." }
+    require(commaIndex > "data:".length) { context.getString(R.string.markdown_image_error_load_preview) }
 
     val metadata = dataUrl.substring("data:".length, commaIndex)
     val payload = dataUrl.substring(commaIndex + 1)
@@ -2196,7 +2221,7 @@ private fun decodeDataUrl(
     } else {
         URLDecoder.decode(payload, Charsets.UTF_8.name()).toByteArray(Charsets.UTF_8)
     }
-    ensureMarkdownImageWithinLimit(bytes.size)
+    ensureMarkdownImageWithinLimit(context, bytes.size)
     return MarkdownImageBinary(
         bytes = bytes,
         mimeType = inferMarkdownImageMimeType(
@@ -2242,7 +2267,7 @@ private fun decodeMarkdownImageResult(
         )
     }
 
-    error("Couldn't load image preview.")
+    error(context.getString(R.string.markdown_image_error_load_preview))
 }
 
 internal fun inferMarkdownImageMimeType(
@@ -2523,6 +2548,7 @@ private fun guessMimeTypeFromPath(rawUrl: String): String? {
 }
 
 private fun readBytesWithLimit(
+    context: Context,
     inputStream: java.io.InputStream,
     byteLimit: Int,
 ): ByteArray {
@@ -2535,7 +2561,7 @@ private fun readBytesWithLimit(
         if (read <= 0) break
         totalRead += read
         if (totalRead > byteLimit) {
-            error("Image is larger than 8.0 MB.")
+            error(context.getString(R.string.markdown_image_error_too_large))
         }
         output.write(buffer, 0, read)
     }
@@ -2543,15 +2569,17 @@ private fun readBytesWithLimit(
     return output.toByteArray()
 }
 
-private fun ensureMarkdownImageWithinLimit(sizeBytes: Int) {
+private fun ensureMarkdownImageWithinLimit(context: Context, sizeBytes: Int) {
     if (sizeBytes > MaxMarkdownImageBytes) {
-        error("Image is larger than 8.0 MB.")
+        error(context.getString(R.string.markdown_image_error_too_large))
     }
 }
 
 private fun buildMermaidHtml(
     code: String,
     layout: MarkdownMediaLayout,
+    renderErrorTitle: String,
+    invalidSyntaxError: String,
 ): String {
     val escapedCode = escapeHtml(code)
     val svgMaxWidth = if (layout.scroll) "none" else "100%"
@@ -2642,9 +2670,9 @@ private fun buildMermaidHtml(
                 function showMermaidError(code, detail) {
                     document.getElementById('container').innerHTML =
                         '<div class="mermaid-error">' +
-                        '<div class="mermaid-error-title">Couldn\\'t render Mermaid diagram.</div>' +
+                        '<div class="mermaid-error-title">' + escapeHtml(renderErrorTitle) + '</div>' +
                         '<pre class="mermaid-source">' + escapeHtml(code) + '</pre>' +
-                        '<div class="mermaid-error-detail">' + escapeHtml(detail || 'Invalid Mermaid syntax.') + '</div>' +
+                        '<div class="mermaid-error-detail">' + escapeHtml(detail || invalidSyntaxError) + '</div>' +
                         '</div>';
                 }
 
@@ -2666,7 +2694,7 @@ private fun buildMermaidHtml(
                     } catch (error) {
                         showMermaidError(
                             code,
-                            error && error.message ? error.message : 'Invalid Mermaid syntax.',
+                            error && error.message ? error.message : invalidSyntaxError,
                         );
                         document.getElementById('container').onclick = reportAetherTap;
                     } finally {
