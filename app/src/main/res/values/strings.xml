@@ -90,9 +90,6 @@
     <string name="chat_gpts">GPTs</string>
     <string name="chat_recent">Recent</string>
     <string name="chat_no_conversations_yet">No conversations yet.</string>
-    <string name="chat_empty_message">Empty message</string>
-    <string name="chat_attachments_count">%1$d attachments</string>
-    <string name="chat_no_messages_yet">No messages yet.</string>
     <string name="chat_empty_draft">Empty draft</string>
     <string name="chat_add_attachment_or_tool">Add attachment or tool</string>
     <string name="chat_photos">Photos</string>
@@ -206,9 +203,6 @@
     <string name="settings_personalization">Personalization</string>
     <string name="settings_web_tools">Web Tools</string>
     <string name="settings_reliability">Reliability</string>
-    <string name="settings_mcp_test_more_items">... and %1$d more</string>
-    <string name="settings_mcp_test_count">%1$s: %2$d</string>
-    <string name="settings_mcp_test_count_on_server">%1$s: %2$d on %3$s</string>
     <string name="settings_agent_skills">Agent Skills</string>
     <string name="settings_mcp_servers">MCP Servers</string>
     <string name="settings_mcp_servers_description">Manage MCP servers, inspect each transport config, and keep only the connections you want active.</string>

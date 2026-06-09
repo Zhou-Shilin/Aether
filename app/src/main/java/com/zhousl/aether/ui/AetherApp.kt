@@ -253,7 +253,7 @@ private fun AetherAppContent(
 
     LaunchedEffect(viewModel, context) {
         viewModel.transientMessages.collectLatest { message ->
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, message.resolve(context), Toast.LENGTH_SHORT).show()
         }
     }
     LaunchedEffect(uiState.appUpdate.pendingInstallUri) {
