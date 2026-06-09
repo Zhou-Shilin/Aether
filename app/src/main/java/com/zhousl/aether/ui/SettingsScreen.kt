@@ -683,19 +683,22 @@ fun SettingsScreen(
                 tavilyConfigured = tavilyApiKeyValue.text.isNotBlank(),
                 reliabilitySummary = buildString {
                     append(
-                        "Reconnect after ${
+                        stringResource(
+                            R.string.settings_reconnect_after_seconds,
                             normalizeLlmInactivityReconnectTimeoutSeconds(
                                 llmInactivityReconnectTimeoutValue.text.trim().toIntOrNull()
-                            )
-                        }s"
+                            ),
+                        )
                     )
                     append(" · ")
                     append(
-                        if (keepTasksRunningInBackgroundValue) {
-                            "Background runs on"
-                        } else {
-                            "Background runs off"
-                        }
+                        stringResource(
+                            if (keepTasksRunningInBackgroundValue) {
+                                R.string.settings_background_runs_on
+                            } else {
+                                R.string.settings_background_runs_off
+                            },
+                        )
                     )
                 },
                 termuxReady = termuxSetupState.isReady,
@@ -4283,7 +4286,7 @@ private fun SettingsTopBar(
     ) {
         SettingsCircleButton(
             icon = Icons.AutoMirrored.Rounded.ArrowBack,
-            contentDescription = "Back",
+            contentDescription = stringResource(R.string.common_back),
             onClick = onBack,
         )
         Text(

@@ -7,6 +7,7 @@ import android.view.Surface
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.zhousl.aether.BuildConfig
+import com.zhousl.aether.R
 import com.zhousl.aether.aetherRuntime
 import com.zhousl.aether.data.ActiveSkillContext
 import com.zhousl.aether.data.AetherAnalytics
@@ -371,9 +372,9 @@ class AetherViewModel(
             }
             emitTransientMessage(
                 if (rootState.isReady) {
-                    "Root setup completed"
+                    appString(R.string.message_root_setup_completed)
                 } else {
-                    "Root setup failed: ${rootState.detail.ifBlank { rootState.issue.name }}"
+                    appString(R.string.message_root_setup_failed, rootState.detail.ifBlank { rootState.issue.name })
                 }
             )
         }
@@ -571,7 +572,7 @@ class AetherViewModel(
                             )
                         )
                     }
-                    emitTransientMessage("Couldn't download update: ${throwable.userFacingMessage()}")
+                    emitTransientMessage(appString(R.string.message_update_download_failed, throwable.userFacingMessage()))
                 }
         }
     }
@@ -949,7 +950,7 @@ class AetherViewModel(
 
     fun deleteSession(sessionId: String) {
         if (sessionExecutionManager.isSessionRunning(sessionId)) {
-            emitTransientMessage("Pause this session before deleting it.")
+            emitTransientMessage(appString(R.string.message_pause_before_deleting_session))
             return
         }
 
@@ -993,7 +994,7 @@ class AetherViewModel(
                     }.toString(2),
                 )
             }
-            emitTransientMessage(if (didExport) "Session exported" else "Couldn't export session")
+            emitTransientMessage(appString(if (didExport) R.string.message_session_exported else R.string.message_session_export_failed))
         }
     }
 
@@ -1006,7 +1007,7 @@ class AetherViewModel(
                     text = buildFullAppExportJson(snapshot).toString(2),
                 )
             }
-            emitTransientMessage(if (didExport) "App data exported" else "Couldn't export app data")
+            emitTransientMessage(appString(if (didExport) R.string.message_app_data_exported else R.string.message_app_data_export_failed))
         }
     }
 
@@ -1032,7 +1033,7 @@ class AetherViewModel(
                 event = if (didExport) "diagnostic_export_end" else "diagnostic_export_failed",
                 level = if (didExport) "info" else "warn",
             )
-            emitTransientMessage(if (didExport) "Logs exported" else "Couldn't export logs")
+            emitTransientMessage(appString(if (didExport) R.string.message_logs_exported else R.string.message_logs_export_failed))
         }
     }
 
@@ -1076,10 +1077,10 @@ class AetherViewModel(
                             unviewedCompletedSessionIds = emptySet(),
                         )
                     }
-                    emitTransientMessage("App data imported")
+                    emitTransientMessage(appString(R.string.message_app_data_imported))
                 }
                 .onFailure { throwable ->
-                    emitTransientMessage("Couldn't import app data: ${throwable.userFacingMessage()}")
+                    emitTransientMessage(appString(R.string.message_app_data_import_failed, throwable.userFacingMessage()))
                 }
         }
     }
@@ -1824,7 +1825,7 @@ class AetherViewModel(
                 isEnabled = enabled,
             )
             if (task.prompt.isBlank()) {
-                emitTransientMessage("Scheduled task prompt is required.")
+                emitTransientMessage(appString(R.string.message_scheduled_task_prompt_required))
                 return@launch
             }
             scheduledTaskManager.upsertTask(task)
@@ -2072,13 +2073,13 @@ class AetherViewModel(
         )
 
         if (snapshot.editingSessionId != null && sessionExecutionManager.isSessionRunning(targetSessionId)) {
-            emitTransientMessage("Pause this session before editing an earlier message.")
+            emitTransientMessage(appString(R.string.message_pause_before_editing_message))
             return
         }
 
         if (sessionExecutionManager.isSessionRunning(targetSessionId)) {
             if (!sessionExecutionManager.submitFollowUp(targetSessionId, userMessage, runningFollowUpMode)) {
-                emitTransientMessage("This session is no longer running. Try sending again.")
+                emitTransientMessage(appString(R.string.message_session_no_longer_running))
                 return
             }
             buildAnalyticsTurnRequest(
@@ -2171,7 +2172,7 @@ class AetherViewModel(
                     val newSession = createSession(
                         id = targetSessionId,
                         messages = listOf(userMessage),
-                        title = "New chat",
+                        title = appString(R.string.common_new_chat),
                         hasCustomTitle = true,
                         selectedModelKey = current.draftSelectedModelKey.ifBlank {
                             resolveDefaultChatModelKey(current.settings, current.providerConfigs)
@@ -2956,14 +2957,14 @@ class AetherViewModel(
             .firstOrNull { it.author == MessageAuthor.User && it.displayKind == MessageDisplayKind.Standard }
             ?.summaryText()
             .orEmpty()
-            .ifBlank { "New chat" }
+            .ifBlank { appString(R.string.common_new_chat) }
             .take(36)
 
         val preview = visibleMessages
             .lastOrNull()
             ?.summaryText()
             .orEmpty()
-            .ifBlank { "No messages yet." }
+            .ifBlank { appString(R.string.chat_no_messages_yet) }
             .take(96)
 
         return SessionMetadata(title = title, preview = preview)
@@ -3037,26 +3038,26 @@ class AetherViewModel(
 
     private fun compactCurrentSession(snapshot: AetherUiState) {
         if (snapshot.editingSessionId != null) {
-            emitTransientMessage("Finish editing before compacting this conversation.")
+            emitTransientMessage(appString(R.string.message_finish_editing_before_compacting))
             return
         }
         val sessionId = snapshot.currentSessionId
         if (sessionId == DraftSessionId) {
-            emitTransientMessage("There is no conversation to compact yet.")
+            emitTransientMessage(appString(R.string.message_no_conversation_to_compact))
             return
         }
         if (sessionExecutionManager.isSessionRunning(sessionId)) {
-            emitTransientMessage("Pause this session before compacting it.")
+            emitTransientMessage(appString(R.string.message_pause_before_compacting))
             return
         }
         val session = snapshot.sessions.firstOrNull { it.id == sessionId }
         if (session == null || session.messages.size < 2) {
-            emitTransientMessage("There is not enough conversation to compact yet.")
+            emitTransientMessage(appString(R.string.message_not_enough_conversation_to_compact))
             return
         }
         val compactInput = buildCompactConversationInput(session)
         if (compactInput.isBlank()) {
-            emitTransientMessage("There is no text to compact.")
+            emitTransientMessage(appString(R.string.message_no_text_to_compact))
             return
         }
 
@@ -3088,7 +3089,7 @@ class AetherViewModel(
                         compactSettings.modelId,
                     )
                 ) {
-                    emitTransientMessage("Configure a provider before compacting.")
+                    emitTransientMessage(appString(R.string.message_configure_provider_before_compacting))
                     return@launch
                 }
 
@@ -3097,7 +3098,7 @@ class AetherViewModel(
                     session = session,
                     compactInput = compactInput,
                 ).getOrElse { throwable ->
-                    emitTransientMessage("Compaction failed: ${throwable.userFacingMessage()}")
+                    emitTransientMessage(appString(R.string.message_compaction_failed, throwable.userFacingMessage()))
                     return@launch
                 }
 
@@ -3114,7 +3115,7 @@ class AetherViewModel(
                     ChatMessage(
                         id = "compact-status-$now",
                         author = MessageAuthor.Agent,
-                        text = "Context compacted",
+                        text = appString(R.string.chat_context_compacted),
                         createdAtMillis = now + 1,
                         assistantActionsHidden = true,
                         displayKind = MessageDisplayKind.CompactStatus,
@@ -3325,7 +3326,7 @@ class AetherViewModel(
     }
 
     private fun ChatMessage.summaryText(): String {
-        if (displayKind == MessageDisplayKind.CompactStatus) return text.ifBlank { "Context compacted" }
+        if (displayKind == MessageDisplayKind.CompactStatus) return text.ifBlank { appString(R.string.chat_context_compacted) }
         val textSummary = text.trim()
         if (textSummary.isNotBlank()) return textSummary
         reasoningTrace?.let { trace ->
@@ -3351,9 +3352,9 @@ class AetherViewModel(
                 "Used ${toolInvocations.size} tools"
             }
         }
-        if (attachments.isEmpty()) return "Empty message"
+        if (attachments.isEmpty()) return appString(R.string.chat_empty_message)
         if (attachments.size == 1) return attachments.first().name
-        return "${attachments.size} attachments"
+        return appString(R.string.chat_attachments_count, attachments.size)
     }
 
     private fun List<ChatMessage>.resolveConversationTrimIndex(
@@ -3433,21 +3434,21 @@ class AetherViewModel(
         val serverInfo = json.optString("server_info").ifBlank { json.optString("server_name") }
         return when (operation) {
             McpServerTestOperation.ListTools -> formatMcpNamedItems(
-                title = "Tools",
+                title = appString(R.string.settings_mcp_tools),
                 serverInfo = serverInfo,
                 items = json.optJSONArray("tools"),
                 nameKey = "name",
             )
 
             McpServerTestOperation.ListResources -> formatMcpNamedItems(
-                title = "Resources",
+                title = appString(R.string.settings_mcp_resources),
                 serverInfo = serverInfo,
                 items = json.optJSONArray("resources"),
                 nameKey = "uri",
             )
 
             McpServerTestOperation.ListPrompts -> formatMcpNamedItems(
-                title = "Prompts",
+                title = appString(R.string.settings_mcp_prompts),
                 serverInfo = serverInfo,
                 items = json.optJSONArray("prompts"),
                 nameKey = "name",
@@ -3463,12 +3464,10 @@ class AetherViewModel(
     ): String {
         val count = items?.length() ?: 0
         return buildString {
-            append(title)
-            append(": ")
-            append(count)
             if (serverInfo.isNotBlank()) {
-                append(" on ")
-                append(serverInfo)
+                append(appString(R.string.settings_mcp_test_count_on_server, title, count, serverInfo))
+            } else {
+                append(appString(R.string.settings_mcp_test_count, title, count))
             }
             if (count > 0 && items != null) {
                 appendLine()
@@ -3487,9 +3486,7 @@ class AetherViewModel(
                     appendLine()
                 }
                 if (count > visibleCount) {
-                    append("... and ")
-                    append(count - visibleCount)
-                    append(" more")
+                    append(appString(R.string.settings_mcp_test_more_items, count - visibleCount))
                 }
             }
         }.trim()
@@ -3503,7 +3500,7 @@ class AetherViewModel(
             val result = installBlock()
             result
                 .onSuccess { installedSkill ->
-                    emitTransientMessage("Installed skill: ${installedSkill.name}")
+                    emitTransientMessage(appString(R.string.message_installed_skill, installedSkill.name))
                     captureAnalyticsEvent(
                         event = "skill installed",
                         properties = mapOf(
@@ -3514,7 +3511,7 @@ class AetherViewModel(
                 }
                 .onFailure { throwable ->
                     emitTransientMessage(
-                        "Couldn't install skill: ${throwable.userFacingMessage()}"
+                        appString(R.string.message_install_skill_failed, throwable.userFacingMessage())
                     )
                 }
             onComplete(result.isSuccess)
@@ -3566,7 +3563,7 @@ class AetherViewModel(
                         )
                     }
                     if (!hasUpdate && manual) {
-                        emitTransientMessage("Aether is up to date.")
+                        emitTransientMessage(appString(R.string.message_aether_up_to_date))
                     }
                 }
                 .onFailure { throwable ->
@@ -3576,7 +3573,7 @@ class AetherViewModel(
                         )
                     }
                     if (manual) {
-                        emitTransientMessage("Couldn't check for updates: ${throwable.userFacingMessage()}")
+                        emitTransientMessage(appString(R.string.message_update_check_failed, throwable.userFacingMessage()))
                     }
                 }
         }
@@ -4063,6 +4060,9 @@ class AetherViewModel(
     private fun emitTransientMessage(message: String) {
         _transientMessages.tryEmit(message)
     }
+
+    private fun appString(resId: Int, vararg formatArgs: Any): String =
+        getApplication<Application>().getString(resId, *formatArgs)
 
     private fun Throwable.userFacingMessage(): String =
         message?.trim().takeUnless { it.isNullOrBlank() } ?: javaClass.simpleName

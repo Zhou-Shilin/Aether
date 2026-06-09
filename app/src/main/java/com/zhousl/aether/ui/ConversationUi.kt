@@ -336,7 +336,10 @@ fun ConversationScreen(
     val visibleMessages = remember(messages) {
         messages.filterNot { message -> message.displayKind == MessageDisplayKind.HiddenContext }
     }
-    val compactSuggestionText = remember(messages) { compactCommandSuggestionText(messages) }
+    val compactSuggestion = remember(messages) { compactCommandSuggestion(messages) }
+    val compactSuggestionText = compactSuggestion.percent?.let { percent ->
+        stringResource(R.string.chat_compact_thread_context_percent, percent)
+    } ?: stringResource(R.string.chat_compact_thread_context)
     val lastVisibleMessageAuthor = remember(messages) {
         messages.lastOrNull { message ->
             message.displayKind == MessageDisplayKind.Standard
@@ -1303,7 +1306,11 @@ private fun minStartedAtMillis(first: Long?, second: Long?): Long? = when {
 private fun fallbackDurationMillis(startedRealtimeMillis: Long): Long =
     (SystemClock.elapsedRealtime() - startedRealtimeMillis).coerceAtLeast(1_000L)
 
-private fun compactCommandSuggestionText(messages: List<ChatMessage>): String {
+private data class CompactCommandSuggestion(
+    val percent: Int?,
+)
+
+private fun compactCommandSuggestion(messages: List<ChatMessage>): CompactCommandSuggestion {
     var visibleCount = 0
     var estimatedChars = 0
     messages.forEach { message ->
@@ -1322,9 +1329,9 @@ private fun compactCommandSuggestionText(messages: List<ChatMessage>): String {
             estimatedChars += invocation.toolName.length + invocation.argumentsJson.length + invocation.outputJson.length
         }
     }
-    if (visibleCount < 2) return "Compact this thread's context"
+    if (visibleCount < 2) return CompactCommandSuggestion(percent = null)
     val percent = ((estimatedChars * 100L) / 120_000L).toInt().coerceIn(1, 100)
-    return "Compact this thread's context (${percent}% full)"
+    return CompactCommandSuggestion(percent = percent)
 }
 
 @Composable

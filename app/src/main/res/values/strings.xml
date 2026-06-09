@@ -5,6 +5,35 @@
     <!-- Common -->
     <string name="common_menu">Menu</string>
     <string name="common_new_chat">New chat</string>
+    <string name="chat_no_messages_yet">No messages yet.</string>
+    <string name="chat_empty_message">Empty message</string>
+    <string name="chat_attachments_count">%1$d attachments</string>
+    <string name="message_root_setup_completed">Root setup completed</string>
+    <string name="message_root_setup_failed">Root setup failed: %1$s</string>
+    <string name="message_update_download_failed">Couldn\'t download update: %1$s</string>
+    <string name="message_pause_before_deleting_session">Pause this session before deleting it.</string>
+    <string name="message_session_exported">Session exported</string>
+    <string name="message_session_export_failed">Couldn\'t export session</string>
+    <string name="message_app_data_exported">App data exported</string>
+    <string name="message_app_data_export_failed">Couldn\'t export app data</string>
+    <string name="message_logs_exported">Logs exported</string>
+    <string name="message_logs_export_failed">Couldn\'t export logs</string>
+    <string name="message_app_data_imported">App data imported</string>
+    <string name="message_app_data_import_failed">Couldn\'t import app data: %1$s</string>
+    <string name="message_scheduled_task_prompt_required">Scheduled task prompt is required.</string>
+    <string name="message_pause_before_editing_message">Pause this session before editing an earlier message.</string>
+    <string name="message_session_no_longer_running">This session is no longer running. Try sending again.</string>
+    <string name="message_finish_editing_before_compacting">Finish editing before compacting this conversation.</string>
+    <string name="message_no_conversation_to_compact">There is no conversation to compact yet.</string>
+    <string name="message_pause_before_compacting">Pause this session before compacting it.</string>
+    <string name="message_not_enough_conversation_to_compact">There is not enough conversation to compact yet.</string>
+    <string name="message_no_text_to_compact">There is no text to compact.</string>
+    <string name="message_configure_provider_before_compacting">Configure a provider before compacting.</string>
+    <string name="message_compaction_failed">Compaction failed: %1$s</string>
+    <string name="message_installed_skill">Installed skill: %1$s</string>
+    <string name="message_install_skill_failed">Couldn\'t install skill: %1$s</string>
+    <string name="message_aether_up_to_date">Aether is up to date.</string>
+    <string name="message_update_check_failed">Couldn\'t check for updates: %1$s</string>
     <string name="common_more">More</string>
     <string name="common_close">Close</string>
     <string name="common_skip">Skip</string>
@@ -179,6 +208,9 @@
     <string name="settings_personalization">Personalization</string>
     <string name="settings_web_tools">Web Tools</string>
     <string name="settings_reliability">Reliability</string>
+    <string name="settings_mcp_test_count">%1$s: %2$d</string>
+    <string name="settings_mcp_test_count_on_server">%1$s: %2$d on %3$s</string>
+    <string name="settings_mcp_test_more_items">... and %1$d more</string>
     <string name="settings_agent_skills">Agent Skills</string>
     <string name="settings_mcp_servers">MCP Servers</string>
     <string name="settings_mcp_servers_description">Manage MCP servers, inspect each transport config, and keep only the connections you want active.</string>
@@ -363,6 +395,7 @@
     <string name="settings_notify_background_tasks_finish">Notify when background tasks finish</string>
     <string name="settings_notify_background_tasks_finish_subtitle">Shows a completion alert when a run ends while Aether is not on screen.</string>
     <string name="settings_reconnect">Reconnect</string>
+    <string name="settings_reconnect_after_seconds">Reconnect after %1$ds</string>
     <string name="settings_reconnect_after_idle_seconds">Reconnect after idle seconds</string>
     <string name="settings_reconnect_after_idle_description">If a request produces no response activity at all for this many seconds, Aether cancels that attempt and reconnects with backoff. Range: 30-3600 seconds.</string>
     <string name="action_edit">Edit</string>
@@ -423,6 +456,13 @@
     <string name="markdown_image_preview_title">Image preview</string>
     <string name="markdown_preview_unavailable">Preview unavailable.</string>
     <string name="markdown_open_original">Open original</string>
+    <string name="markdown_image_error_load_preview">Couldn\'t load image preview.</string>
+    <string name="markdown_image_error_load_preview_http">Couldn\'t load image preview (HTTP %1$d).</string>
+    <string name="markdown_image_error_read_data">Couldn\'t read image data.</string>
+    <string name="markdown_image_error_read_workspace">Couldn\'t read image data from the workspace.</string>
+    <string name="markdown_image_error_too_large">Image is larger than 8.0 MB.</string>
+    <string name="markdown_mermaid_error_render">Couldn\'t render Mermaid diagram.</string>
+    <string name="markdown_mermaid_error_invalid_syntax">Invalid Mermaid syntax.</string>
     <string name="markdown_mermaid_preview_title">Mermaid preview</string>
 
     <!-- Search -->
