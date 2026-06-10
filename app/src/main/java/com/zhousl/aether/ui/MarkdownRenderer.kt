@@ -2590,6 +2590,8 @@ private fun buildMermaidHtml(
     invalidSyntaxError: String,
 ): String {
     val escapedCode = escapeHtml(code)
+    val renderErrorTitleLiteral = jsStringLiteral(renderErrorTitle)
+    val invalidSyntaxErrorLiteral = jsStringLiteral(invalidSyntaxError)
     val svgMaxWidth = if (layout.scroll) "none" else "100%"
     val containerWidthRule = if (layout.scroll) {
         "display: inline-block; min-width: 100%;"
@@ -2649,6 +2651,9 @@ private fun buildMermaidHtml(
                 <pre id="diagram" class="mermaid">$escapedCode</pre>
             </div>
             <script>
+                const renderErrorTitle = $renderErrorTitleLiteral;
+                const invalidSyntaxError = $invalidSyntaxErrorLiteral;
+
                 function escapeHtml(value) {
                     return String(value || '')
                         .replace(/&/g, '&amp;')
@@ -2730,6 +2735,27 @@ private fun escapeHtml(value: String): String = buildString {
             else -> append(character)
         }
     }
+}
+
+private fun jsStringLiteral(value: String): String = buildString {
+    append('"')
+    value.forEach { character ->
+        when (character) {
+            '\\' -> append("\\\\")
+            '"' -> {
+                append('\\')
+                append('"')
+            }
+            '\n' -> append("\\n")
+            '\r' -> append("\\r")
+            '\t' -> append("\\t")
+            '<' -> append("\\u003C")
+            '>' -> append("\\u003E")
+            '&' -> append("\\u0026")
+            else -> append(character)
+        }
+    }
+    append('"')
 }
 
 private fun Color.toCssHex(): String {

@@ -677,8 +677,8 @@ private fun ProviderSetupStep(
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
                         ProviderStageButton(
-                            label = "OpenAI Responses",
-                            subtitle = "OpenAI Responses API",
+                            label = stringResource(R.string.onboarding_provider_openai_responses),
+                            subtitle = stringResource(R.string.onboarding_provider_openai_responses_subtitle),
                             provider = LlmProvider.OpenAiResponses,
                             onClick = {
                                 onSelectProvider(LlmProvider.OpenAiResponses)
@@ -686,8 +686,8 @@ private fun ProviderSetupStep(
                             },
                         )
                         ProviderStageButton(
-                            label = "OpenAI Chat Com...",
-                            subtitle = "OpenAI Chat Completions API",
+                            label = stringResource(R.string.onboarding_provider_openai_chat_completions),
+                            subtitle = stringResource(R.string.onboarding_provider_openai_chat_completions_subtitle),
                             provider = LlmProvider.OpenAiCompatible,
                             onClick = {
                                 onSelectProvider(LlmProvider.OpenAiCompatible)
@@ -695,8 +695,8 @@ private fun ProviderSetupStep(
                             },
                         )
                         ProviderStageButton(
-                            label = "Vertex",
-                            subtitle = "Google Cloud Vertex API",
+                            label = stringResource(R.string.onboarding_provider_vertex),
+                            subtitle = stringResource(R.string.onboarding_provider_vertex_subtitle),
                             provider = LlmProvider.VertexExpress,
                             onClick = {
                                 onSelectProvider(LlmProvider.VertexExpress)
@@ -704,8 +704,8 @@ private fun ProviderSetupStep(
                             },
                         )
                         ProviderStageButton(
-                            label = "Anthropic",
-                            subtitle = "Anthropic Messages API",
+                            label = stringResource(R.string.onboarding_provider_anthropic),
+                            subtitle = stringResource(R.string.onboarding_provider_anthropic_subtitle),
                             provider = LlmProvider.AnthropicMessages,
                             onClick = {
                                 onSelectProvider(LlmProvider.AnthropicMessages)

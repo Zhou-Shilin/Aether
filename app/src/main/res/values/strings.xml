@@ -509,6 +509,14 @@
     <string name="onboarding_provider_credentials_message">Great. Add your key and base URL. I\'ll fetch the models after this.</string>
     <string name="onboarding_provider_model_message">Pick the model you want, and then we can go straight into chat.</string>
     <string name="onboarding_change_later_settings">You can change this later in Settings.</string>
+    <string name="onboarding_provider_openai_responses">OpenAI Responses</string>
+    <string name="onboarding_provider_openai_responses_subtitle">OpenAI Responses API</string>
+    <string name="onboarding_provider_openai_chat_completions">OpenAI Chat Com...</string>
+    <string name="onboarding_provider_openai_chat_completions_subtitle">OpenAI Chat Completions API</string>
+    <string name="onboarding_provider_vertex">Vertex</string>
+    <string name="onboarding_provider_vertex_subtitle">Google Cloud Vertex API</string>
+    <string name="onboarding_provider_anthropic">Anthropic</string>
+    <string name="onboarding_provider_anthropic_subtitle">Anthropic Messages API</string>
     <string name="onboarding_using_openai_responses">Using OpenAI Responses</string>
     <string name="onboarding_using_openai_chat_completions">Using OpenAI Chat Completions</string>
     <string name="onboarding_using_vertex">Using Vertex</string>
