@@ -345,7 +345,7 @@ fun OnboardingScreen(
                 stepIndex = stepIndex,
                 stepCount = steps.size,
                 message = stringResource(R.string.onboarding_mcp_message),
-                title = "MCP",
+                title = stringResource(R.string.onboarding_mcp_title),
                 icon = Icons.Rounded.Cloud,
                 accent = TourBlue,
                 lineOne = if (mcpServerCount == 0) {
@@ -354,7 +354,11 @@ fun OnboardingScreen(
                     stringResource(R.string.onboarding_mcp_available_count, mcpServerCount)
                 },
                 lineTwo = stringResource(R.string.onboarding_mcp_line_two),
-                chips = listOf(stringResource(R.string.onboarding_chip_docs), stringResource(R.string.onboarding_chip_search), "APIs"),
+                chips = listOf(
+                    stringResource(R.string.onboarding_chip_docs),
+                    stringResource(R.string.onboarding_chip_search),
+                    stringResource(R.string.onboarding_chip_apis),
+                ),
                 primaryLabel = stringResource(R.string.common_done),
                 onPrimary = onCompleteFollowUp,
                 secondaryLabel = stringResource(R.string.onboarding_open_settings),

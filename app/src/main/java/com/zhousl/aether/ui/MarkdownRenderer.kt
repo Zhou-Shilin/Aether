@@ -2263,6 +2263,7 @@ private fun decodeMarkdownImageResult(
         return MarkdownImageLoadResult(
             html = buildMarkdownImageHtml(
                 imageUrl = imageUrl,
+                loadErrorMessage = context.getString(R.string.markdown_image_error_load_preview),
             ),
         )
     }
@@ -2389,6 +2390,7 @@ internal fun buildMarkdownInlineSvgHtml(
 
 private fun buildMarkdownImageHtml(
     imageUrl: String,
+    loadErrorMessage: String,
 ): String = """
     <!DOCTYPE html>
     <html>
@@ -2417,6 +2419,7 @@ private fun buildMarkdownImageHtml(
             }
             .image-error {
                 color: #6b7280;
+                display: none;
                 font: 14px sans-serif;
                 padding: 16px;
             }
@@ -2426,6 +2429,7 @@ private fun buildMarkdownImageHtml(
         <div class="image-shell">
             <img id="preview-image" src="${escapeHtml(imageUrl)}" alt="" />
         </div>
+        <div id="image-error" class="image-error">${escapeHtml(loadErrorMessage)}</div>
         <script>
             function reportAetherHeight() {
                 const height = Math.max(
@@ -2450,7 +2454,11 @@ private fun buildMarkdownImageHtml(
                     }
                 });
                 image.addEventListener('error', function() {
-                    document.body.innerHTML = '<div class="image-error">Couldn\\'t load image preview.</div>';
+                    const error = document.getElementById('image-error');
+                    if (error) {
+                        error.style.display = 'block';
+                    }
+                    image.style.display = 'none';
                     reportAetherHeight();
                 });
             }

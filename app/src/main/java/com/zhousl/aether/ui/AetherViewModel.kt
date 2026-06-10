@@ -1558,7 +1558,9 @@ class AetherViewModel(
             _uiState.update { it.copy(isFetchingModels = false) }
             onComplete(result.models)
             if (result.error != null) {
-                _transientMessages.emit(UiText.Raw("Failed to fetch models: ${result.error}"))
+                _transientMessages.emit(
+                    UiText.Resource(R.string.message_fetch_models_failed, listOf(result.error)),
+                )
             }
         }
     }

@@ -31,6 +31,7 @@
     <string name="message_install_skill_failed">Couldn\'t install skill: %1$s</string>
     <string name="message_aether_up_to_date">Aether is up to date.</string>
     <string name="message_update_check_failed">Couldn\'t check for updates: %1$s</string>
+    <string name="message_fetch_models_failed">Failed to fetch models: %1$s</string>
     <string name="common_more">More</string>
     <string name="common_close">Close</string>
     <string name="common_skip">Skip</string>
@@ -495,12 +496,14 @@
     <string name="onboarding_skill_chip_prompts">Prompts</string>
     <string name="onboarding_skill_chip_checks">Checks</string>
     <string name="onboarding_skill_chip_templates">Templates</string>
+    <string name="onboarding_mcp_title">MCP</string>
     <string name="onboarding_mcp_message">If you want live docs, search, or APIs later, you can connect MCP servers in Settings.</string>
     <string name="onboarding_mcp_later">You can leave this for later.</string>
     <string name="onboarding_mcp_available_count">%1$d MCP servers are already available.</string>
     <string name="onboarding_mcp_line_two">This is where Aether grows beyond local tools.</string>
     <string name="onboarding_chip_docs">Docs</string>
     <string name="onboarding_chip_search">Search</string>
+    <string name="onboarding_chip_apis">APIs</string>
     <string name="onboarding_open_settings">Open settings</string>
     <string name="onboarding_provider_pick_message">First, let\'s choose your model provider.</string>
     <string name="onboarding_provider_credentials_message">Great. Add your key and base URL. I\'ll fetch the models after this.</string>
