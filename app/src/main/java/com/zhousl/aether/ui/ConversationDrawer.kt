@@ -115,6 +115,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -128,6 +129,7 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import com.zhousl.aether.R
 import com.zhousl.aether.data.InstalledSkill
 import com.zhousl.aether.data.AppLanguage
 import com.zhousl.aether.data.AgentModeDisplayState
@@ -186,7 +188,6 @@ fun ConversationDrawer(
     onDeleteSession: (String) -> Unit,
     onSettingsSelected: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var overlayHeightPx by remember { mutableIntStateOf(0) }
@@ -227,7 +228,11 @@ fun ConversationDrawer(
                         )
                 ) {
                     Text(
-                        text = if (sessions.isEmpty()) strings.noConversationsYet else strings.noChatsMatchSummary(searchQuery),
+                        text = if (sessions.isEmpty()) {
+                            stringResource(R.string.chat_no_conversations_yet)
+                        } else {
+                            stringResource(R.string.search_no_chats_match)
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = AetherOnSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
@@ -293,7 +298,7 @@ fun ConversationDrawer(
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             HeaderCircleButton(
                                 icon = LucideIcons.Search,
-                                contentDescription = strings.search,
+                                contentDescription = stringResource(R.string.common_search),
                                 onClick = {
                                     if (searchExpanded || searchQuery.isNotBlank()) {
                                         searchExpanded = false
@@ -307,7 +312,7 @@ fun ConversationDrawer(
                             )
                             HeaderCircleButton(
                                 icon = LucideIcons.Settings,
-                                contentDescription = strings.settings,
+                                contentDescription = stringResource(R.string.settings_title),
                                 onClick = {
                                     searchExpanded = false
                                     searchQuery = ""
@@ -367,7 +372,6 @@ private fun DrawerCompactSearchField(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val strings = rememberAetherStrings()
     Row(
         modifier = modifier
             .shadow(12.dp, RoundedCornerShape(24.dp), ambientColor = AetherScrim, spotColor = AetherScrim)
@@ -389,7 +393,7 @@ private fun DrawerCompactSearchField(
         ) {
             if (value.isBlank()) {
                 Text(
-                    text = strings.search,
+                    text = stringResource(R.string.common_search),
                     style = MaterialTheme.typography.bodyMedium,
                     color = AetherOnSurfaceVariant,
                 )
@@ -418,12 +422,12 @@ private fun DrawerSessionRow(
     onExport: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
+    val newChatTitle = stringResource(R.string.common_new_chat)
     var menuExpanded by remember { mutableStateOf(false) }
     var isRenaming by remember { mutableStateOf(false) }
     var renameFieldHadFocus by remember { mutableStateOf(false) }
     var renameFocusRequest by remember { mutableIntStateOf(0) }
-    var titleValue by remember(session.id, session.title) { mutableStateOf(session.title.ifBlank { strings.newChat }) }
+    var titleValue by remember(session.id, session.title, newChatTitle) { mutableStateOf(session.title.ifBlank { newChatTitle }) }
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -492,7 +496,7 @@ private fun DrawerSessionRow(
                 )
             } else {
                 Text(
-                    text = session.title.ifBlank { strings.newChat },
+                    text = session.title.ifBlank { newChatTitle },
                     style = MaterialTheme.typography.bodyLarge.copy(
                         fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
                     ),
@@ -524,7 +528,7 @@ private fun DrawerSessionRow(
             onDismissRequest = { menuExpanded = false },
             onRename = {
                 menuExpanded = false
-                titleValue = session.title.ifBlank { strings.newChat }
+                titleValue = session.title.ifBlank { newChatTitle }
                 renameFieldHadFocus = false
                 isRenaming = true
                 renameFocusRequest += 1
@@ -549,7 +553,6 @@ private fun DrawerSessionActionMenu(
     onExport: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     val menuVisibility = remember { MutableTransitionState(false) }
     menuVisibility.targetState = expanded
     if (!menuVisibility.currentState && !menuVisibility.targetState) return
@@ -578,9 +581,9 @@ private fun DrawerSessionActionMenu(
                     .padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                DrawerSessionActionRow(strings.rename, onRename)
-                DrawerSessionActionRow(strings.export, onExport)
-                DrawerSessionActionRow(strings.delete, onDelete, destructive = true)
+                DrawerSessionActionRow(stringResource(R.string.common_rename), onRename)
+                DrawerSessionActionRow(stringResource(R.string.common_export), onExport)
+                DrawerSessionActionRow(stringResource(R.string.common_delete), onDelete, destructive = true)
             }
         }
     }
@@ -630,7 +633,6 @@ private fun DrawerFloatingChatButton(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
-    val strings = rememberAetherStrings()
     Row(
         modifier = modifier
             .shadow(18.dp, RoundedCornerShape(999.dp), ambientColor = AetherScrim, spotColor = AetherScrim)
@@ -652,7 +654,7 @@ private fun DrawerFloatingChatButton(
             modifier = Modifier.size(17.dp),
         )
         Text(
-            text = strings.chat,
+            text = stringResource(R.string.common_chat),
             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
             color = Color.White,
         )

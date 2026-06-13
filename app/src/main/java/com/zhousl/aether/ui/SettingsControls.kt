@@ -78,6 +78,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -320,7 +321,7 @@ internal fun ChatGptDropdownField(
             )
             Icon(
                 imageVector = Icons.Rounded.ArrowDropDown,
-                contentDescription = "Choose",
+                contentDescription = stringResource(R.string.common_choose),
                 tint = AetherOnSurfaceVariant,
             )
         }
