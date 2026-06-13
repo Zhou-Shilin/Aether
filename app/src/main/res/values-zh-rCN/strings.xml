@@ -1,7 +1,5 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <resources>
-
-    <!-- Common -->
     <string name="common_menu">菜单</string>
     <string name="common_new_chat">新建对话</string>
     <string name="common_more">更多</string>
@@ -33,7 +31,6 @@
     <string name="common_delete_reply">删除回复</string>
     <string name="common_save">保存</string>
     <string name="common_search">搜索</string>
-
     <string name="common_agree">同意</string>
     <string name="common_decline">不同意</string>
     <string name="common_later">稍后</string>
@@ -44,7 +41,6 @@
     <string name="app_update_available_message">Aether %1$s 已可用，可以立即下载 APK 并安装。</string>
     <string name="app_downloading">正在下载...</string>
     <string name="app_download_and_install">下载并安装</string>
-    <!-- Chat -->
     <string name="chat_welcome_help">想让我帮你做什么？</string>
     <string name="chat_create_image">生成图片</string>
     <string name="chat_brainstorm">头脑风暴</string>
@@ -85,7 +81,6 @@
     <string name="chat_standby">待机</string>
     <string name="chat_no_output">无输出</string>
     <string name="chat_content_truncated">内容已截断，便于阅读。</string>
-
     <string name="termux_install_to_enable_bash">安装 Termux 以启用 bash</string>
     <string name="termux_grant_command_access">授予 Termux 命令访问权限</string>
     <string name="termux_enable_external_apps">在 Termux 中启用外部应用</string>
@@ -99,7 +94,6 @@
     <string name="termux_settings">Termux 设置</string>
     <string name="common_open">打开</string>
     <string name="common_error">错误</string>
-
     <string name="tool_invocation_command">命令</string>
     <string name="tool_invocation_result">结果</string>
     <string name="termux_setup_command_copied">已复制 Termux 配置命令</string>
@@ -108,13 +102,11 @@
     <string name="termux_paste_setup_command_and_refresh">打开 Termux，粘贴 Aether 配置命令，然后返回刷新状态。</string>
     <string name="termux_open_once_verify_settings">打开一次 Termux，并确认其集成设置。</string>
     <string name="tool_invocation_exit_code">退出代码：%1$d</string>
-    <!-- Settings -->
     <string name="settings_title">设置</string>
     <string name="settings_general">通用设置</string>
     <string name="settings_language">语言</string>
     <string name="settings_language_description">选择应用界面语言。</string>
     <string name="language_simplified_chinese">简体中文</string>
-
     <string name="settings_theme">主题</string>
     <string name="settings_theme_description">选择应用界面外观。</string>
     <string name="theme_system">跟随系统</string>
@@ -166,7 +158,6 @@
     <string name="settings_server_url">服务器 URL</string>
     <string name="settings_arguments">参数</string>
     <string name="settings_agent_mode">Agent 模式</string>
-
     <string name="settings_agent_mode_already_configured">Agent Mode 已配置完成</string>
     <string name="settings_agent_mode_authorization">Agent 模式授权</string>
     <string name="settings_authorization_method">授权方式</string>
@@ -244,7 +235,6 @@
     <string name="settings_get_started_tour_subtitle">重新播放首次启动和设置流程</string>
     <string name="settings_developer_subtitle">重新播放后续引导流程</string>
     <string name="settings_release_summary">版本 %1$s</string>
-
     <string name="onboarding_root_body_unknown">如果这台手机有 Root，Aether 可以自动配置 Termux 和 Agent Mode。</string>
     <string name="onboarding_root_body_available">已检测到 Root。授予 Aether su 后，可以跳过后续 Termux 和 Agent Mode 手动步骤。</string>
     <string name="onboarding_root_body_running">Aether 正在启用 Termux 外部应用、授予命令权限，并选择 Root Agent Mode。</string>
@@ -260,30 +250,20 @@
     <string name="onboarding_termux_status_external_apps_disabled">复制配置命令，在 Termux 中粘贴运行后再回来刷新。</string>
     <string name="onboarding_termux_status_dispatch_failed_configured">先打开一次 Termux，然后回到这里刷新。</string>
     <string name="onboarding_termux_status_dispatch_failed">复制配置命令，在 Termux 中粘贴运行后再回来刷新。</string>
-    <!-- Markdown -->
     <string name="attachment_file_preview_unavailable">此文件类型无法预览。</string>
     <string name="attachment_preview_truncated">为了便于阅读，预览内容已截断。</string>
-
     <string name="attachment_copying_to_workspace">正在复制到工作区</string>
     <string name="attachment_workspace_copy_failed">工作区复制失败</string>
     <string name="attachment_close_preview">关闭预览</string>
     <string name="markdown_open_original">打开原图</string>
-
-    <!-- Search -->
     <string name="search_no_chats_match">没有匹配的对话</string>
-
-    <!-- File / Termux -->
     <string name="file_saved">文件已保存</string>
     <string name="file_could_not_save">无法保存文件</string>
     <string name="file_reply_copied">回复已复制</string>
     <string name="termux_access_granted">已授予 Termux 访问权限</string>
     <string name="termux_access_not_granted">未授予 Termux 访问权限</string>
-
-    <!-- Agent -->
     <string name="agent_mode_label">Agent 模式</string>
     <string name="agent_mode_display_id">显示 %1$d</string>
-
-    <!-- Onboarding -->
     <string name="onboarding_aether_icon">Aether 图标</string>
     <string name="onboarding_get_started">开始使用</string>
     <string name="onboarding_api_key">API 密钥</string>
@@ -365,8 +345,6 @@
     <string name="onboarding_tavily_message">如果你之后想获得更新鲜的网页答案，可以在这里补上搜索能力。</string>
     <string name="onboarding_tavily_optional_body">这是可选项。即使不填，URL 抓取也已经可以使用。</string>
     <string name="onboarding_paste_it_here">粘贴到这里</string>
-
-    <!-- Conversation -->
     <string name="branch_steer_current_run">引导当前运行</string>
     <string name="branch_queue_next_turn">排队下一轮</string>
     <string name="tool_invocation_group_executing">正在执行 %1$d 个工具</string>
@@ -375,7 +353,6 @@
     <string name="tool_invocation_expand_tools">展开工具</string>
     <string name="agent_mode_replay_frame">Agent 模式回放帧</string>
     <string name="agent_mode_replay_preview_unavailable">预览不可用</string>
-
     <string name="settings_skills_count_configured">已配置 %1$d 个</string>
     <string name="settings_scheduled_tasks">定时任务</string>
     <string name="settings_scheduled_tasks_count_configured">已配置 %1$d 个</string>
@@ -415,7 +392,6 @@
     <string name="settings_days_of_week_input">星期 1-7 或 mon,tue</string>
     <string name="settings_time_hhmm">时间 HH:mm</string>
     <string name="settings_interval_window_hint">间隔任务的时间窗口是可选的。开始和结束留空则全天运行。</string>
-
     <string name="tool_title_bash_running">正在执行 bash 命令</string>
     <string name="tool_title_bash_done">已执行 bash 命令</string>
     <string name="tool_title_fetch_bash_output_running">正在获取 bash 输出</string>
@@ -508,5 +484,196 @@
     <string name="tool_title_captured_agent_mode_display">已截取 Agent 模式显示</string>
     <string name="tool_title_using_agent_mode_display">正在使用 Agent 模式显示</string>
     <string name="tool_title_used_agent_mode_display">已使用 Agent 模式显示</string>
-
+    <string name="agent_work_collapse">折叠工作内容</string>
+    <string name="agent_work_expand">展开工作内容</string>
+    <string name="app_name">Aether</string>
+    <string name="app_unable_to_open_apk_installer">无法打开 APK 安装器</string>
+    <string name="app_unable_to_open_file">无法打开该文件</string>
+    <string name="app_unable_to_open_link">无法打开该链接</string>
+    <string name="app_unable_to_open_screen">无法打开该屏幕</string>
+    <string name="attachment_remove">移除附件</string>
+    <string name="attachment_type_file">文件</string>
+    <string name="attachment_type_photo">照片</string>
+    <string name="chat_compact">压缩</string>
+    <string name="chat_compact_thread_context">压缩此对话上下文</string>
+    <string name="chat_compact_thread_context_percent">压缩此对话上下文（已满 %1$d%%）</string>
+    <string name="chat_compacting_context">正在压缩上下文</string>
+    <string name="chat_context_compacted">上下文已压缩</string>
+    <string name="chat_gpts">GPTs</string>
+    <string name="chat_preparing_reasoning_summary">正在准备简短的可见摘要。</string>
+    <string name="chat_raw_reasoning">原始推理</string>
+    <string name="chat_summarizing_reasoning">正在总结推理</string>
+    <string name="chat_thought_for_duration">思考了 %1$s</string>
+    <string name="chat_thought_for_duration_and_tools">思考了 %1$s，并执行了 %2$d 个工具</string>
+    <string name="chat_waiting_for_reasoning">正在等待推理...</string>
+    <string name="chat_working_for_duration">工作了 %1$s</string>
+    <string name="common_choose">选择</string>
+    <string name="common_off">关闭</string>
+    <string name="common_on">开启</string>
+    <string name="common_optional">可选</string>
+    <string name="common_remove">移除</string>
+    <string name="language_english">英语</string>
+    <string name="markdown_image_error_load_preview">无法加载图片预览。</string>
+    <string name="markdown_image_error_load_preview_http">无法加载图片预览（HTTP %1$d）。</string>
+    <string name="markdown_image_error_read_data">无法读取图片数据。</string>
+    <string name="markdown_image_error_read_workspace">无法从工作区读取图片数据。</string>
+    <string name="markdown_image_error_too_large">图片大于 8.0 MB。</string>
+    <string name="markdown_image_preview_title">图片预览</string>
+    <string name="markdown_mermaid_error_invalid_syntax">Mermaid 语法无效。</string>
+    <string name="markdown_mermaid_error_render">无法渲染 Mermaid 图表。</string>
+    <string name="markdown_mermaid_preview_title">Mermaid 预览</string>
+    <string name="markdown_preview_unavailable">预览不可用。</string>
+    <string name="message_aether_up_to_date">Aether 已是最新版本。</string>
+    <string name="message_app_data_export_failed">无法导出应用数据</string>
+    <string name="message_app_data_exported">应用数据已导出</string>
+    <string name="message_app_data_import_failed">无法导入应用数据：%1$s</string>
+    <string name="message_app_data_imported">应用数据已导入</string>
+    <string name="message_compaction_failed">压缩失败：%1$s</string>
+    <string name="message_configure_provider_before_compacting">压缩前请先配置提供方。</string>
+    <string name="message_fetch_models_failed">获取模型失败：%1$s</string>
+    <string name="message_finish_editing_before_compacting">请先完成编辑，再压缩此对话。</string>
+    <string name="message_install_skill_failed">无法安装技能：%1$s</string>
+    <string name="message_installed_skill">已安装技能：%1$s</string>
+    <string name="message_logs_export_failed">无法导出日志</string>
+    <string name="message_logs_exported">日志已导出</string>
+    <string name="message_no_conversation_to_compact">还没有可压缩的对话。</string>
+    <string name="message_no_text_to_compact">没有可压缩的文本。</string>
+    <string name="message_not_enough_conversation_to_compact">对话内容还不足以压缩。</string>
+    <string name="message_pause_before_compacting">请先暂停此会话，再压缩它。</string>
+    <string name="message_pause_before_deleting_session">请先暂停此会话，再删除它。</string>
+    <string name="message_pause_before_editing_message">请先暂停此会话，再编辑较早的消息。</string>
+    <string name="message_root_setup_completed">Root 设置已完成</string>
+    <string name="message_root_setup_failed">Root 设置失败：%1$s</string>
+    <string name="message_scheduled_task_prompt_required">定时任务提示词不能为空。</string>
+    <string name="message_session_export_failed">无法导出会话</string>
+    <string name="message_session_exported">会话已导出</string>
+    <string name="message_session_no_longer_running">此会话已不在运行。请重新发送。</string>
+    <string name="message_update_check_failed">无法检查更新：%1$s</string>
+    <string name="message_update_download_failed">无法下载更新：%1$s</string>
+    <string name="onboarding_chip_apis">APIs</string>
+    <string name="onboarding_mcp_title">MCP</string>
+    <string name="onboarding_provider_anthropic">Anthropic</string>
+    <string name="onboarding_provider_anthropic_subtitle">Anthropic Messages API</string>
+    <string name="onboarding_provider_openai_chat_completions">OpenAI Chat Com...</string>
+    <string name="onboarding_provider_openai_chat_completions_subtitle">OpenAI Chat Completions API</string>
+    <string name="onboarding_provider_openai_responses">OpenAI Responses</string>
+    <string name="onboarding_provider_openai_responses_subtitle">OpenAI Responses API</string>
+    <string name="onboarding_provider_vertex">Vertex</string>
+    <string name="onboarding_provider_vertex_subtitle">Google Cloud Vertex API</string>
+    <string name="onboarding_termux_message">很好。现在让 Aether 获得设备访问权限，以便工具可以在本地运行。</string>
+    <string name="provider_form_add_header">添加请求头</string>
+    <string name="provider_form_api_key">API 密钥</string>
+    <string name="provider_form_base_url">基础 URL</string>
+    <string name="provider_form_basic_tool_compatibility">基础工具兼容模式</string>
+    <string name="provider_form_choose_provider">选择提供方</string>
+    <string name="provider_form_compatibility_mode_description">兼容模式使用基础函数调用，并为工具支持有限的提供方禁用并行或批量工具功能。</string>
+    <string name="provider_form_custom_request_headers">自定义请求头</string>
+    <string name="provider_form_fetch_models">获取模型</string>
+    <string name="provider_form_header_name">请求头</string>
+    <string name="provider_form_header_value">值</string>
+    <string name="provider_form_headers_configured_count">已配置 %1$d 个</string>
+    <string name="provider_form_manual_model_ids">手动模型 ID</string>
+    <string name="provider_form_model_list">模型列表</string>
+    <string name="provider_form_model_picker_refresh_hint">已启用的模型会显示在聊天模型选择器中。刷新会从提供方 API 加载模型。</string>
+    <string name="provider_form_model_picker_requires_api_key">已启用的模型会显示在聊天模型选择器中。此请求格式需要 API 密钥。</string>
+    <string name="provider_form_models_enabled_count">已启用 %1$d/%2$d 个</string>
+    <string name="provider_form_no_models_loaded">尚未加载模型。</string>
+    <string name="provider_form_provider_id">提供方 ID</string>
+    <string name="provider_form_provider_id_in_use">此提供方 ID 已被使用。</string>
+    <string name="provider_form_provider_id_invalid">只能使用小写字母、数字和下划线。</string>
+    <string name="provider_form_provider_id_required">提供方 ID 不能为空。</string>
+    <string name="provider_form_provider_name">提供方名称</string>
+    <string name="provider_form_remove_header">移除请求头</string>
+    <string name="provider_form_request_format">请求格式</string>
+    <string name="provider_form_request_format_anthropic_messages">使用 Anthropic 兼容的 /messages 端点。</string>
+    <string name="provider_form_request_format_openai_chat_completions">使用 OpenAI 兼容的 /chat/completions 端点。</string>
+    <string name="provider_form_request_format_openai_responses">使用 OpenAI 兼容的 /responses 端点。</string>
+    <string name="provider_form_request_format_vertex_express">使用 Vertex AI Express Mode generateContent。</string>
+    <string name="settings_add_http_server">添加 HTTP 服务器</string>
+    <string name="settings_add_mcp_server_description">添加 HTTP 或 stdio 服务器来扩展能力。</string>
+    <string name="settings_add_mcp_server_page_description">添加用于远程 API 的 HTTP 服务器，或用于本地 Termux 进程的 stdio 服务器。</string>
+    <string name="settings_add_provider_description">添加提供方以连接 LLM API。</string>
+    <string name="settings_add_server">添加服务器</string>
+    <string name="settings_add_skill">添加技能</string>
+    <string name="settings_add_skill_description">从本地文件夹、zip 文件或远程 URL 导入 Agent 技能。</string>
+    <string name="settings_add_stdio_server">添加 Stdio 服务器</string>
+    <string name="settings_agent_mode_authorization_subtitle">启用隔离虚拟显示工具。需要 Shizuku 或 Root。</string>
+    <string name="settings_agent_mode_description">使用 Shizuku 或 Root 授权隔离虚拟显示工具。没有这两种条件的设备可以跳过。</string>
+    <string name="settings_agent_mode_display_active">显示 %1$s 正在以 %2$d x %3$d 运行。</string>
+    <string name="settings_agent_mode_method_description">Shizuku 模式通过 Shizuku 用户服务创建显示，让应用在主屏幕之外渲染。Root 模式仍属实验性。</string>
+    <string name="settings_agent_mode_method_root_subtitle">使用 root shell 执行特权输入。</string>
+    <string name="settings_agent_mode_method_shizuku_subtitle">使用提权的 Shizuku 服务。</string>
+    <string name="settings_agent_mode_no_virtual_display">当前没有活动的 Agent 模式虚拟显示。</string>
+    <string name="settings_agent_mode_unavailable">Agent 模式不可用</string>
+    <string name="settings_agent_mode_unavailable_body">请先配置 Termux。Agent 模式使用 Termux 桥接工作区和截图流程，因此在 Termux 就绪前无法启用授权。</string>
+    <string name="settings_any">任意</string>
+    <string name="settings_app_data_description">以 JSON 导入或导出完整的本地 Aether 数据集。</string>
+    <string name="settings_author">作者</string>
+    <string name="settings_check_for_updates">检查更新</string>
+    <string name="settings_choose_folder">选择文件夹</string>
+    <string name="settings_developer_description">开发者专用工具和重播控制。</string>
+    <string name="settings_download_and_install">下载并安装</string>
+    <string name="settings_force_update_prompt">强制显示更新提示</string>
+    <string name="settings_general_summary">%1$s / %2$s</string>
+    <string name="settings_headers">请求头</string>
+    <string name="settings_import_skills_description">从文件夹、zip 或远程 URL 导入技能。</string>
+    <string name="settings_keep_tasks_running_background">保持任务在后台运行</string>
+    <string name="settings_keep_tasks_running_background_subtitle">使用 Android 前台服务，让活跃聊天在离开 Aether 后继续工作。</string>
+    <string name="settings_language_english_interface">英语界面</string>
+    <string name="settings_language_simplified_chinese_interface">简体中文界面</string>
+    <string name="settings_mcp_servers_description">管理 MCP 服务器，检查每个传输配置，并只保留需要的连接。</string>
+    <string name="settings_no_mcp_servers">没有 MCP 服务器</string>
+    <string name="settings_no_skills_installed">尚未安装技能</string>
+    <string name="settings_no_visible_displays">Aether 当前看不到任何显示。</string>
+    <string name="settings_notify_background_tasks_finish_subtitle">当运行在 Aether 不在屏幕上时结束，会显示完成提醒。</string>
+    <string name="settings_optional_environment_hint">可选环境变量，每行一个 KEY=VALUE。</string>
+    <string name="settings_optional_headers_hint">可选请求头，每行一个 KEY=VALUE。</string>
+    <string name="settings_provider_models_enabled_count">已启用 %1$d/%2$d 个模型</string>
+    <string name="settings_reconnect_after_idle_description">如果请求在这么多秒内完全没有响应活动，Aether 会取消本次尝试并带退避重连。范围：30-3600 秒。</string>
+    <string name="settings_reconnect_after_seconds">%1$d 秒后重连</string>
+    <string name="settings_remote_skill_url_description">支持 GitHub 仓库/目录 URL 和直接 zip 链接。</string>
+    <string name="settings_replay_follow_up_tour_description">从 Termux 开始，然后依次经过 Agent 模式、Tavily、技能和 MCP。</string>
+    <string name="settings_requires_termux_setup">需要 Termux 设置</string>
+    <string name="settings_root_authorization_denied">Root 授权被拒绝。请授予 Aether su 后刷新此状态。</string>
+    <string name="settings_root_authorization_grant_su">请授予 Aether su 后刷新此状态。</string>
+    <string name="settings_root_authorization_inspect_failed">无法检查 Root 状态。</string>
+    <string name="settings_root_authorization_no_su">此设备未检测到 su 二进制文件。</string>
+    <string name="settings_root_authorization_ready">Root 授权已就绪。</string>
+    <string name="settings_root_authorization_refresh_first">使用 Agent 模式前请先刷新 Root 状态。</string>
+    <string name="settings_root_setup_body_available">Aether 可以使用 su 启用 Termux 命令访问和后台唤醒。</string>
+    <string name="settings_root_setup_body_ready">当 Termux 尚未运行时，Aether 可以通过 Root 在后台静默唤醒 Termux。</string>
+    <string name="settings_root_setup_progress_body_ready">Termux 命令访问和 Root Agent 模式授权已就绪。</string>
+    <string name="settings_root_setup_progress_body_running">Aether 正在请求 su、启用 Termux 命令访问，并准备 Root Agent 模式。</string>
+    <string name="settings_root_setup_step_agent_mode">Root Agent 模式</string>
+    <string name="settings_save_http_server">保存 HTTP 服务器</string>
+    <string name="settings_save_stdio_server">保存 Stdio 服务器</string>
+    <string name="settings_server_name">服务器名称</string>
+    <string name="settings_skill_allowed_tools">允许的工具</string>
+    <string name="settings_skill_compatibility">兼容性</string>
+    <string name="settings_skill_files">文件</string>
+    <string name="settings_skill_source_folder">文件夹</string>
+    <string name="settings_skills_description">管理已安装的技能，只保留希望 Aether 在聊天中使用的包。</string>
+    <string name="settings_switch_to_root_to_inspect">切换到 Root 模式以检查 Root 状态。</string>
+    <string name="settings_tavily_base_url">Tavily 基础 URL</string>
+    <string name="settings_termux">Termux</string>
+    <string name="settings_termux_connected">Termux 已连接</string>
+    <string name="settings_termux_connected_description">权限已授予，设置探测已成功。</string>
+    <string name="settings_termux_description">Aether 通过 Termux 运行 bash。在这里完成设置，让所有用户无需手动 adb 步骤即可使用工具调用。</string>
+    <string name="settings_termux_readiness_override">Termux 就绪状态覆盖</string>
+    <string name="settings_termux_readiness_override_description">用于 Agent 模式门控的测试开关。开启时视为 Termux 已就绪；关闭时视为未就绪。</string>
+    <string name="settings_termux_ready_toggle_subtitle">开启 = 已就绪。关闭 = 未就绪。</string>
+    <string name="settings_treat_termux_as_ready">将 Termux 视为已就绪</string>
+    <string name="settings_unnamed_display">未命名</string>
+    <string name="settings_update_available">Aether %1$s 已可用</string>
+    <string name="settings_update_check_newer_apk">检查 GitHub Releases 是否有更新 APK</string>
+    <string name="settings_update_checking_github_releases">正在检查 GitHub Releases</string>
+    <string name="settings_update_downloading">正在下载更新</string>
+    <string name="settings_update_downloading_percent">正在下载 %1$d%%</string>
+    <string name="settings_update_mcp_server_description">更新此 MCP 服务器的传输配置和快捷操作来源。</string>
+    <string name="settings_update_testing">更新测试</string>
+    <string name="settings_update_testing_description">获取最新 GitHub Release，即使当前安装版本已是最新也显示更新提示。</string>
+    <string name="termux_keep_running_and_refresh">打开 Termux 并保持其在后台运行，然后返回 Aether 并刷新。</string>
+    <string name="termux_not_running_background">Termux 似乎没有在后台运行</string>
+    <string name="tool_title_action_subject">%1$s%2$s</string>
+    <string name="tool_title_agent_skill_fallback">Agent 技能</string>
 </resources>

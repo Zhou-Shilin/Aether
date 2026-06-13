@@ -2,6 +2,7 @@ package com.zhousl.aether.ui
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
+import android.content.ContextWrapper
 import android.content.Intent
 import android.content.Context
 import android.net.Uri
@@ -77,6 +78,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -163,6 +165,12 @@ private fun AppScreen.depth(): Int = when (this) {
     AppScreen.Settings -> 2
 }
 
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
 @Composable
 fun AetherApp(
     viewModel: AetherViewModel = viewModel(),
@@ -175,16 +183,22 @@ fun AetherApp(
         AetherLocaleManager.applyIfChanged(context, uiState.settings.language)
     }
 
-    AetherTheme(themeMode = uiState.settings.themeMode) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background,
-        ) {
-            AetherAppContent(
-                viewModel = viewModel,
-                uiState = uiState,
-                onPrivacyPolicyAccepted = onPrivacyPolicyAccepted,
-            )
+    val localizedContext = remember(context, uiState.settings.language) {
+        AetherLocaleManager.localizedContext(context, uiState.settings.language)
+    }
+
+    CompositionLocalProvider(LocalContext provides localizedContext) {
+        AetherTheme(themeMode = uiState.settings.themeMode) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.background,
+            ) {
+                AetherAppContent(
+                    viewModel = viewModel,
+                    uiState = uiState,
+                    onPrivacyPolicyAccepted = onPrivacyPolicyAccepted,
+                )
+            }
         }
     }
 }
@@ -778,7 +792,7 @@ private fun AetherAppContent(
             PrivacyPolicyConsentDialog(
                 onOpenPolicy = { openPrivacyPolicy(context) },
                 onAccept = viewModel::acceptPrivacyPolicy,
-                onDecline = { (context as? Activity)?.finishAffinity() },
+                onDecline = { context.findActivity()?.finishAffinity() },
             )
         }
         val availableUpdate = uiState.appUpdate.availableRelease
