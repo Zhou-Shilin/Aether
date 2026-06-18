@@ -66,7 +66,6 @@
     <string name="common_on">On</string>
     <string name="common_off">Off</string>
     <string name="common_optional">Optional</string>
-
     <string name="common_agree">Agree</string>
     <string name="common_decline">Decline</string>
     <string name="common_later">Later</string>
@@ -77,6 +76,23 @@
     <string name="app_update_available_message">Aether %1$s is available. You can download the APK and install it now.</string>
     <string name="app_downloading">Downloading...</string>
     <string name="app_download_and_install">Download and install</string>
+    <string name="common_open">Open</string>
+    <string name="common_error">Error</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_continue">Continue</string>
+    <string name="action_back">Back</string>
+    <string name="action_done">Done</string>
+    <string name="action_try_again">Try again</string>
+    <string name="action_edit">Edit</string>
+    <string name="action_remove">Remove</string>
+    <string name="app_unable_to_open_link">Unable to open that link</string>
+    <string name="app_unable_to_open_file">Unable to open that file</string>
+    <string name="app_unable_to_open_apk_installer">Unable to open the APK installer</string>
+    <string name="app_unable_to_open_screen">Unable to open that screen</string>
+    <string name="action_collapse">Collapse</string>
+    <string name="action_expand">Expand</string>
+    <string name="action_delete">Delete</string>
+
     <!-- Chat -->
     <string name="chat_welcome_help">What can I help with?</string>
     <string name="chat_create_image">Create image</string>
@@ -124,20 +140,6 @@
     <string name="chat_standby">standby</string>
     <string name="chat_no_output">No output</string>
     <string name="chat_content_truncated">Content truncated for readability.</string>
-
-    <string name="termux_install_to_enable_bash">Install Termux to enable bash</string>
-    <string name="termux_grant_command_access">Grant Termux command access</string>
-    <string name="termux_enable_external_apps">Enable external apps in Termux</string>
-    <string name="termux_finish_setup">Finish Termux setup</string>
-    <string name="termux_install_termux">Install Termux</string>
-    <string name="termux_grant_access">Grant access</string>
-    <string name="termux_app_settings">App settings</string>
-    <string name="termux_copy_and_open_termux">Copy and Open Termux</string>
-    <string name="termux_copy_setup_command">Copy setup command</string>
-    <string name="termux_open_termux">Open Termux</string>
-    <string name="termux_settings">Termux settings</string>
-    <string name="common_open">Open</string>
-    <string name="common_error">Error</string>
     <string name="chat_thought_for_duration">Thought for %1$s</string>
     <string name="chat_working_for_duration">Working for %1$s</string>
     <string name="chat_waiting_for_reasoning">Waiting for reasoning...</string>
@@ -146,24 +148,15 @@
     <string name="chat_preparing_reasoning_summary">Preparing a short visible summary.</string>
     <string name="agent_work_collapse">Collapse work</string>
     <string name="agent_work_expand">Expand work</string>
-    <string name="tool_invocation_command">Command</string>
-    <string name="tool_invocation_result">Result</string>
-    <string name="termux_setup_command_copied">Termux setup command copied</string>
-    <string name="termux_runs_shell_commands_on_device">Aether uses Termux to run shell commands on-device.</string>
-    <string name="termux_allow_run_commands_permission">Allow Aether to use the &quot;Run commands in Termux environment&quot; Android permission.</string>
-    <string name="termux_not_running_background">Termux seems to be not running in the background</string>
-    <string name="termux_keep_running_and_refresh">Open Termux and keep it running in the background, then return to Aether and refresh.</string>
-    <string name="termux_paste_setup_command_and_refresh">Open Termux, paste the Aether setup command, then return and refresh.</string>
-    <string name="termux_open_once_verify_settings">Open Termux once and verify its integration settings.</string>
     <string name="chat_thought_for_duration_and_tools">Thought for %1$s and executed %2$d tools</string>
-    <string name="tool_invocation_exit_code">Exit code: %1$d</string>
+
     <!-- Settings -->
     <string name="settings_title">Settings</string>
     <string name="settings_general">General Settings</string>
     <string name="settings_language">Language</string>
     <string name="settings_language_description">Choose the app language.</string>
-    <string name="language_english">English</string>
-    <string name="language_simplified_chinese">Simplified Chinese</string>
+    <string name="language_english" translatable="false">English</string>
+    <string name="language_simplified_chinese" translatable="false">简体中文</string>
     <string name="settings_language_english_interface">English interface</string>
     <string name="settings_language_simplified_chinese_interface">Simplified Chinese interface</string>
     <string name="settings_theme">Theme</string>
@@ -237,7 +230,6 @@
     <string name="settings_add_stdio_server">Add Stdio Server</string>
     <string name="settings_termux">Termux</string>
     <string name="settings_agent_mode">Agent Mode</string>
-
     <string name="settings_agent_mode_unavailable">Agent Mode is unavailable</string>
     <string name="settings_agent_mode_already_configured">Agent Mode is already configured</string>
     <string name="settings_agent_mode_description">Authorize isolated virtual-display tools with Shizuku or Root. Skip this on devices without either option.</string>
@@ -321,11 +313,6 @@
     <string name="settings_privacy_policy">Privacy Policy</string>
     <string name="settings_download_and_install">Download and install</string>
     <string name="settings_mcp_server_count_summary">%1$d servers</string>
-    <string name="action_cancel">Cancel</string>
-    <string name="action_continue">Continue</string>
-    <string name="action_back">Back</string>
-    <string name="action_done">Done</string>
-    <string name="action_try_again">Try again</string>
     <string name="settings_root_setup_progress_body_running">Aether is requesting su, enabling Termux command access, and preparing Root Agent Mode.</string>
     <string name="settings_root_setup_progress_body_ready">Termux command access and Root Agent Mode authorization are ready.</string>
     <string name="settings_root_setup_progress_body_available">Start setup to grant su and finish the local access configuration.</string>
@@ -356,8 +343,6 @@
     <string name="settings_get_started_tour_subtitle">Replay the first-run landing and setup flow</string>
     <string name="settings_developer_subtitle">Replay the follow-up onboarding flow</string>
     <string name="settings_release_summary">Release %1$s</string>
-
-    <!-- Provider configuration -->
     <string name="settings_default_models">Default Models</string>
     <string name="settings_default_models_subtitle">Choose dedicated defaults for chat, titles, naming, and compaction.</string>
     <string name="settings_default_chat_model">Default Chat Model</string>
@@ -391,8 +376,56 @@
     <string name="settings_reconnect_after_seconds">Reconnect after %1$ds</string>
     <string name="settings_reconnect_after_idle_seconds">Reconnect after idle seconds</string>
     <string name="settings_reconnect_after_idle_description">If a request produces no response activity at all for this many seconds, Aether cancels that attempt and reconnects with backoff. Range: 30-3600 seconds.</string>
-    <string name="action_edit">Edit</string>
-    <string name="action_remove">Remove</string>
+    <string name="settings_skills_count_configured">%1$d configured</string>
+    <string name="settings_scheduled_tasks">Scheduled Tasks</string>
+    <string name="settings_scheduled_tasks_count_configured">%1$d configured</string>
+    <string name="settings_skills_description">Manage installed skills and keep only the bundles you want Aether to use in chat.</string>
+    <string name="settings_no_skills_installed">No skills installed</string>
+    <string name="settings_import_skills_description">Import skills from a folder, zip, or remote URL.</string>
+    <string name="settings_add_skill">Add Skill</string>
+    <string name="settings_skill_id">Skill ID</string>
+    <string name="settings_skill_files">Files</string>
+    <string name="settings_skill_allowed_tools">Allowed tools</string>
+    <string name="settings_any">Any</string>
+    <string name="settings_skill_compatibility">Compatibility</string>
+    <string name="settings_skill_source">Source</string>
+    <string name="settings_skill_path">Path</string>
+    <string name="settings_skill_source_folder">Folder</string>
+    <string name="settings_add_skill_description">Import Agent Skills from a local folder, zip file, or remote URL.</string>
+    <string name="settings_select_skill_folder_description">Select a folder containing SKILL.md</string>
+    <string name="settings_choose_folder">Choose Folder</string>
+    <string name="settings_select_skill_zip_description">Select a .zip file containing SKILL.md</string>
+    <string name="settings_choose_zip">Choose Zip</string>
+    <string name="settings_remote_skill_url">Remote skill URL</string>
+    <string name="settings_remote_skill_url_description">GitHub repo/tree URLs and direct zip links are supported.</string>
+    <string name="settings_installing">Installing...</string>
+    <string name="settings_install_from_url">Install from URL</string>
+    <string name="settings_scheduled_tasks_description">Aether wakes at the next matching time and runs the task prompt as an automated Agent turn.</string>
+    <string name="settings_no_scheduled_tasks">No scheduled tasks</string>
+    <string name="settings_create_scheduled_task_description">Create one manually, or ask the Agent to create one with its scheduling tool.</string>
+    <string name="settings_add_task">Add Task</string>
+    <string name="settings_next_run">Next run: %1$s</string>
+    <string name="settings_no_next_run_scheduled">No next run scheduled</string>
+    <string name="settings_created_by_agent">Created by Agent</string>
+    <string name="settings_created_manually">Created manually</string>
+    <string name="settings_add_scheduled_task">Add Scheduled Task</string>
+    <string name="settings_edit_scheduled_task">Edit Scheduled Task</string>
+    <string name="settings_name">Name</string>
+    <string name="settings_prompt">Prompt</string>
+    <string name="settings_enabled">Enabled</string>
+    <string name="settings_disabled_tasks_saved_subtitle">Disabled tasks stay saved but do not wake Aether.</string>
+    <string name="settings_schedule_interval">Interval</string>
+    <string name="settings_schedule_daily">Daily</string>
+    <string name="settings_schedule_weekly">Weekly</string>
+    <string name="settings_every_n_minutes">Every N minutes</string>
+    <string name="settings_active_start_time">Active start HH:mm</string>
+    <string name="settings_active_end_time">Active end HH:mm</string>
+    <string name="settings_times_comma_separated">Times HH:mm, comma separated</string>
+    <string name="settings_days_of_week_input">Days 1-7 or mon,tue</string>
+    <string name="settings_time_hhmm">Time HH:mm</string>
+    <string name="settings_interval_window_hint">Interval windows are optional. Leave start and end blank to run all day.</string>
+
+    <!-- Provider configuration -->
     <string name="provider_form_provider_name">Provider name</string>
     <string name="provider_form_provider_id">Provider ID</string>
     <string name="provider_form_provider_id_required">Provider ID is required.</string>
@@ -422,21 +455,6 @@
     <string name="provider_form_header_value">Value</string>
     <string name="provider_form_remove_header">Remove header</string>
 
-    <string name="onboarding_root_body_unknown">If this phone has Root, Aether can configure Termux and Agent Mode automatically.</string>
-    <string name="onboarding_root_body_available">Root is available. Grant su to Aether to skip the manual Termux and Agent Mode steps.</string>
-    <string name="onboarding_root_body_running">Aether is enabling Termux external apps, granting command permission, and selecting Root Agent Mode.</string>
-    <string name="onboarding_root_body_ready">Root setup is complete. Termux and Agent Mode are ready.</string>
-    <string name="onboarding_root_body_unavailable">If you have Root, try the automatic setup. Otherwise continue with the existing manual flow.</string>
-    <string name="onboarding_root_body_permission_denied">Root access was denied or timed out.</string>
-    <string name="onboarding_root_body_termux_not_installed">Install Termux first, then Aether can finish this setup with Root.</string>
-    <string name="onboarding_root_body_failed">Root setup did not complete. You can retry or continue manually.</string>
-    <string name="onboarding_termux_status_ready">Local tools are ready.</string>
-    <string name="onboarding_termux_status_not_installed">Install Termux first, then come back here.</string>
-    <string name="onboarding_termux_status_permission_missing">Grant the &quot;Run commands in Termux environment&quot; permission in Android settings.</string>
-    <string name="onboarding_termux_status_external_apps_disabled_configured">Open Termux once, then return and refresh.</string>
-    <string name="onboarding_termux_status_external_apps_disabled">Copy the setup command, paste it in Termux, then return and refresh.</string>
-    <string name="onboarding_termux_status_dispatch_failed_configured">Open Termux once, then refresh here.</string>
-    <string name="onboarding_termux_status_dispatch_failed">Copy the setup command, paste it in Termux, then return and refresh.</string>
     <!-- Markdown -->
     <string name="attachment_file_preview_unavailable">Preview unavailable for this file type.</string>
     <string name="attachment_preview_truncated">Preview truncated for readability.</string>
@@ -464,19 +482,50 @@
     <!-- File / Termux -->
     <string name="file_saved">File saved</string>
     <string name="file_could_not_save">Couldn\'t save file</string>
-    <string name="app_unable_to_open_link">Unable to open that link</string>
-    <string name="app_unable_to_open_file">Unable to open that file</string>
-    <string name="app_unable_to_open_apk_installer">Unable to open the APK installer</string>
-    <string name="app_unable_to_open_screen">Unable to open that screen</string>
     <string name="file_reply_copied">Reply copied</string>
+    <string name="termux_install_to_enable_bash">Install Termux to enable bash</string>
+    <string name="termux_grant_command_access">Grant Termux command access</string>
+    <string name="termux_enable_external_apps">Enable external apps in Termux</string>
+    <string name="termux_finish_setup">Finish Termux setup</string>
+    <string name="termux_install_termux">Install Termux</string>
+    <string name="termux_grant_access">Grant access</string>
+    <string name="termux_app_settings">App settings</string>
+    <string name="termux_copy_and_open_termux">Copy and Open Termux</string>
+    <string name="termux_copy_setup_command">Copy setup command</string>
+    <string name="termux_open_termux">Open Termux</string>
+    <string name="termux_settings">Termux settings</string>
+    <string name="termux_setup_command_copied">Termux setup command copied</string>
+    <string name="termux_runs_shell_commands_on_device">Aether uses Termux to run shell commands on-device.</string>
+    <string name="termux_allow_run_commands_permission">Allow Aether to use the &quot;Run commands in Termux environment&quot; Android permission.</string>
+    <string name="termux_not_running_background">Termux seems to be not running in the background</string>
+    <string name="termux_keep_running_and_refresh">Open Termux and keep it running in the background, then return to Aether and refresh.</string>
+    <string name="termux_paste_setup_command_and_refresh">Open Termux, paste the Aether setup command, then return and refresh.</string>
+    <string name="termux_open_once_verify_settings">Open Termux once and verify its integration settings.</string>
     <string name="termux_access_granted">Termux access granted</string>
     <string name="termux_access_not_granted">Termux access not granted</string>
 
     <!-- Agent -->
     <string name="agent_mode_label">Agent Mode</string>
     <string name="agent_mode_display_id">display %1$d</string>
+    <string name="agent_mode_replay_frame">Agent Mode replay frame</string>
+    <string name="agent_mode_replay_preview_unavailable">Preview unavailable</string>
 
     <!-- Onboarding -->
+    <string name="onboarding_root_body_unknown">If this phone has Root, Aether can configure Termux and Agent Mode automatically.</string>
+    <string name="onboarding_root_body_available">Root is available. Grant su to Aether to skip the manual Termux and Agent Mode steps.</string>
+    <string name="onboarding_root_body_running">Aether is enabling Termux external apps, granting command permission, and selecting Root Agent Mode.</string>
+    <string name="onboarding_root_body_ready">Root setup is complete. Termux and Agent Mode are ready.</string>
+    <string name="onboarding_root_body_unavailable">If you have Root, try the automatic setup. Otherwise continue with the existing manual flow.</string>
+    <string name="onboarding_root_body_permission_denied">Root access was denied or timed out.</string>
+    <string name="onboarding_root_body_termux_not_installed">Install Termux first, then Aether can finish this setup with Root.</string>
+    <string name="onboarding_root_body_failed">Root setup did not complete. You can retry or continue manually.</string>
+    <string name="onboarding_termux_status_ready">Local tools are ready.</string>
+    <string name="onboarding_termux_status_not_installed">Install Termux first, then come back here.</string>
+    <string name="onboarding_termux_status_permission_missing">Grant the &quot;Run commands in Termux environment&quot; permission in Android settings.</string>
+    <string name="onboarding_termux_status_external_apps_disabled_configured">Open Termux once, then return and refresh.</string>
+    <string name="onboarding_termux_status_external_apps_disabled">Copy the setup command, paste it in Termux, then return and refresh.</string>
+    <string name="onboarding_termux_status_dispatch_failed_configured">Open Termux once, then refresh here.</string>
+    <string name="onboarding_termux_status_dispatch_failed">Copy the setup command, paste it in Termux, then return and refresh.</string>
     <string name="onboarding_aether_icon">Aether icon</string>
     <string name="onboarding_get_started">Get started</string>
     <string name="onboarding_api_key">API key</string>
@@ -544,67 +593,15 @@
     <string name="onboarding_paste_it_here">Paste it here</string>
 
     <!-- Conversation -->
+    <string name="tool_invocation_command">Command</string>
+    <string name="tool_invocation_result">Result</string>
+    <string name="tool_invocation_exit_code">Exit code: %1$d</string>
     <string name="branch_steer_current_run">Steer current run</string>
     <string name="branch_queue_next_turn">Queue next turn</string>
     <string name="tool_invocation_group_executing">Executing %1$d tools</string>
     <string name="tool_invocation_group_executed">Executed %1$d tools</string>
     <string name="tool_invocation_collapse_tools">Collapse tools</string>
     <string name="tool_invocation_expand_tools">Expand tools</string>
-    <string name="agent_mode_replay_frame">Agent Mode replay frame</string>
-    <string name="agent_mode_replay_preview_unavailable">Preview unavailable</string>
-
-    <string name="settings_skills_count_configured">%1$d configured</string>
-    <string name="settings_scheduled_tasks">Scheduled Tasks</string>
-    <string name="settings_scheduled_tasks_count_configured">%1$d configured</string>
-    <string name="settings_skills_description">Manage installed skills and keep only the bundles you want Aether to use in chat.</string>
-    <string name="settings_no_skills_installed">No skills installed</string>
-    <string name="settings_import_skills_description">Import skills from a folder, zip, or remote URL.</string>
-    <string name="settings_add_skill">Add Skill</string>
-    <string name="action_collapse">Collapse</string>
-    <string name="action_expand">Expand</string>
-    <string name="action_delete">Delete</string>
-    <string name="settings_skill_id">Skill ID</string>
-    <string name="settings_skill_files">Files</string>
-    <string name="settings_skill_allowed_tools">Allowed tools</string>
-    <string name="settings_any">Any</string>
-    <string name="settings_skill_compatibility">Compatibility</string>
-    <string name="settings_skill_source">Source</string>
-    <string name="settings_skill_path">Path</string>
-    <string name="settings_skill_source_folder">Folder</string>
-    <string name="settings_add_skill_description">Import Agent Skills from a local folder, zip file, or remote URL.</string>
-    <string name="settings_select_skill_folder_description">Select a folder containing SKILL.md</string>
-    <string name="settings_choose_folder">Choose Folder</string>
-    <string name="settings_select_skill_zip_description">Select a .zip file containing SKILL.md</string>
-    <string name="settings_choose_zip">Choose Zip</string>
-    <string name="settings_remote_skill_url">Remote skill URL</string>
-    <string name="settings_remote_skill_url_description">GitHub repo/tree URLs and direct zip links are supported.</string>
-    <string name="settings_installing">Installing...</string>
-    <string name="settings_install_from_url">Install from URL</string>
-    <string name="settings_scheduled_tasks_description">Aether wakes at the next matching time and runs the task prompt as an automated Agent turn.</string>
-    <string name="settings_no_scheduled_tasks">No scheduled tasks</string>
-    <string name="settings_create_scheduled_task_description">Create one manually, or ask the Agent to create one with its scheduling tool.</string>
-    <string name="settings_add_task">Add Task</string>
-    <string name="settings_next_run">Next run: %1$s</string>
-    <string name="settings_no_next_run_scheduled">No next run scheduled</string>
-    <string name="settings_created_by_agent">Created by Agent</string>
-    <string name="settings_created_manually">Created manually</string>
-    <string name="settings_add_scheduled_task">Add Scheduled Task</string>
-    <string name="settings_edit_scheduled_task">Edit Scheduled Task</string>
-    <string name="settings_name">Name</string>
-    <string name="settings_prompt">Prompt</string>
-    <string name="settings_enabled">Enabled</string>
-    <string name="settings_disabled_tasks_saved_subtitle">Disabled tasks stay saved but do not wake Aether.</string>
-    <string name="settings_schedule_interval">Interval</string>
-    <string name="settings_schedule_daily">Daily</string>
-    <string name="settings_schedule_weekly">Weekly</string>
-    <string name="settings_every_n_minutes">Every N minutes</string>
-    <string name="settings_active_start_time">Active start HH:mm</string>
-    <string name="settings_active_end_time">Active end HH:mm</string>
-    <string name="settings_times_comma_separated">Times HH:mm, comma separated</string>
-    <string name="settings_days_of_week_input">Days 1-7 or mon,tue</string>
-    <string name="settings_time_hhmm">Time HH:mm</string>
-    <string name="settings_interval_window_hint">Interval windows are optional. Leave start and end blank to run all day.</string>
-
     <string name="tool_title_bash_running">Executing bash command</string>
     <string name="tool_title_bash_done">Executed bash command</string>
     <string name="tool_title_fetch_bash_output_running">Fetching bash output</string>
