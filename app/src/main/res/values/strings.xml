@@ -312,6 +312,8 @@
     <string name="statistics_token_mix">Token mix</string>
     <string name="statistics_speed">Speed</string>
     <string name="statistics_speed_subtitle">Recent output speed samples</string>
+    <string name="statistics_no_speed_samples">No speed samples yet</string>
+    <string name="statistics_selected_day_tokens">%1$s · %2$s tokens</string>
     <string name="settings_developer_description">Developer-only tools and replay controls.</string>
     <string name="settings_app_data">App Data</string>
     <string name="settings_app_data_description">Import or export the complete local Aether data set as JSON.</string>

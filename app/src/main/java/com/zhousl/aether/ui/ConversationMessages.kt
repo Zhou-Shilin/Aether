@@ -3246,6 +3246,28 @@ private fun AssistantMessageActions(
     onDelete: () -> Unit,
 ) {
     var showStatistics by rememberSaveable { mutableStateOf(false) }
+    var keepStatisticsPopup by remember { mutableStateOf(false) }
+    val statisticsPopupAlpha by animateFloatAsState(
+        targetValue = if (showStatistics) 1f else 0f,
+        animationSpec = if (showStatistics) {
+            tween(durationMillis = 140, easing = ToolTransitionEasing)
+        } else {
+            tween(durationMillis = 90, easing = FastOutLinearInEasing)
+        },
+        finishedListener = { alpha ->
+            if (alpha == 0f) keepStatisticsPopup = false
+        },
+        label = "statistics_popup_alpha",
+    )
+    val statisticsPopupScale by animateFloatAsState(
+        targetValue = if (showStatistics) 1f else 0.98f,
+        animationSpec = if (showStatistics) {
+            tween(durationMillis = 160, easing = ToolTransitionEasing)
+        } else {
+            tween(durationMillis = 90, easing = FastOutLinearInEasing)
+        },
+        label = "statistics_popup_scale",
+    )
     Box {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AssistantMessageAction(
@@ -3268,10 +3290,13 @@ private fun AssistantMessageActions(
             AssistantMessageAction(
                 icon = LucideIcons.ChartNoAxesColumn,
                 contentDescription = stringResource(R.string.statistics_title),
-                onClick = { showStatistics = true },
+                onClick = {
+                    keepStatisticsPopup = true
+                    showStatistics = true
+                },
             )
         }
-        if (showStatistics) {
+        if (keepStatisticsPopup || showStatistics) {
             Popup(
                 popupPositionProvider = remember { StatisticsPopupPositionProvider() },
                 onDismissRequest = { showStatistics = false },
@@ -3280,6 +3305,12 @@ private fun AssistantMessageActions(
                 MessageStatisticsPopup(
                     usageStatistics = usageStatistics,
                     sessionTotalTokens = sessionTotalTokens,
+                    modifier = Modifier.graphicsLayer {
+                        alpha = statisticsPopupAlpha
+                        scaleX = statisticsPopupScale
+                        scaleY = statisticsPopupScale
+                        transformOrigin = TransformOrigin(0.18f, 1f)
+                    },
                 )
             }
         }
@@ -3290,9 +3321,10 @@ private fun AssistantMessageActions(
 private fun MessageStatisticsPopup(
     usageStatistics: ChatUsageStatistics?,
     sessionTotalTokens: Long?,
+    modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .widthIn(min = 236.dp, max = 300.dp)
             .shadow(18.dp, RoundedCornerShape(22.dp), ambientColor = AetherScrim, spotColor = AetherScrim)
             .clip(RoundedCornerShape(22.dp))
@@ -3429,9 +3461,9 @@ private class StatisticsPopupPositionProvider : PopupPositionProvider {
         layoutDirection: androidx.compose.ui.unit.LayoutDirection,
         popupContentSize: IntSize,
     ): IntOffset {
-        val margin = 12
-        val preferredX = anchorBounds.right + margin
-        val fallbackX = anchorBounds.left - popupContentSize.width - margin
+        val margin = 28
+        val preferredX = anchorBounds.right + 18
+        val fallbackX = anchorBounds.left - popupContentSize.width + 18
         val x = if (preferredX + popupContentSize.width <= windowSize.width - margin) {
             preferredX
         } else {

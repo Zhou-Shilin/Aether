@@ -16,8 +16,10 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -102,6 +104,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -167,10 +170,8 @@ import com.zhousl.aether.ui.theme.AetherOnPrimary
 import com.zhousl.aether.ui.theme.AetherOnSurfaceVariant
 import com.zhousl.aether.ui.theme.AetherPrimary
 import com.zhousl.aether.ui.theme.AetherScrim
-import com.zhousl.aether.ui.theme.AetherSecondary
 import com.zhousl.aether.ui.theme.AetherSurface
 import com.zhousl.aether.ui.theme.AetherSurfaceHigh
-import com.zhousl.aether.ui.theme.AetherTertiary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -303,6 +304,10 @@ private fun parseTaskDays(value: String): List<Int> =
 private const val PageTransitionDuration = 320
 private val PageTransitionEasing = CubicBezierEasing(0.22f, 0.84f, 0.18f, 1f)
 private val SettingsTopFadeHeight = 40.dp
+private val StatisticsInputColor = Color(0xFF5D7CFF)
+private val StatisticsOutputColor = Color(0xFF7B68EE)
+private val StatisticsReasoningColor = Color(0xFFA9B8FF)
+private val StatisticsNeutralChartColor = Color(0xFFDCE4FF)
 
 
 
@@ -1475,21 +1480,23 @@ private fun StatisticsSettingsPage(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(26.dp),
                 ) {
                     TokenMixPieChart(
                         inputTokens = report.inputTokens,
                         outputTokens = report.outputTokens,
                         reasoningTokens = report.reasoningTokens,
-                        modifier = Modifier.size(132.dp),
+                        modifier = Modifier.size(112.dp),
                     )
                     Column(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 4.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        TokenMixLegend(stringResource(R.string.statistics_input), AetherPrimary, report.inputTokens)
-                        TokenMixLegend(stringResource(R.string.statistics_output), AetherSecondary, report.outputTokens)
-                        TokenMixLegend(stringResource(R.string.statistics_reasoning), AetherTertiary, report.reasoningTokens)
+                        TokenMixLegend(stringResource(R.string.statistics_input), StatisticsInputColor, report.inputTokens)
+                        TokenMixLegend(stringResource(R.string.statistics_output), StatisticsOutputColor, report.outputTokens)
+                        TokenMixLegend(stringResource(R.string.statistics_reasoning), StatisticsReasoningColor, report.reasoningTokens)
                     }
                 }
             }
@@ -1607,38 +1614,91 @@ private fun TokenBarChart(points: List<DailyTokenUsage>) {
 
 @Composable
 private fun TokenLineChart(points: List<DailyTokenUsage>) {
-    val lineColor = AetherPrimary
-    val fillColor = AetherPrimary.copy(alpha = 0.12f)
+    var selectedIndex by remember(points) { mutableStateOf<Int?>(null) }
+    val selectedPoint = selectedIndex?.let(points::getOrNull)
+    val lineColor = StatisticsInputColor
+    val fillColor = StatisticsInputColor.copy(alpha = 0.12f)
     val labelColor = AetherOnSurfaceVariant
     val maxTokens = points.maxOfOrNull { it.tokens }?.coerceAtLeast(1L) ?: 1L
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Canvas(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(150.dp)
                 .clip(RoundedCornerShape(18.dp))
                 .background(AetherSurfaceHigh)
-                .padding(12.dp),
+                .pointerInput(points) {
+                    detectTapGestures { offset ->
+                        if (points.isEmpty()) return@detectTapGestures
+                        val horizontalPadding = 24f
+                        val chartWidth = (size.width - horizontalPadding * 2f).coerceAtLeast(1f)
+                        val progress = ((offset.x - horizontalPadding) / chartWidth).coerceIn(0f, 1f)
+                        selectedIndex = (progress * (points.size - 1)).roundToInt().coerceIn(0, points.lastIndex)
+                    }
+                },
         ) {
-            if (points.isEmpty()) return@Canvas
-            val step = if (points.size <= 1) 0f else size.width / (points.size - 1)
-            val coordinates = points.mapIndexed { index, point ->
-                val x = if (points.size <= 1) size.width / 2f else step * index
-                val y = size.height - (point.tokens.toFloat() / maxTokens) * size.height
-                androidx.compose.ui.geometry.Offset(x, y)
+            val chartPadding = 12.dp
+            val chartHeight = 126.dp
+            val chartWidth = maxWidth - chartPadding * 2
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(12.dp),
+            ) {
+                if (points.isEmpty()) return@Canvas
+                val step = if (points.size <= 1) 0f else size.width / (points.size - 1)
+                val coordinates = points.mapIndexed { index, point ->
+                    val x = if (points.size <= 1) size.width / 2f else step * index
+                    val y = size.height - (point.tokens.toFloat() / maxTokens) * size.height
+                    androidx.compose.ui.geometry.Offset(x, y)
+                }
+                for (index in 0 until coordinates.lastIndex) {
+                    drawLine(
+                        color = lineColor,
+                        start = coordinates[index],
+                        end = coordinates[index + 1],
+                        strokeWidth = 5f,
+                        cap = StrokeCap.Round,
+                    )
+                }
+                coordinates.forEachIndexed { index, point ->
+                    val selected = selectedIndex == index
+                    drawCircle(color = fillColor, radius = if (selected) 17f else 12f, center = point)
+                    drawCircle(color = if (selected) StatisticsOutputColor else lineColor, radius = if (selected) 7f else 5f, center = point)
+                }
             }
-            for (index in 0 until coordinates.lastIndex) {
-                drawLine(
-                    color = lineColor,
-                    start = coordinates[index],
-                    end = coordinates[index + 1],
-                    strokeWidth = 5f,
-                    cap = StrokeCap.Round,
-                )
-            }
-            coordinates.forEach { point ->
-                drawCircle(color = fillColor, radius = 12f, center = point)
-                drawCircle(color = lineColor, radius = 5f, center = point)
+            selectedPoint?.let { point ->
+                val selectedX = if (points.size <= 1) {
+                    maxWidth / 2
+                } else {
+                    chartPadding + chartWidth * (selectedIndex!!.toFloat() / points.lastIndex)
+                }
+                val selectedY = chartPadding + chartHeight * (1f - point.tokens.toFloat() / maxTokens)
+                val tooltipWidth = 116.dp
+                val tooltipX = (selectedX - tooltipWidth / 2)
+                    .coerceIn(4.dp, (maxWidth - tooltipWidth - 4.dp).coerceAtLeast(4.dp))
+                val tooltipY = (selectedY - 34.dp).coerceAtLeast(4.dp)
+                Box(
+                    modifier = Modifier
+                        .offset(x = tooltipX, y = tooltipY)
+                        .width(tooltipWidth)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(AetherSurface.copy(alpha = 0.96f))
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = stringResource(
+                            R.string.statistics_selected_day_tokens,
+                            point.label,
+                            formatSettingsTokenCount(point.tokens),
+                        ),
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                        color = AetherOnSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
         Row(
@@ -1663,18 +1723,29 @@ private fun TokenMixPieChart(
     modifier: Modifier = Modifier,
 ) {
     val values = listOf(inputTokens, outputTokens, reasoningTokens)
-    val colors = listOf(AetherPrimary, AetherSecondary, AetherTertiary)
-    val total = values.sum().coerceAtLeast(1L)
+    val colors = listOf(StatisticsInputColor, StatisticsOutputColor, StatisticsReasoningColor)
+    val total = values.sum()
     Canvas(modifier = modifier) {
+        if (total <= 0L) {
+            drawArc(
+                color = StatisticsNeutralChartColor,
+                startAngle = -90f,
+                sweepAngle = 360f,
+                useCenter = false,
+                style = Stroke(width = size.minDimension * 0.20f, cap = StrokeCap.Butt),
+            )
+            return@Canvas
+        }
         var startAngle = -90f
         values.forEachIndexed { index, value ->
+            if (value <= 0L) return@forEachIndexed
             val sweep = 360f * value / total
             drawArc(
                 color = colors[index],
                 startAngle = startAngle,
                 sweepAngle = sweep,
                 useCenter = false,
-                style = Stroke(width = size.minDimension * 0.22f, cap = StrokeCap.Round),
+                style = Stroke(width = size.minDimension * 0.20f, cap = StrokeCap.Butt),
             )
             startAngle += sweep
         }
@@ -1682,24 +1753,65 @@ private fun TokenMixPieChart(
 }
 
 @Composable
-private fun SpeedBarChart(points: List<Double>) {
-    val maxSpeed = points.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
+private fun SpeedBarChart(points: List<SpeedSample>) {
+    val visiblePoints = points.takeLast(7)
+    if (visiblePoints.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(132.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(AetherSurfaceHigh),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = stringResource(R.string.statistics_no_speed_samples),
+                style = MaterialTheme.typography.bodyMedium,
+                color = AetherOnSurfaceVariant,
+            )
+        }
+        return
+    }
+    val maxSpeed = visiblePoints.maxOfOrNull { it.tokensPerSecond }?.coerceAtLeast(1.0) ?: 1.0
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(132.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .height(164.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.Bottom,
     ) {
-        points.ifEmpty { listOf(0.0) }.forEach { speed ->
+        visiblePoints.forEach { sample ->
+            val speed = sample.tokensPerSecond
             val fraction = (speed / maxSpeed).toFloat()
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height((18 + 92 * fraction).dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(AetherSecondary.copy(alpha = 0.18f + 0.48f * fraction)),
-            )
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Bottom,
+            ) {
+                Text(
+                    text = formatSettingsTokenRate(speed),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AetherOnSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Clip,
+                )
+                Spacer(Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height((18 + 96 * fraction).dp)
+                        .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 6.dp, bottomEnd = 6.dp))
+                        .background(AetherPrimary.copy(alpha = 0.18f + 0.44f * fraction)),
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = sample.shortLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AetherOnSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Clip,
+                )
+            }
         }
     }
 }
@@ -1795,7 +1907,20 @@ private fun buildUsageStatisticsReport(sessions: List<ChatSession>): UsageStatis
                 .sumOf { it.totalTokens ?: 0L },
         )
     }
-    val speeds = stats.mapNotNull { it.outputTokensPerSecond }
+    val speedSamples = stats.mapNotNull { stat ->
+        val speed = stat.outputTokensPerSecond ?: return@mapNotNull null
+        val millis = stat.completedAtMillis.takeIf { it > 0L } ?: stat.startedAtMillis
+        if (millis <= 0L) return@mapNotNull null
+        val date = Instant.ofEpochMilli(millis).atZone(zone).toLocalDate()
+        SpeedSample(
+            date = date,
+            label = "${date.monthValue}/${date.dayOfMonth}",
+            shortLabel = "${date.monthValue}/${date.dayOfMonth}",
+            tokensPerSecond = speed,
+            timestampMillis = millis,
+        )
+    }.sortedBy { it.timestampMillis }
+    val speeds = speedSamples.map { it.tokensPerSecond }
     val latencies = stats.mapNotNull { it.firstTokenLatencyMillis }
     return UsageStatisticsReport(
         totalTokens = stats.sumOf { it.totalTokens ?: 0L },
@@ -1809,7 +1934,7 @@ private fun buildUsageStatisticsReport(sessions: List<ChatSession>): UsageStatis
         largestTurnTokens = stats.mapNotNull { it.totalTokens }.maxOrNull(),
         averageOutputTokensPerSecond = speeds.takeIf { it.isNotEmpty() }?.average(),
         averageFirstTokenLatencyMillis = latencies.takeIf { it.isNotEmpty() }?.average()?.roundToInt()?.toLong(),
-        recentSpeedSamples = speeds,
+        recentSpeedSamples = speedSamples,
     )
 }
 
@@ -1841,7 +1966,7 @@ private data class UsageStatisticsReport(
     val largestTurnTokens: Long?,
     val averageOutputTokensPerSecond: Double?,
     val averageFirstTokenLatencyMillis: Long?,
-    val recentSpeedSamples: List<Double>,
+    val recentSpeedSamples: List<SpeedSample>,
 )
 
 private data class DailyTokenUsage(
@@ -1849,6 +1974,14 @@ private data class DailyTokenUsage(
     val label: String,
     val shortLabel: String,
     val tokens: Long,
+)
+
+private data class SpeedSample(
+    val date: LocalDate,
+    val label: String,
+    val shortLabel: String,
+    val tokensPerSecond: Double,
+    val timestampMillis: Long,
 )
 
 // -----------------------------------------------------------------------------

@@ -305,6 +305,8 @@
     <string name="statistics_token_mix">Token 构成</string>
     <string name="statistics_speed">速度</string>
     <string name="statistics_speed_subtitle">最近输出速度样本</string>
+    <string name="statistics_no_speed_samples">暂无速度样本</string>
+    <string name="statistics_selected_day_tokens">%1$s · %2$s token</string>
     <string name="settings_developer_description">开发者专用工具和重播控制。</string>
     <string name="settings_app_data">应用数据</string>
     <string name="settings_app_data_description">以 JSON 导入或导出完整的本地 Aether 数据集。</string>
