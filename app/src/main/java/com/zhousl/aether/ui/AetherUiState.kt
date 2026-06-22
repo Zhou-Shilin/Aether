@@ -101,6 +101,34 @@ data class ChatToolInvocation(
     val timelineOrder: Long = 0L,
 )
 
+data class ChatUsageStatistics(
+    val inputTokens: Long? = null,
+    val outputTokens: Long? = null,
+    val totalTokens: Long? = null,
+    val reasoningTokens: Long? = null,
+    val cachedInputTokens: Long? = null,
+    val requestCount: Int = 1,
+    val tokenUsageSource: String = "unavailable",
+    val startedAtMillis: Long = 0L,
+    val firstTokenAtMillis: Long? = null,
+    val completedAtMillis: Long = 0L,
+) {
+    val firstTokenLatencyMillis: Long?
+        get() = firstTokenAtMillis?.let { firstToken ->
+            if (startedAtMillis > 0L) (firstToken - startedAtMillis).coerceAtLeast(0L) else null
+        }
+
+    val outputTokensPerSecond: Double?
+        get() {
+            val output = outputTokens ?: return null
+            val outputStartedAt = firstTokenAtMillis ?: startedAtMillis.takeIf { it > 0L } ?: return null
+            if (completedAtMillis <= outputStartedAt) return null
+            val seconds = (completedAtMillis - outputStartedAt) / 1000.0
+            if (seconds <= 0.0) return null
+            return output / seconds
+        }
+}
+
 data class ReasoningSummaryChunk(
     val id: String,
     val title: String = "",
@@ -160,6 +188,7 @@ data class ChatMessage(
     val assistantActionsHidden: Boolean = false,
     val providerPayloadJson: String = "",
     val displayKind: MessageDisplayKind = MessageDisplayKind.Standard,
+    val usageStatistics: ChatUsageStatistics? = null,
 )
 
 data class ChatSession(

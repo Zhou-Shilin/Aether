@@ -13,6 +13,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -96,6 +97,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.layout.onSizeChanged
@@ -117,6 +120,10 @@ import com.zhousl.aether.BuildConfig
 
 import com.zhousl.aether.R
 import java.util.Locale
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import kotlin.math.roundToInt
 import com.zhousl.aether.data.AetherPrivacyPolicyUrl
 import com.zhousl.aether.data.AetherWebsiteUrl
 import com.zhousl.aether.data.AgentModeAuthorizationIssue
@@ -159,8 +166,10 @@ import com.zhousl.aether.ui.theme.AetherOnPrimary
 import com.zhousl.aether.ui.theme.AetherOnSurfaceVariant
 import com.zhousl.aether.ui.theme.AetherPrimary
 import com.zhousl.aether.ui.theme.AetherScrim
+import com.zhousl.aether.ui.theme.AetherSecondary
 import com.zhousl.aether.ui.theme.AetherSurface
 import com.zhousl.aether.ui.theme.AetherSurfaceHigh
+import com.zhousl.aether.ui.theme.AetherTertiary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -195,6 +204,7 @@ private enum class SettingsPage {
     AlpineTerminal,
     RuntimeDefaults,
     AgentMode,
+    Statistics,
     RootSetupProgress,
     Developer,
     About,
@@ -216,6 +226,7 @@ private fun SettingsPage.depth(): Int = when (this) {
     SettingsPage.Alpine,
     SettingsPage.RuntimeDefaults,
     SettingsPage.AgentMode,
+    SettingsPage.Statistics,
     SettingsPage.Developer,
     SettingsPage.About -> 1
     SettingsPage.DefaultModels,
@@ -386,6 +397,7 @@ fun SettingsScreen(
     defaultCompactingModelKey: String,
     agentModeDisplayState: AgentModeDisplayState,
     providerConfigs: List<LlmProviderConfig>,
+    sessions: List<ChatSession>,
     scheduledTasks: List<ScheduledTask>,
     termuxSetupState: TermuxSetupState,
     alpineSetupState: LocalRuntimeSetupState,
@@ -745,6 +757,7 @@ fun SettingsScreen(
                 skillCount = installedSkills.size,
                 mcpServerCount = mcpServers.size,
                 scheduledTaskCount = scheduledTasks.size,
+                statisticsSummary = buildSettingsStatisticsSummary(sessions),
                 onReplayOnboarding = ::persistAndReplayOnboarding,
                 onNavigate = { page ->
                     if (page == SettingsPage.AgentMode && !termuxSetupState.isReady) {
@@ -1091,6 +1104,12 @@ fun SettingsScreen(
                 onBack = { currentPage = SettingsPage.Hub.name },
             )
 
+            SettingsPage.Statistics -> StatisticsSettingsPage(
+                title = stringResource(R.string.settings_statistics),
+                sessions = sessions,
+                onBack = { currentPage = SettingsPage.Hub.name },
+            )
+
             SettingsPage.RootSetupProgress -> RootSetupProgressPage(
                 rootSetupState = rootSetupState,
                 termuxSetupState = termuxSetupState,
@@ -1144,6 +1163,7 @@ private fun SettingsHub(
     skillCount: Int,
     mcpServerCount: Int,
     scheduledTaskCount: Int,
+    statisticsSummary: String,
     onReplayOnboarding: () -> Unit,
     onNavigate: (SettingsPage) -> Unit,
     onBack: () -> Unit,
@@ -1285,6 +1305,17 @@ private fun SettingsHub(
 
             Spacer(Modifier.height(16.dp))
 
+            SettingsCardGroup {
+                SettingsNavRow(
+                    icon = LucideIcons.ChartNoAxesColumn,
+                    title = stringResource(R.string.settings_statistics),
+                    subtitle = statisticsSummary.ifBlank { stringResource(R.string.settings_statistics_empty) },
+                    onClick = { onNavigate(SettingsPage.Statistics) },
+                )
+            }
+
+            Spacer(Modifier.height(16.dp))
+
             // About card
             SettingsCardGroup {
                 SettingsNavRow(
@@ -1325,6 +1356,499 @@ private fun SettingsHub(
         }
     }
 }
+
+// -----------------------------------------------------------------------------
+// Statistics
+// -----------------------------------------------------------------------------
+
+@Composable
+private fun StatisticsSettingsPage(
+    title: String,
+    sessions: List<ChatSession>,
+    onBack: () -> Unit,
+) {
+    val report = remember(sessions) { buildUsageStatisticsReport(sessions) }
+    SubPageScaffold(title = title, onBack = onBack) {
+        SettingsCardGroup {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.statistics_overview),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = AetherOnSurface,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    StatisticsMetricTile(
+                        label = stringResource(R.string.statistics_total_tokens),
+                        value = formatSettingsTokenCount(report.totalTokens),
+                        modifier = Modifier.weight(1f),
+                    )
+                    StatisticsMetricTile(
+                        label = stringResource(R.string.statistics_sessions),
+                        value = report.sessionCount.toString(),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    StatisticsMetricTile(
+                        label = stringResource(R.string.statistics_average_speed),
+                        value = report.averageOutputTokensPerSecond?.let(::formatSettingsTokenRate)
+                            ?: stringResource(R.string.statistics_unavailable),
+                        modifier = Modifier.weight(1f),
+                    )
+                    StatisticsMetricTile(
+                        label = stringResource(R.string.statistics_average_latency),
+                        value = report.averageFirstTokenLatencyMillis?.let(::formatSettingsDuration)
+                            ?: stringResource(R.string.statistics_unavailable),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        SettingsCardGroup {
+            StatisticsChartSection(
+                title = stringResource(R.string.statistics_daily_token_usage),
+                subtitle = stringResource(R.string.statistics_recent_7_days),
+            ) {
+                TokenBarChart(points = report.dailyTokenUsage.takeLast(7))
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        SettingsCardGroup {
+            StatisticsChartSection(
+                title = stringResource(R.string.statistics_recent_token_usage),
+                subtitle = stringResource(R.string.statistics_recent_14_days),
+            ) {
+                TokenLineChart(points = report.dailyTokenUsage.takeLast(14))
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        SettingsCardGroup {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.statistics_historical_token_usage),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = AetherOnSurface,
+                )
+                HistoryPeakRow(
+                    label = stringResource(R.string.statistics_peak_day),
+                    value = report.peakDay?.let { "${it.label} · ${formatSettingsTokenCount(it.tokens)}" }
+                        ?: stringResource(R.string.statistics_unavailable),
+                )
+                HistoryPeakRow(
+                    label = stringResource(R.string.statistics_largest_turn),
+                    value = report.largestTurnTokens?.let(::formatSettingsTokenCount)
+                        ?: stringResource(R.string.statistics_unavailable),
+                )
+                HistoryPeakRow(
+                    label = stringResource(R.string.statistics_recorded_turns),
+                    value = report.turnCount.toString(),
+                )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        SettingsCardGroup {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.statistics_token_mix),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = AetherOnSurface,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    TokenMixPieChart(
+                        inputTokens = report.inputTokens,
+                        outputTokens = report.outputTokens,
+                        reasoningTokens = report.reasoningTokens,
+                        modifier = Modifier.size(132.dp),
+                    )
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        TokenMixLegend(stringResource(R.string.statistics_input), AetherPrimary, report.inputTokens)
+                        TokenMixLegend(stringResource(R.string.statistics_output), AetherSecondary, report.outputTokens)
+                        TokenMixLegend(stringResource(R.string.statistics_reasoning), AetherTertiary, report.reasoningTokens)
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        SettingsCardGroup {
+            StatisticsChartSection(
+                title = stringResource(R.string.statistics_speed),
+                subtitle = stringResource(R.string.statistics_speed_subtitle),
+            ) {
+                SpeedBarChart(points = report.recentSpeedSamples.takeLast(12))
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatisticsMetricTile(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(AetherSurfaceHigh)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+            color = AetherOnSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = AetherOnSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun StatisticsChartSection(
+    title: String,
+    subtitle: String,
+    chart: @Composable () -> Unit,
+) {
+    Column(
+        modifier = Modifier.padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = AetherOnSurface,
+        )
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = AetherOnSurfaceVariant,
+        )
+        chart()
+    }
+}
+
+@Composable
+private fun TokenBarChart(points: List<DailyTokenUsage>) {
+    val maxTokens = points.maxOfOrNull { it.tokens }?.coerceAtLeast(1L) ?: 1L
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(164.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        points.forEach { point ->
+            val fraction = point.tokens.toFloat() / maxTokens
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Bottom,
+            ) {
+                Text(
+                    text = formatSettingsTokenCount(point.tokens),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AetherOnSurfaceVariant,
+                    maxLines = 1,
+                )
+                Spacer(Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height((18 + 96 * fraction).dp)
+                        .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 6.dp, bottomEnd = 6.dp))
+                        .background(AetherPrimary.copy(alpha = 0.18f + 0.44f * fraction)),
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = point.shortLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AetherOnSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TokenLineChart(points: List<DailyTokenUsage>) {
+    val lineColor = AetherPrimary
+    val fillColor = AetherPrimary.copy(alpha = 0.12f)
+    val labelColor = AetherOnSurfaceVariant
+    val maxTokens = points.maxOfOrNull { it.tokens }?.coerceAtLeast(1L) ?: 1L
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(150.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(AetherSurfaceHigh)
+                .padding(12.dp),
+        ) {
+            if (points.isEmpty()) return@Canvas
+            val step = if (points.size <= 1) 0f else size.width / (points.size - 1)
+            val coordinates = points.mapIndexed { index, point ->
+                val x = if (points.size <= 1) size.width / 2f else step * index
+                val y = size.height - (point.tokens.toFloat() / maxTokens) * size.height
+                androidx.compose.ui.geometry.Offset(x, y)
+            }
+            for (index in 0 until coordinates.lastIndex) {
+                drawLine(
+                    color = lineColor,
+                    start = coordinates[index],
+                    end = coordinates[index + 1],
+                    strokeWidth = 5f,
+                    cap = StrokeCap.Round,
+                )
+            }
+            coordinates.forEach { point ->
+                drawCircle(color = fillColor, radius = 12f, center = point)
+                drawCircle(color = lineColor, radius = 5f, center = point)
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            points.firstOrNull()?.let {
+                Text(it.shortLabel, style = MaterialTheme.typography.labelSmall, color = labelColor)
+            }
+            points.lastOrNull()?.let {
+                Text(it.shortLabel, style = MaterialTheme.typography.labelSmall, color = labelColor)
+            }
+        }
+    }
+}
+
+@Composable
+private fun TokenMixPieChart(
+    inputTokens: Long,
+    outputTokens: Long,
+    reasoningTokens: Long,
+    modifier: Modifier = Modifier,
+) {
+    val values = listOf(inputTokens, outputTokens, reasoningTokens)
+    val colors = listOf(AetherPrimary, AetherSecondary, AetherTertiary)
+    val total = values.sum().coerceAtLeast(1L)
+    Canvas(modifier = modifier) {
+        var startAngle = -90f
+        values.forEachIndexed { index, value ->
+            val sweep = 360f * value / total
+            drawArc(
+                color = colors[index],
+                startAngle = startAngle,
+                sweepAngle = sweep,
+                useCenter = false,
+                style = Stroke(width = size.minDimension * 0.22f, cap = StrokeCap.Round),
+            )
+            startAngle += sweep
+        }
+    }
+}
+
+@Composable
+private fun SpeedBarChart(points: List<Double>) {
+    val maxSpeed = points.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(132.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        points.ifEmpty { listOf(0.0) }.forEach { speed ->
+            val fraction = (speed / maxSpeed).toFloat()
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height((18 + 92 * fraction).dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(AetherSecondary.copy(alpha = 0.18f + 0.48f * fraction)),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TokenMixLegend(
+    label: String,
+    color: Color,
+    tokens: Long,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(color),
+        )
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodySmall,
+            color = AetherOnSurfaceVariant,
+        )
+        Text(
+            text = formatSettingsTokenCount(tokens),
+            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+            color = AetherOnSurface,
+        )
+    }
+}
+
+@Composable
+private fun HistoryPeakRow(
+    label: String,
+    value: String,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(AetherSurfaceHigh)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            color = AetherOnSurfaceVariant,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+            color = AetherOnSurface,
+        )
+    }
+}
+
+@Composable
+private fun buildSettingsStatisticsSummary(sessions: List<ChatSession>): String {
+    val report = buildUsageStatisticsReport(sessions)
+    return if (report.turnCount == 0) {
+        ""
+    } else {
+        stringResource(
+            R.string.settings_statistics_summary,
+            formatSettingsTokenCount(report.totalTokens),
+            report.turnCount,
+        )
+    }
+}
+
+private fun buildUsageStatisticsReport(sessions: List<ChatSession>): UsageStatisticsReport {
+    val usageMessages = sessions.flatMap { it.messages }.filter { it.usageStatistics != null }
+    val stats = usageMessages.mapNotNull { it.usageStatistics }
+    val zone = ZoneId.systemDefault()
+    val today = LocalDate.now(zone)
+    val daily = (13 downTo 0).map { daysAgo ->
+        val date = today.minusDays(daysAgo.toLong())
+        DailyTokenUsage(
+            date = date,
+            label = "${date.monthValue}/${date.dayOfMonth}",
+            shortLabel = date.dayOfMonth.toString(),
+            tokens = stats
+                .filter { stat ->
+                    val millis = stat.completedAtMillis.takeIf { it > 0L } ?: stat.startedAtMillis
+                    millis > 0L && Instant.ofEpochMilli(millis).atZone(zone).toLocalDate() == date
+                }
+                .sumOf { it.totalTokens ?: 0L },
+        )
+    }
+    val speeds = stats.mapNotNull { it.outputTokensPerSecond }
+    val latencies = stats.mapNotNull { it.firstTokenLatencyMillis }
+    return UsageStatisticsReport(
+        totalTokens = stats.sumOf { it.totalTokens ?: 0L },
+        inputTokens = stats.sumOf { it.inputTokens ?: 0L },
+        outputTokens = stats.sumOf { it.outputTokens ?: 0L },
+        reasoningTokens = stats.sumOf { it.reasoningTokens ?: 0L },
+        sessionCount = sessions.count { session -> session.messages.any { it.usageStatistics != null } },
+        turnCount = stats.size,
+        dailyTokenUsage = daily,
+        peakDay = daily.maxByOrNull { it.tokens }?.takeIf { it.tokens > 0L },
+        largestTurnTokens = stats.mapNotNull { it.totalTokens }.maxOrNull(),
+        averageOutputTokensPerSecond = speeds.takeIf { it.isNotEmpty() }?.average(),
+        averageFirstTokenLatencyMillis = latencies.takeIf { it.isNotEmpty() }?.average()?.roundToInt()?.toLong(),
+        recentSpeedSamples = speeds,
+    )
+}
+
+private fun formatSettingsTokenCount(tokens: Long): String = when {
+    tokens >= 1_000_000L -> String.format(Locale.US, "%.1fM", tokens / 1_000_000.0)
+    tokens >= 1_000L -> String.format(Locale.US, "%.1fK", tokens / 1_000.0)
+    else -> tokens.toString()
+}
+
+private fun formatSettingsTokenRate(tokensPerSecond: Double): String =
+    String.format(Locale.US, "%.1f tok/s", tokensPerSecond)
+
+private fun formatSettingsDuration(millis: Long): String =
+    if (millis >= 1_000L) {
+        String.format(Locale.US, "%.2fs", millis / 1000.0)
+    } else {
+        "${millis}ms"
+    }
+
+private data class UsageStatisticsReport(
+    val totalTokens: Long,
+    val inputTokens: Long,
+    val outputTokens: Long,
+    val reasoningTokens: Long,
+    val sessionCount: Int,
+    val turnCount: Int,
+    val dailyTokenUsage: List<DailyTokenUsage>,
+    val peakDay: DailyTokenUsage?,
+    val largestTurnTokens: Long?,
+    val averageOutputTokensPerSecond: Double?,
+    val averageFirstTokenLatencyMillis: Long?,
+    val recentSpeedSamples: List<Double>,
+)
+
+private data class DailyTokenUsage(
+    val date: LocalDate,
+    val label: String,
+    val shortLabel: String,
+    val tokens: Long,
+)
 
 // -----------------------------------------------------------------------------
 // Providers List Page (Multi-Provider)

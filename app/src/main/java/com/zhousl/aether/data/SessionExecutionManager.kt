@@ -14,6 +14,7 @@ import com.zhousl.aether.ui.ChatAttachment
 import com.zhousl.aether.ui.ChatMessage
 import com.zhousl.aether.ui.ChatSession
 import com.zhousl.aether.ui.ChatToolInvocation
+import com.zhousl.aether.ui.ChatUsageStatistics
 import com.zhousl.aether.ui.MessageDisplayKind
 import com.zhousl.aether.ui.MessageAuthor
 import com.zhousl.aether.ui.ReasoningSummaryChunk
@@ -429,6 +430,7 @@ class SessionExecutionManager(
     ): CompletionSummary {
         val turnStartedAtMillis = System.currentTimeMillis()
         val turnId = "turn-$turnStartedAtMillis"
+        var firstAssistantTokenAtMillis: Long? = null
         diagnosticLogger.event(
             category = "session",
             event = "turn_start",
@@ -574,6 +576,9 @@ class SessionExecutionManager(
                 onAssistantTextDelta = { delta ->
                     if (handle.pauseRequested) return@runTurn
                     if (delta.isEmpty()) return@runTurn
+                    if (firstAssistantTokenAtMillis == null) {
+                        firstAssistantTokenAtMillis = System.currentTimeMillis()
+                    }
                     handle.finishDirectReasoningSummaryChunk()
                     completeActiveReasoning(
                         handle = handle,
@@ -643,6 +648,7 @@ class SessionExecutionManager(
                 trigger = ReasoningCompletionTrigger.TurnFinished,
             )
             val thoughtDurationMillis = (System.currentTimeMillis() - turnStartedAtMillis).coerceAtLeast(0L)
+            val turnCompletedAtMillis = System.currentTimeMillis()
             val estimatedTokenUsage = estimateRequestTokenUsage(request)
             val completion = result.fold(
                 onSuccess = { turnResult ->
@@ -666,6 +672,9 @@ class SessionExecutionManager(
                         outcome = SessionTurnOutcome.Success,
                         tokenUsage = turnResult.tokenUsage ?: estimatedTokenUsage,
                         tokenUsageSource = if (turnResult.tokenUsage != null) "api" else "estimated",
+                        turnStartedAtMillis = turnStartedAtMillis,
+                        firstTokenAtMillis = firstAssistantTokenAtMillis,
+                        turnCompletedAtMillis = turnCompletedAtMillis,
                         inputMessageCount = request.requestMessages.size,
                         userMessageCount = request.requestMessages.count { it.author == MessageAuthor.User },
                     )
@@ -694,6 +703,9 @@ class SessionExecutionManager(
                         outcome = SessionTurnOutcome.Failure,
                         tokenUsage = estimatedTokenUsage,
                         tokenUsageSource = "estimated",
+                        turnStartedAtMillis = turnStartedAtMillis,
+                        firstTokenAtMillis = firstAssistantTokenAtMillis,
+                        turnCompletedAtMillis = System.currentTimeMillis(),
                         inputMessageCount = request.requestMessages.size,
                         userMessageCount = request.requestMessages.count { it.author == MessageAuthor.User },
                     )
@@ -843,6 +855,9 @@ class SessionExecutionManager(
         outcome: SessionTurnOutcome,
         tokenUsage: LlmTokenUsage? = null,
         tokenUsageSource: String = "unavailable",
+        turnStartedAtMillis: Long? = null,
+        firstTokenAtMillis: Long? = null,
+        turnCompletedAtMillis: Long? = null,
         inputMessageCount: Int = 0,
         userMessageCount: Int = 0,
     ): CompletionSummary {
@@ -856,6 +871,13 @@ class SessionExecutionManager(
             normalizedBlocks = normalizedBlocks,
             thoughtDurationMillis = thoughtDurationMillis,
             assistantActionsHidden = false,
+            usageStatistics = buildChatUsageStatistics(
+                tokenUsage = tokenUsage,
+                tokenUsageSource = tokenUsageSource,
+                turnStartedAtMillis = turnStartedAtMillis,
+                firstTokenAtMillis = firstTokenAtMillis,
+                turnCompletedAtMillis = turnCompletedAtMillis,
+            ),
         )
 
         chatStateStore.update { persisted ->
@@ -976,6 +998,7 @@ class SessionExecutionManager(
         normalizedBlocks: List<AssistantResponseBlock>,
         thoughtDurationMillis: Long?,
         assistantActionsHidden: Boolean,
+        usageStatistics: ChatUsageStatistics? = null,
     ): List<ChatMessage> {
         val messageTimestamp = System.currentTimeMillis()
         val responseGroupId = "agent-group-$messageTimestamp"
@@ -1032,11 +1055,49 @@ class SessionExecutionManager(
                 messages.toMutableList().apply {
                     if (none { it.reasoningTrace != null }) {
                         val lastIndex = lastIndex
-                        set(lastIndex, get(lastIndex).copy(thoughtDurationMillis = thoughtDurationMillis))
+                        set(
+                            lastIndex,
+                            get(lastIndex).copy(
+                                thoughtDurationMillis = thoughtDurationMillis,
+                                usageStatistics = usageStatistics,
+                            ),
+                        )
+                    } else {
+                        val lastIndex = lastIndex
+                        set(lastIndex, get(lastIndex).copy(usageStatistics = usageStatistics))
                     }
                 }
             }
         }
+    }
+
+    private fun buildChatUsageStatistics(
+        tokenUsage: LlmTokenUsage?,
+        tokenUsageSource: String,
+        turnStartedAtMillis: Long?,
+        firstTokenAtMillis: Long?,
+        turnCompletedAtMillis: Long?,
+    ): ChatUsageStatistics? {
+        if (
+            tokenUsage == null &&
+            turnStartedAtMillis == null &&
+            firstTokenAtMillis == null &&
+            turnCompletedAtMillis == null
+        ) {
+            return null
+        }
+        return ChatUsageStatistics(
+            inputTokens = tokenUsage?.inputTokens,
+            outputTokens = tokenUsage?.outputTokens,
+            totalTokens = tokenUsage?.withMissingTotalResolved()?.totalTokens,
+            reasoningTokens = tokenUsage?.reasoningTokens,
+            cachedInputTokens = tokenUsage?.cachedInputTokens,
+            requestCount = tokenUsage?.requestCount ?: 1,
+            tokenUsageSource = tokenUsageSource,
+            startedAtMillis = turnStartedAtMillis ?: 0L,
+            firstTokenAtMillis = firstTokenAtMillis,
+            completedAtMillis = turnCompletedAtMillis ?: 0L,
+        )
     }
 
     private fun currentAssistantResponseBlocks(sessionId: String): List<AssistantResponseBlock> =

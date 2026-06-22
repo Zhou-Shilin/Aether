@@ -120,6 +120,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Popup
@@ -156,6 +157,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Base64
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlin.math.max
 
 private const val ToolInvocationCollapseThreshold = 3
 private const val ToolTransitionDurationMillis = 360
@@ -193,6 +195,7 @@ fun ConversationMessageBubble(
     onRedo: () -> Unit,
     onRetry: () -> Unit,
     onSwitchBranch: (Int) -> Unit,
+    sessionTotalTokens: Long? = null,
 ) {
     if (message.author == MessageAuthor.User) {
         UserMessageBlock(
@@ -215,6 +218,7 @@ fun ConversationMessageBubble(
             onCopy = onCopy,
             onRedo = onRedo,
             onDelete = onDelete,
+            sessionTotalTokens = sessionTotalTokens,
         )
     }
 }
@@ -825,6 +829,7 @@ private fun AssistantMessageBlock(
     onCopy: () -> Unit,
     onRedo: () -> Unit,
     onDelete: () -> Unit,
+    sessionTotalTokens: Long?,
 ) {
     val shouldFoldWorkBeforeFinalText = message.text.isNotBlank() &&
         (message.reasoningTrace != null ||
@@ -903,25 +908,14 @@ private fun AssistantMessageBlock(
             )
         }
         if (showActions) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AssistantMessageAction(
-                icon = LucideIcons.Copy,
-                contentDescription = stringResource(R.string.common_copy_reply),
-                onClick = onCopy,
+            AssistantMessageActions(
+                usageStatistics = message.usageStatistics,
+                sessionTotalTokens = sessionTotalTokens,
+                actionsEnabled = actionsEnabled,
+                onCopy = onCopy,
+                onRedo = onRedo,
+                onDelete = onDelete,
             )
-            AssistantMessageAction(
-                icon = LucideIcons.RotateCcw,
-                contentDescription = stringResource(R.string.common_redo_reply),
-                enabled = actionsEnabled,
-                onClick = onRedo,
-            )
-            AssistantMessageAction(
-                icon = LucideIcons.Trash2,
-                contentDescription = stringResource(R.string.common_delete_reply),
-                enabled = actionsEnabled,
-                onClick = onDelete,
-            )
-            }
         }
     }
 }
@@ -980,8 +974,10 @@ fun ConversationAssistantGroupBubble(
     onCopy: () -> Unit,
     onRedo: () -> Unit,
     onDelete: () -> Unit,
+    sessionTotalTokens: Long? = null,
 ) {
     if (messages.isEmpty()) return
+    val groupUsageStatistics = messages.lastOrNull { it.usageStatistics != null }?.usageStatistics
     val thoughtDurationMillis = messages.lastOrNull()?.thoughtDurationMillis
     val hasReasoningTrace = messages.any { it.reasoningTrace != null }
     val showActions = messages.none { it.assistantActionsHidden }
@@ -1019,25 +1015,14 @@ fun ConversationAssistantGroupBubble(
                     )
                 }
             if (showActions) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AssistantMessageAction(
-                    icon = LucideIcons.Copy,
-                    contentDescription = stringResource(R.string.common_copy_reply),
-                    onClick = onCopy,
+                AssistantMessageActions(
+                    usageStatistics = groupUsageStatistics,
+                    sessionTotalTokens = sessionTotalTokens,
+                    actionsEnabled = actionsEnabled,
+                    onCopy = onCopy,
+                    onRedo = onRedo,
+                    onDelete = onDelete,
                 )
-                AssistantMessageAction(
-                    icon = LucideIcons.RotateCcw,
-                    contentDescription = stringResource(R.string.common_redo_reply),
-                    enabled = actionsEnabled,
-                    onClick = onRedo,
-                )
-                AssistantMessageAction(
-                    icon = LucideIcons.Trash2,
-                    contentDescription = stringResource(R.string.common_delete_reply),
-                    enabled = actionsEnabled,
-                    onClick = onDelete,
-                )
-                }
             }
         }
         return
@@ -1141,25 +1126,14 @@ fun ConversationAssistantGroupBubble(
             )
         }
         if (showActions) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AssistantMessageAction(
-                icon = LucideIcons.Copy,
-                contentDescription = stringResource(R.string.common_copy_reply),
-                onClick = onCopy,
+            AssistantMessageActions(
+                usageStatistics = groupUsageStatistics,
+                sessionTotalTokens = sessionTotalTokens,
+                actionsEnabled = actionsEnabled,
+                onCopy = onCopy,
+                onRedo = onRedo,
+                onDelete = onDelete,
             )
-            AssistantMessageAction(
-                icon = LucideIcons.RotateCcw,
-                contentDescription = stringResource(R.string.common_redo_reply),
-                enabled = actionsEnabled,
-                onClick = onRedo,
-            )
-            AssistantMessageAction(
-                icon = LucideIcons.Trash2,
-                contentDescription = stringResource(R.string.common_delete_reply),
-                enabled = actionsEnabled,
-                onClick = onDelete,
-            )
-            }
         }
     }
 }
@@ -3261,6 +3235,231 @@ private fun AssistantMessageAction(
         )
     }
 }
+
+@Composable
+private fun AssistantMessageActions(
+    usageStatistics: ChatUsageStatistics?,
+    sessionTotalTokens: Long?,
+    actionsEnabled: Boolean,
+    onCopy: () -> Unit,
+    onRedo: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    var showStatistics by rememberSaveable { mutableStateOf(false) }
+    Box {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            AssistantMessageAction(
+                icon = LucideIcons.Copy,
+                contentDescription = stringResource(R.string.common_copy_reply),
+                onClick = onCopy,
+            )
+            AssistantMessageAction(
+                icon = LucideIcons.RotateCcw,
+                contentDescription = stringResource(R.string.common_redo_reply),
+                enabled = actionsEnabled,
+                onClick = onRedo,
+            )
+            AssistantMessageAction(
+                icon = LucideIcons.Trash2,
+                contentDescription = stringResource(R.string.common_delete_reply),
+                enabled = actionsEnabled,
+                onClick = onDelete,
+            )
+            AssistantMessageAction(
+                icon = LucideIcons.ChartNoAxesColumn,
+                contentDescription = stringResource(R.string.statistics_title),
+                onClick = { showStatistics = true },
+            )
+        }
+        if (showStatistics) {
+            Popup(
+                popupPositionProvider = remember { StatisticsPopupPositionProvider() },
+                onDismissRequest = { showStatistics = false },
+                properties = PopupProperties(focusable = true),
+            ) {
+                MessageStatisticsPopup(
+                    usageStatistics = usageStatistics,
+                    sessionTotalTokens = sessionTotalTokens,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MessageStatisticsPopup(
+    usageStatistics: ChatUsageStatistics?,
+    sessionTotalTokens: Long?,
+) {
+    Column(
+        modifier = Modifier
+            .widthIn(min = 236.dp, max = 300.dp)
+            .shadow(18.dp, RoundedCornerShape(22.dp), ambientColor = AetherScrim, spotColor = AetherScrim)
+            .clip(RoundedCornerShape(22.dp))
+            .background(AetherSurface.copy(alpha = 0.98f))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(AetherPrimary.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = LucideIcons.ChartNoAxesColumn,
+                    contentDescription = null,
+                    tint = AetherPrimary,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+            Text(
+                text = stringResource(R.string.statistics_title),
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = AetherOnSurface,
+            )
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            MessageStatisticRow(
+                label = stringResource(R.string.statistics_session_tokens),
+                value = sessionTotalTokens?.let(::formatTokenCount)
+                    ?: stringResource(R.string.statistics_unavailable),
+            )
+            MessageStatisticRow(
+                label = stringResource(R.string.statistics_turn_tokens),
+                value = usageStatistics?.totalTokens?.let(::formatTokenCount)
+                    ?: stringResource(R.string.statistics_unavailable),
+            )
+            MessageStatisticRow(
+                label = stringResource(R.string.statistics_output_rate),
+                value = usageStatistics?.outputTokensPerSecond?.let(::formatTokenRate)
+                    ?: stringResource(R.string.statistics_unavailable),
+            )
+            MessageStatisticRow(
+                label = stringResource(R.string.statistics_first_token_latency),
+                value = usageStatistics?.firstTokenLatencyMillis?.let(::formatLatency)
+                    ?: stringResource(R.string.statistics_unavailable),
+            )
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(AetherSurfaceHigh)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            CompactStatisticValue(
+                label = stringResource(R.string.statistics_input),
+                value = usageStatistics?.inputTokens?.let(::formatTokenCount)
+                    ?: stringResource(R.string.statistics_dash),
+            )
+            CompactStatisticValue(
+                label = stringResource(R.string.statistics_output),
+                value = usageStatistics?.outputTokens?.let(::formatTokenCount)
+                    ?: stringResource(R.string.statistics_dash),
+            )
+            CompactStatisticValue(
+                label = stringResource(R.string.statistics_source),
+                value = usageStatistics?.tokenUsageSource?.ifBlank { null }
+                    ?: stringResource(R.string.statistics_dash),
+            )
+        }
+    }
+}
+
+@Composable
+private fun MessageStatisticRow(
+    label: String,
+    value: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = AetherOnSurfaceVariant,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+            color = AetherOnSurface,
+            textAlign = TextAlign.End,
+        )
+    }
+}
+
+@Composable
+private fun CompactStatisticValue(
+    label: String,
+    value: String,
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+            color = AetherOnSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = AetherOnSurfaceVariant,
+            maxLines = 1,
+        )
+    }
+}
+
+private class StatisticsPopupPositionProvider : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: androidx.compose.ui.unit.IntRect,
+        windowSize: IntSize,
+        layoutDirection: androidx.compose.ui.unit.LayoutDirection,
+        popupContentSize: IntSize,
+    ): IntOffset {
+        val margin = 12
+        val preferredX = anchorBounds.right + margin
+        val fallbackX = anchorBounds.left - popupContentSize.width - margin
+        val x = if (preferredX + popupContentSize.width <= windowSize.width - margin) {
+            preferredX
+        } else {
+            fallbackX.coerceAtLeast(margin)
+        }
+        val y = (anchorBounds.top - 10).coerceIn(
+            margin,
+            max(margin, windowSize.height - popupContentSize.height - margin),
+        )
+        return IntOffset(x, y)
+    }
+}
+
+private fun formatTokenCount(tokens: Long): String = when {
+    tokens >= 1_000_000L -> String.format(Locale.US, "%.1fM", tokens / 1_000_000.0)
+    tokens >= 1_000L -> String.format(Locale.US, "%.1fK", tokens / 1_000.0)
+    else -> tokens.toString()
+}
+
+private fun formatTokenRate(tokensPerSecond: Double): String =
+    String.format(Locale.US, "%.1f tok/s", tokensPerSecond)
+
+private fun formatLatency(millis: Long): String =
+    if (millis >= 1_000L) {
+        String.format(Locale.US, "%.2fs", millis / 1000.0)
+    } else {
+        "${millis}ms"
+    }
 
 private fun formatMessageTimestamp(createdAtMillis: Long): String {
     if (createdAtMillis <= 0L) return ""

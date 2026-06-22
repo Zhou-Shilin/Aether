@@ -419,6 +419,52 @@ object LucideIcons {
             return _trash2!!
         }
 
+    val ChartNoAxesColumn: ImageVector
+        get() {
+            if (_chartNoAxesColumn != null) return _chartNoAxesColumn!!
+
+            _chartNoAxesColumn = ImageVector.Builder(
+                name = "chart-no-axes-column",
+                defaultWidth = 24.dp,
+                defaultHeight = 24.dp,
+                viewportWidth = 24f,
+                viewportHeight = 24f,
+            ).apply {
+                path(
+                    fill = SolidColor(Color.Transparent),
+                    stroke = SolidColor(Color(0xFF000000)),
+                    strokeLineWidth = 2f,
+                    strokeLineCap = StrokeCap.Round,
+                    strokeLineJoin = StrokeJoin.Round,
+                ) {
+                    moveTo(5f, 21f)
+                    verticalLineToRelative(-6f)
+                }
+                path(
+                    fill = SolidColor(Color.Transparent),
+                    stroke = SolidColor(Color(0xFF000000)),
+                    strokeLineWidth = 2f,
+                    strokeLineCap = StrokeCap.Round,
+                    strokeLineJoin = StrokeJoin.Round,
+                ) {
+                    moveTo(12f, 21f)
+                    verticalLineTo(9f)
+                }
+                path(
+                    fill = SolidColor(Color.Transparent),
+                    stroke = SolidColor(Color(0xFF000000)),
+                    strokeLineWidth = 2f,
+                    strokeLineCap = StrokeCap.Round,
+                    strokeLineJoin = StrokeJoin.Round,
+                ) {
+                    moveTo(19f, 21f)
+                    verticalLineTo(3f)
+                }
+            }.build()
+
+            return _chartNoAxesColumn!!
+        }
+
     private var _search: ImageVector? = null
     private var _settings: ImageVector? = null
     private var _squarePen: ImageVector? = null
@@ -428,4 +474,5 @@ object LucideIcons {
     private var _mousePointer2: ImageVector? = null
     private var _rotateCcw: ImageVector? = null
     private var _trash2: ImageVector? = null
+    private var _chartNoAxesColumn: ImageVector? = null
 }

@@ -346,6 +346,10 @@ fun ConversationScreen(
     }
     val conversationItems = remember(messages) { buildConversationListItems(messages) }
     val compactSuggestion = remember(messages) { compactCommandSuggestion(messages) }
+    val sessionTotalTokens = remember(messages) {
+        messages.sumOf { message -> message.usageStatistics?.totalTokens ?: 0L }
+            .takeIf { it > 0L }
+    }
     val compactSuggestionText = compactSuggestion.percent?.let { percent ->
         stringResource(R.string.chat_compact_thread_context_percent, percent)
     } ?: stringResource(R.string.chat_compact_thread_context)
@@ -567,6 +571,7 @@ fun ConversationScreen(
                                     onRedo = { onRedoAgentMessage(message.id) },
                                     onRetry = { onRetryUserMessage(message.id) },
                                     onSwitchBranch = { delta -> onSwitchUserMessageBranch(message.id, delta) },
+                                    sessionTotalTokens = sessionTotalTokens,
                                 )
                             }
 
@@ -589,6 +594,7 @@ fun ConversationScreen(
                                     },
                                     onRedo = { onRedoAgentMessage(lastMessage.id) },
                                     onDelete = { onDeleteMessage(lastMessage.id) },
+                                    sessionTotalTokens = sessionTotalTokens,
                                 )
                             }
 

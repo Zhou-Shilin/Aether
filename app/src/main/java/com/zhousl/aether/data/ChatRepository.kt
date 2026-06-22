@@ -11,6 +11,7 @@ import com.zhousl.aether.ui.ChatBranchGroup
 import com.zhousl.aether.ui.ChatMessage
 import com.zhousl.aether.ui.ChatSession
 import com.zhousl.aether.ui.ChatToolInvocation
+import com.zhousl.aether.ui.ChatUsageStatistics
 import com.zhousl.aether.ui.MessageAuthor
 import com.zhousl.aether.ui.MessageDisplayKind
 import com.zhousl.aether.ui.ReasoningSummaryChunk
@@ -169,6 +170,7 @@ private fun parseMessages(messages: JSONArray?): List<ChatMessage> {
                     displayKind = MessageDisplayKind.entries.firstOrNull {
                         it.name == message.optString("displayKind")
                     } ?: MessageDisplayKind.Standard,
+                    usageStatistics = parseUsageStatistics(message.optJSONObject("usageStatistics")),
                 )
             )
         }
@@ -195,9 +197,42 @@ private fun ChatMessage.toJson(): JSONObject = JSONObject().apply {
     if (displayKind != MessageDisplayKind.Standard) {
         put("displayKind", displayKind.name)
     }
+    usageStatistics?.let { put("usageStatistics", it.toJson()) }
     put("toolInvocations", JSONArray().apply { toolInvocations.forEach { put(it.toJson()) } })
     put("attachments", JSONArray().apply { attachments.forEach { put(it.toJson()) } })
 }
+
+private fun parseUsageStatistics(json: JSONObject?): ChatUsageStatistics? {
+    if (json == null) return null
+    return ChatUsageStatistics(
+        inputTokens = json.optionalLong("inputTokens"),
+        outputTokens = json.optionalLong("outputTokens"),
+        totalTokens = json.optionalLong("totalTokens"),
+        reasoningTokens = json.optionalLong("reasoningTokens"),
+        cachedInputTokens = json.optionalLong("cachedInputTokens"),
+        requestCount = json.optInt("requestCount", 1).coerceAtLeast(1),
+        tokenUsageSource = json.optString("tokenUsageSource").ifBlank { "unavailable" },
+        startedAtMillis = json.optLong("startedAtMillis"),
+        firstTokenAtMillis = json.optionalLong("firstTokenAtMillis"),
+        completedAtMillis = json.optLong("completedAtMillis"),
+    )
+}
+
+private fun ChatUsageStatistics.toJson(): JSONObject = JSONObject().apply {
+    inputTokens?.let { put("inputTokens", it) }
+    outputTokens?.let { put("outputTokens", it) }
+    totalTokens?.let { put("totalTokens", it) }
+    reasoningTokens?.let { put("reasoningTokens", it) }
+    cachedInputTokens?.let { put("cachedInputTokens", it) }
+    put("requestCount", requestCount)
+    put("tokenUsageSource", tokenUsageSource)
+    if (startedAtMillis > 0L) put("startedAtMillis", startedAtMillis)
+    firstTokenAtMillis?.let { put("firstTokenAtMillis", it) }
+    if (completedAtMillis > 0L) put("completedAtMillis", completedAtMillis)
+}
+
+private fun JSONObject.optionalLong(key: String): Long? =
+    if (has(key) && !isNull(key)) optLong(key) else null
 
 private fun parseBranchGroup(json: JSONObject?): ChatBranchGroup? {
     if (json == null) return null

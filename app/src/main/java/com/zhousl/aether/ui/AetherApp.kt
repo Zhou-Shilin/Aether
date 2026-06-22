@@ -711,6 +711,7 @@ private fun AetherAppContent(
                     defaultCompactingModelKey = uiState.settings.defaultCompactingModelKey,
                     agentModeDisplayState = uiState.agentModeDisplayState,
                     providerConfigs = uiState.providerConfigs,
+                    sessions = uiState.sessions,
                     scheduledTasks = uiState.scheduledTasks,
                     termuxSetupState = effectiveTermuxSetupState,
                     alpineSetupState = uiState.alpineSetupState,
