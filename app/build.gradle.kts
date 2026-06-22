@@ -29,6 +29,15 @@ val posthogCliHost = localOrEnv(
 val posthogProjectId = localOrEnv("posthog.projectId", "POSTHOG_PROJECT_ID")
 val posthogCliApiKey = localOrEnv("posthog.cliApiKey", "POSTHOG_CLI_API_KEY")
 val posthogExecutable = localOrEnv("posthog.executable", "POSTHOG_EXECUTABLE")
+val nightlyKeystoreFile = localOrEnv("nightly.storeFile", "NIGHTLY_KEYSTORE_FILE")
+val nightlyKeystorePassword = localOrEnv("nightly.storePassword", "NIGHTLY_KEYSTORE_PASSWORD")
+val nightlyKeyAlias = localOrEnv("nightly.keyAlias", "NIGHTLY_KEY_ALIAS")
+val nightlyKeyPassword = localOrEnv("nightly.keyPassword", "NIGHTLY_KEY_PASSWORD")
+val appVersionName = providers.gradleProperty("aether.versionName")
+    .orNull
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: "1.6.0"
 
 android {
     namespace = "com.zhousl.aether"
@@ -41,7 +50,7 @@ android {
         // storage. Android blocks execve() from that location for targetSdk >= 29.
         targetSdk = 28
         versionCode = 7
-        versionName = "1.6.0"
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -50,12 +59,51 @@ android {
 
         buildConfigField("String", "POSTHOG_API_KEY", "\"${localProperties.getProperty("posthog.apiKey", "")}\"")
         buildConfigField("String", "POSTHOG_HOST", "\"${localProperties.getProperty("posthog.host", "https://us.i.posthog.com")}\"")
+        buildConfigField("String", "UPDATE_CHANNEL", "\"stable\"")
+    }
+
+    signingConfigs {
+        create("nightly") {
+            if (
+                nightlyKeystoreFile.isNotBlank() &&
+                nightlyKeystorePassword.isNotBlank() &&
+                nightlyKeyAlias.isNotBlank() &&
+                nightlyKeyPassword.isNotBlank()
+            ) {
+                storeFile = file(nightlyKeystoreFile)
+                storePassword = nightlyKeystorePassword
+                keyAlias = nightlyKeyAlias
+                keyPassword = nightlyKeyPassword
+            }
+        }
     }
 
     buildTypes {
+        debug {
+            manifestPlaceholders["appIcon"] = "@mipmap/ic_launcher"
+            manifestPlaceholders["appRoundIcon"] = "@mipmap/ic_launcher_round"
+        }
+
+        create("nightly") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".nightly"
+            matchingFallbacks += listOf("debug")
+            resValue("string", "app_name", "Aether Nightly")
+            buildConfigField("String", "UPDATE_CHANNEL", "\"nightly\"")
+            manifestPlaceholders["appIcon"] = "@mipmap/ic_launcher_nightly"
+            manifestPlaceholders["appRoundIcon"] = "@mipmap/ic_launcher_nightly_round"
+            signingConfig = if (nightlyKeystoreFile.isNotBlank()) {
+                signingConfigs.getByName("nightly")
+            } else {
+                signingConfigs.getByName("debug")
+            }
+        }
+
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            manifestPlaceholders["appIcon"] = "@mipmap/ic_launcher"
+            manifestPlaceholders["appRoundIcon"] = "@mipmap/ic_launcher_round"
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

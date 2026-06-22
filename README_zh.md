@@ -85,7 +85,7 @@ Aether 的 UI 和交互大量参考了 ChatGPT、Codex CLI/App、Gemini、Poco A
 - 可选：已安装 [Termux](https://termux.dev/)
 
 ### 安装步骤
-1. 下载最新的 [Release APK](https://github.com/Zhou-Shilin/Aether/releases)。
+1. 下载最新的 [Release APK](https://github.com/Zhou-Shilin/Aether/releases) 或 [Nightly APK artifact](https://nightly.link/Zhou-Shilin/Aether/workflows/build-debug-apk.yml/main/Aether-nightly.zip)。
 2. 根据 Get Started Tour 指引配置。
 
 ---

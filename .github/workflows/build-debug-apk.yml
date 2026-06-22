@@ -24,11 +24,38 @@ jobs:
       - name: Make Gradle executable
         run: chmod +x ./gradlew
 
-      - name: Build debug APK
-        run: ./gradlew :app:assembleDebug --stacktrace
+      - name: Prepare nightly metadata
+        id: nightly
+        shell: bash
+        run: |
+          short_sha="${GITHUB_SHA::12}"
+          echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
+          echo "version_name=Nightly $short_sha" >> "$GITHUB_OUTPUT"
 
-      - name: Upload debug APK
+      - name: Restore nightly signing key
+        shell: bash
+        env:
+          NIGHTLY_KEYSTORE_BASE64: ${{ secrets.NIGHTLY_KEYSTORE_BASE64 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/aether-signing"
+          echo "$NIGHTLY_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/aether-signing/aether-nightly.jks"
+
+      - name: Build nightly APK
+        env:
+          NIGHTLY_KEYSTORE_FILE: ${{ runner.temp }}/aether-signing/aether-nightly.jks
+          NIGHTLY_KEYSTORE_PASSWORD: ${{ secrets.NIGHTLY_KEYSTORE_PASSWORD }}
+          NIGHTLY_KEY_ALIAS: ${{ secrets.NIGHTLY_KEY_ALIAS }}
+          NIGHTLY_KEY_PASSWORD: ${{ secrets.NIGHTLY_KEY_PASSWORD }}
+        run: ./gradlew :app:assembleNightly --stacktrace -Paether.versionName="${{ steps.nightly.outputs.version_name }}"
+
+      - name: Rename nightly APK
+        shell: bash
+        run: |
+          mkdir -p dist/nightly
+          cp app/build/outputs/apk/nightly/app-nightly.apk "dist/nightly/Aether-nightly-${{ steps.nightly.outputs.short_sha }}.apk"
+
+      - name: Upload nightly APK
         uses: actions/upload-artifact@v4
         with:
-          name: Aether-debug-null-workdir-fix
-          path: app/build/outputs/apk/debug/*.apk
+          name: Aether-nightly
+          path: dist/nightly/*.apk

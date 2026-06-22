@@ -69,7 +69,7 @@ Aether's UI and interactions are heavily inspired by excellent, mature applicati
 - Optional: [Termux](https://termux.dev/) installed
 
 ### Installation
-1. Download the latest [Release APK](https://github.com/Zhou-Shilin/Aether/releases).
+1. Download the latest [Release APK](https://github.com/Zhou-Shilin/Aether/releases) or [Nightly APK artifact](https://nightly.link/Zhou-Shilin/Aether/workflows/build-debug-apk.yml/main/Aether-nightly.zip).
 2. Follow the "Get Started" tour to configure the app.
 
 ---

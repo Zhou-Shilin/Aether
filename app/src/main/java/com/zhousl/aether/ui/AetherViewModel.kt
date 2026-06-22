@@ -55,6 +55,7 @@ import com.zhousl.aether.data.serializeMcpServerConfigs
 import com.zhousl.aether.data.serializeProviderConfigs
 import com.zhousl.aether.data.toJson
 import com.zhousl.aether.data.isProviderSetupValid
+import com.zhousl.aether.data.isNightlyUpdateNewer
 import com.zhousl.aether.data.isVersionNewer
 import com.zhousl.aether.data.isOnboardingComplete
 import com.zhousl.aether.data.shouldMarkOnboardingCompleted
@@ -87,6 +88,7 @@ import java.util.Base64
 
 private const val FollowUpTourAutoOpenDelayMillis = 2_500L
 private const val AppUpdateCheckIntervalMillis = 3L * 24L * 60L * 60L * 1000L
+private const val UpdateChannelNightly = "nightly"
 private const val LogcatReadTimeoutSeconds = 4L
 private const val SessionTitleSystemPrompt =
     "Generate a concise chat title for this conversation. Return only the title, in the user's language when possible, with no quotes, no emoji, and at most 6 words."
@@ -3684,16 +3686,29 @@ class AetherViewModel(
         viewModelScope.launch {
             val checkedAtMillis = System.currentTimeMillis()
             val result = withContext(Dispatchers.IO) {
-                runCatching { appUpdateManager.fetchLatestRelease() }
+                runCatching {
+                    if (BuildConfig.UPDATE_CHANNEL == UpdateChannelNightly) {
+                        appUpdateManager.fetchLatestNightly()
+                    } else {
+                        appUpdateManager.fetchLatestRelease()
+                    }
+                }
             }
             settingsRepository.updateLastUpdateCheckAtMillis(checkedAtMillis)
 
             result
                 .onSuccess { release ->
-                    val hasUpdate = forceAvailable || isVersionNewer(
-                        remoteVersion = release.versionName,
-                        currentVersion = BuildConfig.VERSION_NAME,
-                    )
+                    val hasUpdate = forceAvailable || if (BuildConfig.UPDATE_CHANNEL == UpdateChannelNightly) {
+                        isNightlyUpdateNewer(
+                            remoteVersion = release.versionName,
+                            currentVersion = BuildConfig.VERSION_NAME,
+                        )
+                    } else {
+                        isVersionNewer(
+                            remoteVersion = release.versionName,
+                            currentVersion = BuildConfig.VERSION_NAME,
+                        )
+                    }
                     _uiState.update { current ->
                         current.copy(
                             appUpdate = current.appUpdate.copy(
