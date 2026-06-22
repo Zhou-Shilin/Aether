@@ -394,6 +394,8 @@
     <string name="settings_provider_models_enabled_count">%1$d of %2$d models enabled</string>
     <string name="settings_no_enabled_models_available">No enabled models available</string>
     <string name="settings_enable_provider_model_first">Enable at least one provider model first, then return here to choose a default.</string>
+    <string name="settings_search_models">Search models</string>
+    <string name="settings_no_models_match_search">No models match this search.</string>
     <string name="settings_tavily_api_key">Tavily API Key</string>
     <string name="settings_tavily_base_url">Tavily Base URL</string>
     <string name="settings_web_tools_description">fetch_web_url works without extra setup. tavily_search uses this API key and Base URL; leave the URL blank to use the official Tavily endpoint.</string>
@@ -478,6 +480,8 @@
     <string name="provider_form_no_models_loaded">No models loaded yet.</string>
     <string name="provider_form_models_enabled_count">%1$d/%2$d enabled</string>
     <string name="provider_form_fetch_models">Fetch models</string>
+    <string name="provider_form_select_all_models">Select all</string>
+    <string name="provider_form_clear_all_models">Clear all</string>
     <string name="provider_form_custom_request_headers">Custom request headers</string>
     <string name="provider_form_headers_configured_count">%1$d configured</string>
     <string name="provider_form_add_header">Add header</string>

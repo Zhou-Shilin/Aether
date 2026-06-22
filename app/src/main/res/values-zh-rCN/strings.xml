@@ -386,6 +386,8 @@
     <string name="settings_provider_models_enabled_count">已启用 %1$d/%2$d 个模型</string>
     <string name="settings_no_enabled_models_available">没有可用的已启用模型</string>
     <string name="settings_enable_provider_model_first">请先启用至少一个提供方模型，然后再回来选择默认模型。</string>
+    <string name="settings_search_models">搜索模型</string>
+    <string name="settings_no_models_match_search">没有匹配此搜索的模型。</string>
     <string name="settings_tavily_api_key">Tavily API 密钥</string>
     <string name="settings_web_tools_description">fetch_web_url 无需额外配置即可使用。tavily_search 使用此 API Key 和 Base URL；将 URL 留空即可使用官方 Tavily API 地址。</string>
     <string name="settings_multitasking">后台运行</string>
@@ -462,9 +464,12 @@
     <string name="provider_form_model_picker_requires_api_key">已启用的模型会显示在聊天模型选择器中。此请求格式需要 API Key。</string>
     <string name="provider_form_model_picker_refresh_hint">已启用的模型会显示在聊天模型选择器中。刷新会从提供方 API 加载模型。</string>
     <string name="provider_form_choose_provider">选择提供方</string>
+    <string name="provider_form_model_list">模型列表</string>
     <string name="provider_form_no_models_loaded">尚未加载模型。</string>
     <string name="provider_form_models_enabled_count">已启用 %1$d/%2$d 个</string>
     <string name="provider_form_fetch_models">获取模型</string>
+    <string name="provider_form_select_all_models">全选</string>
+    <string name="provider_form_clear_all_models">取消全选</string>
     <string name="provider_form_custom_request_headers">自定义请求头</string>
     <string name="provider_form_headers_configured_count">已配置 %1$d 个</string>
     <string name="provider_form_add_header">添加请求头</string>

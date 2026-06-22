@@ -61,6 +61,7 @@ import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material3.Button
@@ -2284,6 +2285,24 @@ private fun ModelSelectionListPage(
     onBack: () -> Unit,
 ) {
     val selectedOption = options.findModelOption(selectedKey)
+    var searchQuery by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(""))
+    }
+    val trimmedSearchQuery = searchQuery.text.trim()
+    val filteredOptions = remember(options, trimmedSearchQuery) {
+        if (trimmedSearchQuery.isBlank()) {
+            options
+        } else {
+            val needle = trimmedSearchQuery.lowercase()
+            options.filter { option ->
+                option.fullLabel.contains(needle, ignoreCase = true) ||
+                    option.modelId.contains(needle, ignoreCase = true) ||
+                    option.providerName.contains(needle, ignoreCase = true) ||
+                    option.providerId.contains(needle, ignoreCase = true) ||
+                    option.providerType.displayName.contains(needle, ignoreCase = true)
+            }
+        }
+    }
 
     SubPageScaffold(
         title = title,
@@ -2318,13 +2337,21 @@ private fun ModelSelectionListPage(
         }
 
         SettingsCardGroup {
+            ModelSelectionSearchField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+
+        SettingsCardGroup {
             ModelSelectionListRow(
                 title = automaticLabel,
                 subtitle = automaticSubtitle,
                 selected = selectedOption == null,
                 onClick = { onSelected("") },
             )
-            options.forEach { option ->
+            filteredOptions.forEach { option ->
                 CardDivider()
                 ModelSelectionListRow(
                     title = option.fullLabel,
@@ -2333,7 +2360,59 @@ private fun ModelSelectionListPage(
                     onClick = { onSelected(option.key) },
                 )
             }
+            if (filteredOptions.isEmpty()) {
+                CardDivider()
+                Text(
+                    text = stringResource(R.string.settings_no_models_match_search),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AetherOnSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 18.dp),
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun ModelSelectionSearchField(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.Search,
+            contentDescription = null,
+            tint = AetherOnSurfaceVariant,
+            modifier = Modifier.size(20.dp),
+        )
+        Spacer(Modifier.width(12.dp))
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier
+                .weight(1f)
+                .settingsBringIntoViewOnFocus(),
+            textStyle = MaterialTheme.typography.bodyLarge.copy(color = AetherOnSurface),
+            cursorBrush = SolidColor(AetherPrimary),
+            singleLine = true,
+            decorationBox = { innerTextField ->
+                Box {
+                    if (value.text.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.settings_search_models),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = AetherOnSurfaceVariant.copy(alpha = 0.5f),
+                        )
+                    }
+                    innerTextField()
+                }
+            },
+        )
     }
 }
 

@@ -42,6 +42,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
@@ -173,6 +174,10 @@ class ProviderFormState internal constructor(
         } else {
             enabledModelIds.filterNot { it == normalizedModel }
         }
+    }
+
+    fun setAllModelsEnabled(enabled: Boolean) {
+        enabledModelIds = if (enabled) allModels else emptyList()
     }
 
     fun applyFetchedModels(models: List<String>) {
@@ -386,6 +391,10 @@ fun ProviderConfigurationForm(
                 isFetchingModels = state.isFetchingModelsLocally || isFetchingModels,
                 onToggleModel = { model, enabled ->
                     state.setModelEnabled(model, enabled)
+                    onModelEnabledChange(state.buildConfig())
+                },
+                onSetAllModelsEnabled = { enabled ->
+                    state.setAllModelsEnabled(enabled)
                     onModelEnabledChange(state.buildConfig())
                 },
                 onFetchModels = {
@@ -656,6 +665,7 @@ private fun ProviderModelListField(
     enabledModelIds: List<String>,
     isFetchingModels: Boolean,
     onToggleModel: (String, Boolean) -> Unit,
+    onSetAllModelsEnabled: (Boolean) -> Unit,
     onFetchModels: () -> Unit,
 ) {
     Column(
@@ -704,6 +714,24 @@ private fun ProviderModelListField(
 
         if (models.isNotEmpty()) {
             Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ProviderModelListActionButton(
+                    label = stringResource(R.string.provider_form_select_all_models),
+                    onClick = { onSetAllModelsEnabled(true) },
+                    enabled = enabledModelIds.size < models.size,
+                    modifier = Modifier.weight(1f),
+                )
+                ProviderModelListActionButton(
+                    label = stringResource(R.string.provider_form_clear_all_models),
+                    onClick = { onSetAllModelsEnabled(false) },
+                    enabled = enabledModelIds.isNotEmpty(),
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Spacer(modifier = Modifier.height(10.dp))
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 models.forEach { model ->
                     Row(
@@ -727,6 +755,35 @@ private fun ProviderModelListField(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ProviderModelListActionButton(
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                if (enabled) {
+                    ProviderFormPrimary.copy(alpha = 0.10f)
+                } else {
+                    AetherSurfaceHigh.copy(alpha = 0.55f)
+                }
+            )
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (enabled) ProviderFormPrimary else AetherOnSurfaceVariant.copy(alpha = 0.55f),
+        )
     }
 }
 
