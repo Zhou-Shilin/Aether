@@ -1,6 +1,7 @@
 package com.zhousl.aether.data
 
 import com.zhousl.aether.data.chatdb.ChatMessageEntity
+import com.zhousl.aether.data.chatdb.ChatMessageSummaryEntity
 import com.zhousl.aether.ui.ChatMessage
 import com.zhousl.aether.ui.MessageAuthor
 import com.zhousl.aether.ui.MessageDisplayKind
@@ -46,8 +47,19 @@ internal object ChatMessageEntityMapper {
             createdAtMillis = entity.createdAtMillis ?: timestampFromMessageId(entity.id),
             responseGroupId = entity.responseGroupId,
             providerPayloadJson = entity.messageJson,
-            displayKind = MessageDisplayKind.entries.firstOrNull { it.name == entity.displayKind }
-                ?: MessageDisplayKind.Standard,
+            displayKind = entity.displayKind.toMessageDisplayKind(),
         )
     }
+
+    fun summaryToChatMessage(entity: ChatMessageSummaryEntity): ChatMessage = ChatMessage(
+        id = entity.id,
+        author = MessageAuthor.entries.firstOrNull { it.name == entity.author } ?: MessageAuthor.Agent,
+        text = entity.text,
+        createdAtMillis = entity.createdAtMillis ?: timestampFromMessageId(entity.id),
+        responseGroupId = entity.responseGroupId,
+        displayKind = entity.displayKind.toMessageDisplayKind(),
+    )
+
+    private fun String?.toMessageDisplayKind(): MessageDisplayKind =
+        MessageDisplayKind.entries.firstOrNull { it.name == this } ?: MessageDisplayKind.Standard
 }

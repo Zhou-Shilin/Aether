@@ -1,5 +1,6 @@
 package com.zhousl.aether.data
 
+import com.zhousl.aether.data.chatdb.ChatMessageSummaryEntity
 import com.zhousl.aether.ui.AttachmentKind
 import com.zhousl.aether.ui.ChatAttachment
 import com.zhousl.aether.ui.ChatMessage
@@ -99,6 +100,27 @@ class ChatRepositorySerializationTest {
 
         assertTrue(output.getBoolean("ok"))
         assertEquals("x".repeat(140_000), output.getString("stdout"))
+    }
+
+    @Test
+    fun summaryMappingDoesNotReadLegacyMessageJsonPayload() {
+        val message = ChatMessageEntityMapper.summaryToChatMessage(
+            ChatMessageSummaryEntity(
+                sessionId = "session-1",
+                id = "agent-1",
+                position = 0,
+                author = MessageAuthor.Agent.name,
+                text = "Recovered from typed columns",
+                createdAtMillis = 123L,
+            )
+        )
+
+        assertEquals("agent-1", message.id)
+        assertEquals(MessageAuthor.Agent, message.author)
+        assertEquals("Recovered from typed columns", message.text)
+        assertEquals(123L, message.createdAtMillis)
+        assertTrue(message.toolInvocations.isEmpty())
+        assertTrue(message.providerPayloadJson.isNullOrBlank())
     }
 
     @Test

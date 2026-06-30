@@ -16,14 +16,30 @@ interface ChatHistoryDao {
     @Query("SELECT * FROM chat_state_meta WHERE id = :id")
     suspend fun getMeta(id: String = ChatStateMetaEntityId): ChatStateMetaEntity?
 
-    @Query("SELECT * FROM chat_messages WHERE sessionId = :sessionId ORDER BY position ASC")
-    fun observeMessagesForSession(sessionId: String): Flow<List<ChatMessageEntity>>
+    @Query("""
+        SELECT sessionId, id, position, author, text, createdAtMillis, responseGroupId, displayKind, messageSchemaVersion
+        FROM chat_messages
+        WHERE sessionId = :sessionId
+        ORDER BY position ASC
+    """)
+    fun observeMessageSummariesForSession(sessionId: String): Flow<List<ChatMessageSummaryEntity>>
 
-    @Query("SELECT * FROM chat_messages WHERE sessionId IN (:sessionIds) ORDER BY sessionId ASC, position ASC")
+    @Query("""
+        SELECT sessionId, id, position, author, text, createdAtMillis, responseGroupId, displayKind, messageSchemaVersion
+        FROM chat_messages
+        WHERE sessionId IN (:sessionIds)
+        ORDER BY sessionId ASC, position ASC
+    """)
+    fun observeMessageSummariesForSessions(sessionIds: List<String>): Flow<List<ChatMessageSummaryEntity>>
+
+    @Query("""
+        SELECT *
+        FROM chat_messages
+        WHERE sessionId IN (:sessionIds)
+        ORDER BY sessionId ASC, position ASC
+    """)
     fun observeMessagesForSessions(sessionIds: List<String>): Flow<List<ChatMessageEntity>>
 
-    @Query("SELECT * FROM chat_messages WHERE sessionId IN (:sessionIds) ORDER BY sessionId ASC, position ASC")
-    suspend fun getMessagesForSessions(sessionIds: List<String>): List<ChatMessageEntity>
 
     @Upsert
     suspend fun upsertMeta(meta: ChatStateMetaEntity)

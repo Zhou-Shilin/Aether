@@ -9,6 +9,7 @@ import androidx.room.withTransaction
 import com.zhousl.aether.data.chatdb.ChatHistoryDao
 import com.zhousl.aether.data.chatdb.ChatHistoryDatabase
 import com.zhousl.aether.data.chatdb.ChatMessageEntity
+import com.zhousl.aether.data.chatdb.ChatMessageSummaryEntity
 import com.zhousl.aether.data.chatdb.ChatSessionEntity
 import com.zhousl.aether.data.chatdb.ChatSessionSnapshot
 import com.zhousl.aether.data.chatdb.ChatStateMetaEntity

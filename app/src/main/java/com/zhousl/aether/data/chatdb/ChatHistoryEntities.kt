@@ -50,6 +50,18 @@ data class ChatMessageEntity(
     val messageSchemaVersion: Int = 1,
 )
 
+data class ChatMessageSummaryEntity(
+    val sessionId: String,
+    val id: String,
+    val position: Int,
+    val author: String = "UNKNOWN",
+    val text: String = "",
+    val createdAtMillis: Long? = null,
+    val responseGroupId: String? = null,
+    val displayKind: String? = null,
+    val messageSchemaVersion: Int = 1,
+)
+
 @Entity(
     tableName = "chat_state_meta",
     foreignKeys = [
