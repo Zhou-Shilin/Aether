@@ -121,6 +121,8 @@ data class AppSettings(
     val baseUrl: String = DefaultCustomProviderBaseUrl,
     val modelId: String = DefaultCustomModelId,
     val customHeaders: List<LlmCustomHeader> = emptyList(),
+    val providerUserAgentMode: ProviderUserAgentMode = ProviderUserAgentMode.Default,
+    val customProviderUserAgent: String? = null,
     val reasoningEffort: String = DefaultReasoningEffort,
     val systemPrompt: String = "You are Aether, a local-first Android agent that can call tools and complete tasks on-device. Use available tools instead of guessing local state.",
     val tavilyApiKey: String = "",
@@ -261,6 +263,84 @@ fun shouldRevealFollowUpTourCard(
 // Multi-Provider Configuration
 // ──────────────────────────────────────────────────────────────────────────────
 
+enum class ProviderUserAgentMode(val storageValue: String) {
+    Aether("aether"),
+    Default("default"),
+    Custom("custom");
+
+    companion object {
+        fun fromStorage(value: String?): ProviderUserAgentMode? =
+            entries.firstOrNull { it.storageValue == value?.trim()?.lowercase() }
+    }
+}
+
+internal data class NormalizedProviderUserAgent(
+    val mode: ProviderUserAgentMode,
+    val customValue: String?,
+    val headers: List<LlmCustomHeader>,
+)
+
+internal fun defaultProviderUserAgentMode(
+    piProviderId: String,
+    baseUrl: String,
+): ProviderUserAgentMode = if (
+    piProviderId == "openai" && !isOfficialOpenAiBaseUrl(baseUrl)
+) {
+    ProviderUserAgentMode.Aether
+} else {
+    ProviderUserAgentMode.Default
+}
+
+internal fun normalizeProviderUserAgent(
+    piProviderId: String,
+    baseUrl: String,
+    mode: ProviderUserAgentMode?,
+    customValue: String?,
+    headers: List<LlmCustomHeader>,
+): NormalizedProviderUserAgent {
+    val migratedValue = headers.firstOrNull {
+        it.name.trim().equals("User-Agent", ignoreCase = true)
+    }?.value
+        ?.trim()
+        ?.takeIf(String::isSafeHttpHeaderValue)
+        .orEmpty()
+    val headersWithoutUserAgent = headers.filterNot {
+        it.name.trim().equals("User-Agent", ignoreCase = true)
+    }
+    val fallbackMode = defaultProviderUserAgentMode(
+        piProviderId = piProviderId,
+        baseUrl = baseUrl,
+    )
+    val resolvedMode = mode ?: if (migratedValue.isNotBlank()) {
+        ProviderUserAgentMode.Custom
+    } else {
+        fallbackMode
+    }
+    val resolvedCustomValue = if (resolvedMode == ProviderUserAgentMode.Custom) {
+        customValue?.trim()
+            ?.takeIf(String::isSafeHttpHeaderValue)
+            .orEmpty()
+            .ifBlank { migratedValue }
+            .takeIf(String::isNotBlank)
+    } else {
+        null
+    }
+    return NormalizedProviderUserAgent(
+        mode = if (resolvedMode == ProviderUserAgentMode.Custom && resolvedCustomValue == null) {
+            fallbackMode
+        } else {
+            resolvedMode
+        },
+        customValue = resolvedCustomValue,
+        headers = headersWithoutUserAgent,
+    )
+}
+
+
+internal fun isOfficialOpenAiBaseUrl(baseUrl: String): Boolean =
+    runCatching { java.net.URI(baseUrl.trim()).host.equals("api.openai.com", ignoreCase = true) }
+        .getOrDefault(false)
+
 data class LlmProviderConfig(
     val id: String = UUID.randomUUID().toString(),
     val providerId: String,
@@ -276,6 +356,8 @@ data class LlmProviderConfig(
     val modelId: String,
     val manualModelIds: List<String> = listOf(modelId).filter(String::isNotBlank),
     val customHeaders: List<LlmCustomHeader> = emptyList(),
+    val userAgentMode: ProviderUserAgentMode = ProviderUserAgentMode.Default,
+    val customUserAgent: String? = null,
     val cachedModels: List<String> = emptyList(),
     val enabledModelIds: List<String> = cachedModels + manualModelIds,
     val isEnabled: Boolean = true,
@@ -307,6 +389,8 @@ internal fun LlmProviderConfig.toJson(): JSONObject = JSONObject().apply {
     put("modelId", modelId)
     put("manualModelIds", JSONArray().apply { manualModelIds.forEach(::put) })
     put("customHeaders", customHeaders.toJsonArray())
+    put("userAgentMode", userAgentMode.storageValue)
+    customUserAgent?.let { put("customUserAgent", it) }
     put("cachedModels", JSONArray().apply { cachedModels.forEach(::put) })
     put("enabledModelIds", JSONArray().apply { enabledModelIds.forEach(::put) })
     put("isEnabled", isEnabled)
@@ -353,6 +437,14 @@ internal fun parseProviderConfigs(rawValue: String): List<LlmProviderConfig> {
                 val inferredProviderId = providerName
                     .sanitizeProviderId()
                     .ifBlank { "${providerDefinition.id.sanitizeProviderId()}_${index + 1}" }
+                val storedHeaders = parseCustomHeaders(json.optJSONArray("customHeaders"))
+                val userAgent = normalizeProviderUserAgent(
+                    piProviderId = piProviderId,
+                    baseUrl = baseUrl,
+                    mode = ProviderUserAgentMode.fromStorage(json.optString("userAgentMode")),
+                    customValue = json.optString("customUserAgent").trim().takeIf(String::isNotBlank),
+                    headers = storedHeaders,
+                )
                 add(
                     LlmProviderConfig(
                         id = json.optString("id").trim().ifBlank { UUID.randomUUID().toString() },
@@ -371,7 +463,9 @@ internal fun parseProviderConfigs(rawValue: String): List<LlmProviderConfig> {
                         baseUrl = baseUrl,
                         modelId = modelId,
                         manualModelIds = manualModelIds,
-                        customHeaders = parseCustomHeaders(json.optJSONArray("customHeaders")),
+                        customHeaders = userAgent.headers,
+                        userAgentMode = userAgent.mode,
+                        customUserAgent = userAgent.customValue,
                         cachedModels = cachedModels,
                         enabledModelIds = if (json.has("enabledModelIds")) {
                             normalizeStringList(enabledModelIds.filter(availableModels::contains))
@@ -495,6 +589,8 @@ data class ProviderModelOption(
     val baseUrl: String,
     val modelId: String,
     val customHeaders: List<LlmCustomHeader>,
+    val userAgentMode: ProviderUserAgentMode,
+    val customUserAgent: String?,
     val fullLabel: String,
     val chatLabel: String,
 )
@@ -546,6 +642,8 @@ fun List<LlmProviderConfig>.availableModelOptions(
                 baseUrl = config.baseUrl.trim(),
                 modelId = normalizedModelId,
                 customHeaders = config.customHeaders,
+                userAgentMode = config.userAgentMode,
+                customUserAgent = config.customUserAgent,
                 fullLabel = fullLabel,
                 chatLabel = if ((modelCounts[normalizedModelId] ?: 0) > 1) fullLabel else normalizedModelId,
             )
@@ -570,6 +668,8 @@ fun AppSettings.withModelOption(option: ProviderModelOption): AppSettings = copy
     baseUrl = option.baseUrl.trim(),
     modelId = option.modelId.trim(),
     customHeaders = option.customHeaders,
+    providerUserAgentMode = option.userAgentMode,
+    customProviderUserAgent = option.customUserAgent,
 )
 
 fun List<ProviderModelOption>.findModelOption(key: String?): ProviderModelOption? =

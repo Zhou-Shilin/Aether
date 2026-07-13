@@ -1,5 +1,6 @@
 package com.zhousl.aether.data.pi
 
+import com.zhousl.aether.data.AetherLlmUserAgent
 import com.zhousl.aether.data.AppSettings
 import com.zhousl.aether.data.LlmCustomHeader
 import com.zhousl.aether.data.LlmImagePart
@@ -7,6 +8,7 @@ import com.zhousl.aether.data.LlmMessage
 import com.zhousl.aether.data.LlmTextPart
 import com.zhousl.aether.data.LlmTokenUsage
 import com.zhousl.aether.data.ProviderAuthMethod
+import com.zhousl.aether.data.ProviderUserAgentMode
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -37,6 +39,47 @@ class PiProviderMapperTest {
             modelId = "gpt-5.4",
             reasoningEffort = "high",
         ).toPiThinkingLevel())
+    }
+
+    private val userAgentTestSettings = AppSettings(
+        piProviderId = "anthropic",
+        apiKey = "anthropic-key",
+        baseUrl = "https://api.anthropic.com/v1",
+        modelId = "claude-test",
+        customHeaders = listOf(
+            LlmCustomHeader("User-Agent", "ignored-legacy-value"),
+            LlmCustomHeader("X-Test", "yes"),
+            LlmCustomHeader("Bad Header", "ignored-invalid-name"),
+        ),
+    )
+
+    @Test
+    fun aetherUserAgentOverridesLegacyHeaderBeforeMappingToPi() {
+        assertEquals(
+            mapOf("X-Test" to "yes", "User-Agent" to AetherLlmUserAgent),
+            userAgentTestSettings.copy(
+                providerUserAgentMode = ProviderUserAgentMode.Aether,
+            ).toPiModelConfig().customHeaders,
+        )
+    }
+
+    @Test
+    fun defaultUserAgentRemovesLegacyHeaderBeforeMappingToPi() {
+        assertEquals(
+            mapOf("X-Test" to "yes"),
+            userAgentTestSettings.toPiModelConfig().customHeaders,
+        )
+    }
+
+    @Test
+    fun customUserAgentOverridesLegacyHeaderBeforeMappingToPi() {
+        assertEquals(
+            mapOf("X-Test" to "yes", "User-Agent" to "ExampleClient/1.0"),
+            userAgentTestSettings.copy(
+                providerUserAgentMode = ProviderUserAgentMode.Custom,
+                customProviderUserAgent = "ExampleClient/1.0",
+            ).toPiModelConfig().customHeaders,
+        )
     }
 
     @Test

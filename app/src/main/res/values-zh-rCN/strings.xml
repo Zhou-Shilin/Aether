@@ -493,6 +493,7 @@
     <string name="provider_form_model_picker_api_key_hint">已启用的模型会显示在聊天模型选择器中。刷新模型目录前，请先配置 API Key 认证。</string>
     <string name="provider_form_model_picker_refresh_hint">已启用的模型会显示在聊天模型选择器中。刷新会从提供方 API 加载模型。</string>
     <string name="provider_form_choose_provider">选择提供方</string>
+    <string name="provider_form_choose_user_agent">选择 User-Agent 模式</string>
     <string name="provider_form_model_list">模型列表</string>
     <string name="provider_form_no_models_loaded">尚未加载模型。</string>
     <string name="provider_form_models_enabled_count">已启用 %1$d/%2$d 个</string>
@@ -505,6 +506,12 @@
     <string name="provider_form_header_name">请求头</string>
     <string name="provider_form_header_value">值</string>
     <string name="provider_form_remove_header">移除请求头</string>
+    <string name="provider_form_user_agent_default">默认</string>
+    <string name="provider_form_user_agent_default_description">使用系统默认值。</string>
+    <string name="provider_form_user_agent_custom">自定义</string>
+    <string name="provider_form_user_agent_custom_description">使用自定义值。</string>
+    <string name="provider_form_user_agent_custom_value">User-Agent 值</string>
+    <string name="provider_form_user_agent_custom_required">请输入 User-Agent 值。</string>
     <string name="provider_add_step">第 %1$d 步，共 %2$d 步</string>
     <string name="provider_add_choose_auth_title">选择认证方式</string>
     <string name="provider_add_choose_auth_description">选择你已有的认证方式。</string>

@@ -3,6 +3,7 @@ package com.zhousl.aether.data
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -208,6 +209,100 @@ class ProviderConfigSerializationTest {
         assertEquals("X-Title", config.customHeaders[1].name)
         assertEquals("Aether", config.customHeaders[1].value)
         assertEquals(config.customHeaders, listOf(config).availableModelOptions().single().customHeaders)
+    }
+
+    @Test
+    fun providerConfigRoundTripsUserAgentModeAndCustomValue() {
+        val config = parseProviderConfigs(
+            serializeProviderConfigs(
+                listOf(
+                    LlmProviderConfig(
+                        providerId = "openrouter",
+                        name = "OpenRouter",
+                        piProviderId = "openrouter",
+                        apiKey = "test-key",
+                        baseUrl = "https://openrouter.ai/api/v1",
+                        modelId = "openai/gpt-test",
+                        userAgentMode = ProviderUserAgentMode.Custom,
+                        customUserAgent = "ExampleClient/1.0",
+                    )
+                )
+            )
+        ).single()
+
+        assertEquals(ProviderUserAgentMode.Custom, config.userAgentMode)
+        assertEquals("ExampleClient/1.0", config.customUserAgent)
+    }
+
+    @Test
+    fun legacyUserAgentHeaderMigratesToTheDedicatedCustomSetting() {
+        val config = parseProviderConfigs(
+            """[{"id":"legacy","providerId":"openai","name":"OpenAI","piProviderId":"openai","baseUrl":"https://example.invalid/v1","modelId":"test-model","customHeaders":[{"name":"User-Agent","value":"LegacyClient/1.0"},{"name":"X-Test","value":"yes"}]}]""",
+        ).single()
+
+        assertEquals(ProviderUserAgentMode.Custom, config.userAgentMode)
+        assertEquals("LegacyClient/1.0", config.customUserAgent)
+        assertEquals(listOf(LlmCustomHeader("X-Test", "yes")), config.customHeaders)
+    }
+
+
+    @Test
+    fun explicitUserAgentModeTakesPrecedenceOverLegacyHeader() {
+        val config = parseProviderConfigs(
+            """[{"id":"legacy","providerId":"openai","name":"OpenAI","piProviderId":"openai","baseUrl":"https://example.test/v1","modelId":"test-model","userAgentMode":"default","customHeaders":[{"name":"User-Agent","value":"LegacyClient/1.0"},{"name":"X-Test","value":"yes"}]}]""",
+        ).single()
+
+        assertEquals(ProviderUserAgentMode.Default, config.userAgentMode)
+        assertNull(config.customUserAgent)
+        assertEquals(listOf(LlmCustomHeader("X-Test", "yes")), config.customHeaders)
+    }
+
+    @Test
+    fun blankCustomUserAgentNormalizesToNoCustomValue() {
+        val config = parseProviderConfigs(
+            """[{"id":"legacy","providerId":"anthropic","name":"Anthropic","piProviderId":"anthropic","baseUrl":"https://api.anthropic.com","modelId":"claude-test","userAgentMode":"custom","customUserAgent":"   "}]""",
+        ).single()
+
+        assertEquals(ProviderUserAgentMode.Default, config.userAgentMode)
+        assertNull(config.customUserAgent)
+        assertTrue(!config.toJson().has("customUserAgent"))
+    }
+
+    @Test
+    fun legacyNonOfficialOpenAiProviderDefaultsToAetherUserAgent() {
+        val config = parseProviderConfigs(
+            """[{"id":"legacy","providerId":"openai","name":"OpenAI","piProviderId":"openai","baseUrl":"https://example.test/v1","modelId":"gpt-5.5"}]""",
+        ).single()
+
+        assertEquals(ProviderUserAgentMode.Aether, config.userAgentMode)
+    }
+
+    @Test
+    fun legacyOtherProviderDefaultsToRequestClientUserAgent() {
+        val config = parseProviderConfigs(
+            """[{"id":"legacy","providerId":"anthropic","name":"Anthropic","piProviderId":"anthropic","baseUrl":"https://api.anthropic.com/v1","modelId":"claude-test"}]""",
+        ).single()
+
+        assertEquals(ProviderUserAgentMode.Default, config.userAgentMode)
+    }
+
+    @Test
+    fun selectingProviderModelPreservesItsUserAgentSetting() {
+        val provider = LlmProviderConfig(
+            providerId = "openrouter",
+            name = "OpenRouter",
+            piProviderId = "openrouter",
+            apiKey = "test-key",
+            baseUrl = "https://openrouter.ai/api/v1",
+            modelId = "openai/gpt-test",
+            userAgentMode = ProviderUserAgentMode.Custom,
+            customUserAgent = "ExampleClient/1.0",
+        )
+
+        val settings = AppSettings().withModelOption(provider.availableModelOptions().single())
+
+        assertEquals(ProviderUserAgentMode.Custom, settings.providerUserAgentMode)
+        assertEquals("ExampleClient/1.0", settings.customProviderUserAgent)
     }
 
     @Test

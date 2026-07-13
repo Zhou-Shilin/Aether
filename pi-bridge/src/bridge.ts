@@ -970,6 +970,31 @@ function emitStreamEvent(requestId: string, event: AssistantMessageEvent): void 
   }
 }
 
+function mergeHeadersWithProviderPrecedence(
+  requestHeaders: Record<string, string>,
+  providerHeaders: Record<string, string>,
+): Record<string, string> {
+  const headers = new Map<string, string>();
+  for (const [name, value] of Object.entries(requestHeaders)) {
+    headers.set(name.trim().toLowerCase(), value);
+  }
+  for (const [name, value] of Object.entries(providerHeaders)) {
+    headers.set(name.trim().toLowerCase(), value);
+  }
+  return Object.fromEntries(headers);
+}
+
+function headersForStreamOptions(
+  payload: JsonObject,
+  config: ModelConfig,
+  model: Model<string>,
+): Record<string, string> {
+  const requestHeaders = normalizeHeaders(payload.headers);
+  return model.api === "bedrock-converse-stream"
+    ? mergeHeadersWithProviderPrecedence(requestHeaders, config.custom_headers ?? {})
+    : requestHeaders;
+}
+
 function streamOptionsFor(
   payload: JsonObject,
   signal: AbortSignal,
@@ -979,7 +1004,7 @@ function streamOptionsFor(
   const options: SimpleStreamOptions = {
     signal,
     sessionId: asString(payload.session_id),
-    headers: normalizeHeaders(payload.headers),
+    headers: headersForStreamOptions(payload, config, model),
     timeoutMs: asNumber(payload.timeout_ms, config.timeout_ms ?? 360000),
     maxRetries: asNumber(payload.max_retries, config.max_retries ?? 2),
     maxRetryDelayMs: asNumber(payload.max_retry_delay_ms, config.max_retry_delay_ms ?? 60000),
@@ -996,9 +1021,9 @@ function streamOptionsFor(
   return options;
 }
 
-function harnessStreamOptions(payload: JsonObject, config: ModelConfig) {
+function harnessStreamOptions(payload: JsonObject, config: ModelConfig, model: Model<string>) {
   return {
-    headers: normalizeHeaders(payload.headers),
+    headers: headersForStreamOptions(payload, config, model),
     timeoutMs: asNumber(payload.timeout_ms, config.timeout_ms ?? 360000),
     maxRetries: asNumber(payload.max_retries, config.max_retries ?? 2),
     maxRetryDelayMs: asNumber(payload.max_retry_delay_ms, config.max_retry_delay_ms ?? 60000),
@@ -1928,7 +1953,7 @@ async function createHarnessSession(
     systemPrompt: () => state.systemPrompt,
     tools: [...tools.values()],
     thinkingLevel: thinkingLevelFor(payload),
-    streamOptions: harnessStreamOptions(payload, config),
+    streamOptions: harnessStreamOptions(payload, config, model),
   });
   state.harness = harness;
   harness.subscribe((event) => emitHarnessEvent(state, event));
@@ -1978,7 +2003,7 @@ async function prepareHarnessSession(
     ? payload.extension_paths.filter((value): value is string => typeof value === "string")
     : [];
   await reusable.harness.setThinkingLevel(thinkingLevelFor(payload) ?? "off");
-  await reusable.harness.setStreamOptions(harnessStreamOptions(payload, config));
+  await reusable.harness.setStreamOptions(harnessStreamOptions(payload, config, reusable.model));
   reusable.hostTools = normalizeHostToolDefinitions(payload.host_tools).map((tool) =>
     createHostTool(reusable, tool),
   );

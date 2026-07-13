@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -23,10 +24,18 @@ class SettingsRepository(
         val defaults = AppSettings()
         val storedWorkspaceMode = AgentWorkspaceMode.fromStorage(preferences[AGENT_WORKSPACE_MODE])
         val storedBaseUrl = preferences[BASE_URL] ?: defaults.baseUrl
+        val storedPiProviderId = preferences[PI_PROVIDER_ID]
+            ?.takeIf(String::isNotBlank)
+            ?: inferLegacyPiProviderId(preferences[PROVIDER], storedBaseUrl)
+        val storedUserAgent = normalizeProviderUserAgent(
+            piProviderId = storedPiProviderId,
+            baseUrl = storedBaseUrl,
+            mode = ProviderUserAgentMode.fromStorage(preferences[PROVIDER_USER_AGENT_MODE]),
+            customValue = preferences[CUSTOM_PROVIDER_USER_AGENT],
+            headers = emptyList(),
+        )
         AppSettings(
-            piProviderId = preferences[PI_PROVIDER_ID]
-                ?.takeIf(String::isNotBlank)
-                ?: inferLegacyPiProviderId(preferences[PROVIDER], storedBaseUrl),
+            piProviderId = storedPiProviderId,
             providerConfigId = preferences[PROVIDER_CONFIG_ID].orEmpty(),
             providerAuthMethod = ProviderAuthMethod.fromStorage(preferences[PROVIDER_AUTH_METHOD]),
             apiKey = preferences[API_KEY].orEmpty(),
@@ -37,6 +46,8 @@ class SettingsRepository(
             ),
             baseUrl = storedBaseUrl,
             modelId = preferences[MODEL_ID] ?: defaults.modelId,
+            providerUserAgentMode = storedUserAgent.mode,
+            customProviderUserAgent = storedUserAgent.customValue,
             reasoningEffort = normalizeReasoningEffort(preferences[REASONING_EFFORT]),
             systemPrompt = preferences[SYSTEM_PROMPT] ?: defaults.systemPrompt,
             tavilyApiKey = preferences[TAVILY_API_KEY].orEmpty(),
@@ -173,6 +184,10 @@ class SettingsRepository(
                     enabledModelIds = listOf(
                         legacyModelId.ifBlank { definition.defaultModelId },
                     ).filter(String::isNotBlank),
+                    userAgentMode = defaultProviderUserAgentMode(
+                        piProviderId = definition.id,
+                        baseUrl = legacyBaseUrl.ifBlank { definition.defaultBaseUrl },
+                    ),
                 )
                 parsedConfigs += matchingConfig
             }
@@ -194,6 +209,7 @@ class SettingsRepository(
                     )
                 prefs[BASE_URL] = config.baseUrl
                 prefs[MODEL_ID] = legacyModelId.ifBlank { config.modelId }
+                prefs.writeProviderUserAgent(config.userAgentMode, config.customUserAgent)
             }
             prefs.remove(PROVIDER)
             prefs.remove(BASIC_FUNCTION_CALLING_COMPATIBILITY_MODE)
@@ -299,6 +315,10 @@ class SettingsRepository(
                 )
                 prefs[BASE_URL] = fallbackOption.baseUrl
                 prefs[MODEL_ID] = fallbackOption.modelId
+                prefs.writeProviderUserAgent(
+                    fallbackOption.userAgentMode,
+                    fallbackOption.customUserAgent,
+                )
             }
         }
     }
@@ -318,6 +338,10 @@ class SettingsRepository(
             )
             it[BASE_URL] = settings.baseUrl
             it[MODEL_ID] = settings.modelId
+            it.writeProviderUserAgent(
+                settings.providerUserAgentMode,
+                settings.customProviderUserAgent,
+            )
             it[REASONING_EFFORT] = normalizeReasoningEffort(settings.reasoningEffort)
             it[SYSTEM_PROMPT] = settings.systemPrompt
             it[TAVILY_API_KEY] = settings.tavilyApiKey
@@ -409,6 +433,10 @@ class SettingsRepository(
             )
             it[BASE_URL] = settings.baseUrl
             it[MODEL_ID] = settings.modelId
+            it.writeProviderUserAgent(
+                settings.providerUserAgentMode,
+                settings.customProviderUserAgent,
+            )
             it[REASONING_EFFORT] = normalizeReasoningEffort(settings.reasoningEffort)
             it[SYSTEM_PROMPT] = settings.systemPrompt
             it[TAVILY_API_KEY] = settings.tavilyApiKey
@@ -482,6 +510,16 @@ class SettingsRepository(
             preferences[WORKSPACE_MODE_INITIALIZED] ?: false
         }.first()
 
+    private fun MutablePreferences.writeProviderUserAgent(
+        mode: ProviderUserAgentMode,
+        customValue: String?,
+    ) {
+        this[PROVIDER_USER_AGENT_MODE] = mode.storageValue
+        customValue?.let { value ->
+            this[CUSTOM_PROVIDER_USER_AGENT] = value
+        } ?: remove(CUSTOM_PROVIDER_USER_AGENT)
+    }
+
     private companion object {
         val PROVIDER = stringPreferencesKey("provider")
         val PI_PROVIDER_ID = stringPreferencesKey("pi_provider_id")
@@ -492,6 +530,8 @@ class SettingsRepository(
         val PROVIDER_ENVIRONMENT_VARIABLES = stringPreferencesKey("provider_environment_variables")
         val BASE_URL = stringPreferencesKey("base_url")
         val MODEL_ID = stringPreferencesKey("model_id")
+        val PROVIDER_USER_AGENT_MODE = stringPreferencesKey("provider_user_agent_mode")
+        val CUSTOM_PROVIDER_USER_AGENT = stringPreferencesKey("custom_provider_user_agent")
         val REASONING_EFFORT = stringPreferencesKey("reasoning_effort")
         val SYSTEM_PROMPT = stringPreferencesKey("system_prompt")
         val TAVILY_API_KEY = stringPreferencesKey("tavily_api_key")

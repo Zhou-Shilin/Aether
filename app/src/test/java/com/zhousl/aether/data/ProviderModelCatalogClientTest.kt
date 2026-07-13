@@ -54,7 +54,7 @@ class ProviderModelCatalogClientTest {
     }
 
     @Test
-    fun fetchModelsIncludesAetherUserAgentAndCustomHeaders() = runBlocking {
+    fun fetchModelsIncludesSelectedAetherUserAgentAndCustomHeaders() = runBlocking {
         val server = MockWebServer()
         server.enqueue(
             MockResponse()
@@ -73,6 +73,7 @@ class ProviderModelCatalogClientTest {
                     baseUrl = server.url("/v1").toString(),
                     modelId = "gpt-test",
                     customHeaders = listOf(LlmCustomHeader("X-Aether-Test", "models")),
+                    userAgentMode = ProviderUserAgentMode.Aether,
                 )
             )
 
@@ -80,6 +81,36 @@ class ProviderModelCatalogClientTest {
             val request = server.takeRequest()
             assertEquals(AetherLlmUserAgent, request.getHeader("User-Agent"))
             assertEquals("models", request.getHeader("X-Aether-Test"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun fetchModelsIncludesCustomUserAgent() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .addHeader("Content-Type", "application/json")
+                .setBody("""{"data":[{"id":"gpt-test"}]}"""),
+        )
+        server.start()
+
+        try {
+            ProviderModelCatalogClient.fetchModels(
+                LlmProviderConfig(
+                    providerId = "custom",
+                    name = "Custom",
+                    piProviderId = "openai-compatible",
+                    apiKey = "test-key",
+                    baseUrl = server.url("/v1").toString(),
+                    modelId = "gpt-test",
+                    userAgentMode = ProviderUserAgentMode.Custom,
+                    customUserAgent = "ExampleClient/1.0",
+                ),
+            )
+
+            assertEquals("ExampleClient/1.0", server.takeRequest().getHeader("User-Agent"))
         } finally {
             server.shutdown()
         }

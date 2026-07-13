@@ -136,7 +136,7 @@ object ProviderModelCatalogClient {
         connection.requestMethod = "GET"
         connection.setRequestProperty("Authorization", "Bearer ${config.apiKey}")
         connection.setRequestProperty("Content-Type", "application/json")
-        connection.applyAetherLlmHeaders(config.customHeaders)
+        connection.applyProviderLlmHeaders(config)
         connection.connectTimeout = 15_000
         connection.readTimeout = 30_000
 

@@ -509,6 +509,7 @@
     <string name="provider_form_model_picker_api_key_hint">Enabled models appear in the chat model picker. Configure API key authentication before refreshing the catalog.</string>
     <string name="provider_form_model_picker_refresh_hint">Enabled models appear in the chat model picker. Refresh loads models from the provider API.</string>
     <string name="provider_form_choose_provider">Choose provider</string>
+    <string name="provider_form_choose_user_agent">Choose User-Agent mode</string>
     <string name="provider_form_model_list">Model list</string>
     <string name="provider_form_no_models_loaded">No models loaded yet.</string>
     <string name="provider_form_models_enabled_count">%1$d/%2$d enabled</string>
@@ -893,4 +894,13 @@
     <string name="message_pi_extension_imported">Imported extension %1$s</string>
     <string name="message_pi_extension_updated">Extension changes applied</string>
     <string name="message_pi_extension_operation_failed">Extension operation failed: %1$s</string>
+    <string name="provider_form_user_agent">User-Agent</string>
+    <string name="provider_form_user_agent_aether">Aether</string>
+    <string name="provider_form_user_agent_aether_description">Aether/%1$s (Android)</string>
+    <string name="provider_form_user_agent_default">Default</string>
+    <string name="provider_form_user_agent_default_description">Uses the system default.</string>
+    <string name="provider_form_user_agent_custom">Custom</string>
+    <string name="provider_form_user_agent_custom_description">Uses a custom value.</string>
+    <string name="provider_form_user_agent_custom_value">User-Agent value</string>
+    <string name="provider_form_user_agent_custom_required">Enter a User-Agent value.</string>
 </resources>

@@ -4,6 +4,7 @@ import com.zhousl.aether.data.LlmProviderConfig
 import com.zhousl.aether.data.PiProviderCatalog
 import com.zhousl.aether.data.PiProviderEnvironmentVariable
 import com.zhousl.aether.data.ProviderAuthMethod
+import com.zhousl.aether.data.ProviderUserAgentMode
 import com.zhousl.aether.data.availableModels
 import com.zhousl.aether.data.pi.PiProviderAuthState
 import org.junit.Assert.assertEquals
@@ -87,6 +88,21 @@ class ProviderConfigFormTest {
             listOf("manual-a", "manual-b", "manual-c", "manual-d"),
             parseManualModelIds("manual-a\nmanual-b, manual-c; manual-d"),
         )
+    }
+
+    @Test
+    fun openAiBaseUrlAutomaticallyUsesAetherUntilUserSelectsUserAgentMode() {
+        val state = ProviderFormState.fromConfig(null)
+        state.applyProviderDefaults(PiProviderCatalog.resolve("openai"))
+
+        assertEquals(ProviderUserAgentMode.Default, state.userAgentMode)
+
+        state.updateBaseUrl("https://example.test/v1")
+        assertEquals(ProviderUserAgentMode.Aether, state.userAgentMode)
+
+        state.selectUserAgentMode(ProviderUserAgentMode.Default)
+        state.updateBaseUrl("https://another.example.test/v1")
+        assertEquals(ProviderUserAgentMode.Default, state.userAgentMode)
     }
 
     @Test

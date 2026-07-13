@@ -1,9 +1,13 @@
 package com.zhousl.aether.data.pi
 
+import com.zhousl.aether.data.AetherLlmUserAgent
 import com.zhousl.aether.data.AppSettings
 import com.zhousl.aether.data.LlmCustomHeader
 import com.zhousl.aether.data.LlmTokenUsage
 import com.zhousl.aether.data.PiProviderCatalog
+import com.zhousl.aether.data.ProviderUserAgentMode
+import com.zhousl.aether.data.isSafeHttpHeaderValue
+import com.zhousl.aether.data.normalizedLlmHeaders
 import com.zhousl.aether.data.normalizeReasoningEffort
 import com.zhousl.aether.data.ProviderAuthMethod
 import org.json.JSONObject
@@ -107,7 +111,10 @@ fun AppSettings.toPiModelConfig(): PiModelConfig {
         } else {
             ""
         },
-        customHeaders = customHeaders.toPiHeaderMap(),
+        customHeaders = customHeaders.toPiHeaderMap(
+            userAgentMode = providerUserAgentMode,
+            customUserAgent = customProviderUserAgent,
+        ),
         reasoning = false,
         timeoutMillis = llmInactivityReconnectTimeoutSeconds
             .coerceIn(30, 3_600) * 1_000,
@@ -187,15 +194,23 @@ private fun stableProviderSuffix(baseUrl: String): String =
         .take(48)
         .ifBlank { "custom" }
 
-private fun List<LlmCustomHeader>.toPiHeaderMap(): Map<String, String> =
-    mapNotNull { header ->
-        val name = header.name.trim()
-        if (name.isBlank()) {
-            null
-        } else {
-            name to header.value
+private fun List<LlmCustomHeader>.toPiHeaderMap(
+    userAgentMode: ProviderUserAgentMode,
+    customUserAgent: String?,
+): Map<String, String> = buildMap {
+    this@toPiHeaderMap.normalizedLlmHeaders().forEach { header ->
+        if (!header.name.equals("User-Agent", ignoreCase = true)) {
+            put(header.name, header.value)
         }
-    }.toMap()
+    }
+    when (userAgentMode) {
+        ProviderUserAgentMode.Aether -> put("User-Agent", AetherLlmUserAgent)
+        ProviderUserAgentMode.Custom -> customUserAgent?.trim().orEmpty()
+            .takeIf { value -> value.isNotBlank() && value.isSafeHttpHeaderValue() }
+            ?.let { value -> put("User-Agent", value) }
+        ProviderUserAgentMode.Default -> Unit
+    }
+}
 
 
 private fun JSONObject.toLlmTokenUsage(): LlmTokenUsage? {

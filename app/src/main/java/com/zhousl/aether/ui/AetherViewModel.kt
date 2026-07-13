@@ -1803,6 +1803,8 @@ class AetherViewModel(
                     baseUrl = selectedModelSettings.baseUrl,
                     modelId = selectedModelSettings.modelId,
                     customHeaders = selectedModelSettings.customHeaders,
+                    providerUserAgentMode = selectedModelSettings.providerUserAgentMode,
+                    customProviderUserAgent = selectedModelSettings.customProviderUserAgent,
                     systemPrompt = systemPrompt,
                     tavilyApiKey = tavilyApiKey.trim(),
                     tavilyBaseUrl = normalizeTavilyBaseUrl(tavilyBaseUrl),
@@ -3726,17 +3728,27 @@ class AetherViewModel(
             .map(String::trim)
             .filter { it.isNotEmpty() && availableModels.contains(it) }
             .distinct()
+        val normalizedBaseUrl = config.baseUrl.trim()
+        val normalizedUserAgent = com.zhousl.aether.data.normalizeProviderUserAgent(
+            piProviderId = definition.id,
+            baseUrl = normalizedBaseUrl,
+            mode = config.userAgentMode,
+            customValue = config.customUserAgent,
+            headers = config.customHeaders
+                .map { header -> header.copy(name = header.name.trim()) }
+                .filter { header -> header.name.isNotBlank() }
+                .distinctBy { header -> header.name.lowercase() },
+        )
         return config.copy(
             providerId = config.providerId.trim(),
             name = config.name.trim().ifBlank { definition.displayName },
             piProviderId = definition.id,
-            baseUrl = config.baseUrl.trim(),
+            baseUrl = normalizedBaseUrl,
             modelId = normalizedModelId,
             manualModelIds = manualModels,
-            customHeaders = config.customHeaders
-                .map { header -> header.copy(name = header.name.trim()) }
-                .filter { header -> header.name.isNotBlank() }
-                .distinctBy { header -> header.name.lowercase() },
+            customHeaders = normalizedUserAgent.headers,
+            userAgentMode = normalizedUserAgent.mode,
+            customUserAgent = normalizedUserAgent.customValue,
             providerEnvironmentVariables = config.providerEnvironmentVariables
                 .map { variable -> variable.copy(name = variable.name.trim()) }
                 .filter { variable -> variable.name.isNotBlank() }
@@ -4820,6 +4832,8 @@ class AetherViewModel(
         put("baseUrl", baseUrl)
         put("modelId", modelId)
         put("customHeaders", customHeaders.toJsonArray())
+        put("providerUserAgentMode", providerUserAgentMode.storageValue)
+        customProviderUserAgent?.let { put("customProviderUserAgent", it) }
         put("reasoningEffort", reasoningEffort)
         put("systemPrompt", systemPrompt)
         put("tavilyApiKey", tavilyApiKey)
@@ -4888,6 +4902,16 @@ class AetherViewModel(
                 importedBaseUrl,
             )
         }
+        val importedHeaders = parseCustomHeaders(json.optJSONArray("customHeaders"))
+        val importedUserAgent = com.zhousl.aether.data.normalizeProviderUserAgent(
+            piProviderId = importedPiProviderId,
+            baseUrl = importedBaseUrl,
+            mode = com.zhousl.aether.data.ProviderUserAgentMode.fromStorage(
+                json.optString("providerUserAgentMode"),
+            ),
+            customValue = json.optString("customProviderUserAgent").trim().takeIf(String::isNotBlank),
+            headers = importedHeaders,
+        )
         return AppSettings(
             piProviderId = importedPiProviderId,
             providerConfigId = json.optString("providerConfigId"),
@@ -4905,7 +4929,9 @@ class AetherViewModel(
                 ),
             baseUrl = importedBaseUrl,
             modelId = json.optString("modelId", defaults.modelId),
-            customHeaders = parseCustomHeaders(json.optJSONArray("customHeaders")),
+            customHeaders = importedUserAgent.headers,
+            providerUserAgentMode = importedUserAgent.mode,
+            customProviderUserAgent = importedUserAgent.customValue,
             reasoningEffort = normalizeReasoningEffort(
                 json.optString("reasoningEffort", defaults.reasoningEffort),
             ),
