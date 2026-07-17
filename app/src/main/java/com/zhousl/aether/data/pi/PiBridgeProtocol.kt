@@ -1,5 +1,9 @@
 package com.zhousl.aether.data.pi
 
+import android.util.JsonWriter
+import java.io.StringWriter
+import java.io.Writer
+import org.json.JSONArray
 import org.json.JSONObject
 
 data class PiBridgeFrame(
@@ -40,11 +44,55 @@ data class PiBridgeRequest(
     val type: String,
     val payload: JSONObject = JSONObject(),
 ) {
-    fun toJsonLine(): String = JSONObject().apply {
-        put("id", id)
-        put("type", type)
-        put("payload", payload)
-    }.toString()
+    fun toJsonLine(): String {
+        val writer = StringWriter()
+        writeJson(writer)
+        return writer.toString()
+    }
+
+    fun writeJsonLine(writer: Writer) {
+        writeJson(writer)
+        writer.write("\n")
+    }
+
+    private fun writeJson(writer: Writer) {
+        JsonWriter(writer).apply {
+            beginObject()
+            name("id").value(id)
+            name("type").value(type)
+            name("payload")
+            writeJsonValue(payload)
+            endObject()
+            flush()
+        }
+    }
+}
+
+private fun JsonWriter.writeJsonValue(value: Any?) {
+    when (value) {
+        null, JSONObject.NULL -> nullValue()
+        is JSONObject -> {
+            beginObject()
+            val keys = value.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                name(key)
+                writeJsonValue(value.opt(key))
+            }
+            endObject()
+        }
+        is JSONArray -> {
+            beginArray()
+            for (index in 0 until value.length()) {
+                writeJsonValue(value.opt(index))
+            }
+            endArray()
+        }
+        is String -> value(value)
+        is Number -> value(value)
+        is Boolean -> value(value)
+        else -> value(value.toString())
+    }
 }
 
 class PiJsonlParser(

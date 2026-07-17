@@ -1,5 +1,8 @@
 package com.zhousl.aether.data.pi
 
+import java.io.StringWriter
+import java.io.Writer
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -52,5 +55,62 @@ class PiBridgeProtocolTest {
         assertTrue(line.contains("\"type\":\"complete_once\""))
         assertTrue(line.contains("\"pi_provider_id\":\"faux\""))
         assertTrue(line.contains("\"faux_response\":\"done\""))
+    }
+
+    @Test
+    fun requestStreamsOneLfDelimitedJsonRecord() {
+        val output = StringWriter()
+
+        PiBridgeRequest(
+            id = "req",
+            type = "run_turn",
+            payload = JSONObject()
+                .put("text", "first\nsecond")
+                .put("path", "workspace/file.png"),
+        ).writeJsonLine(output)
+
+        val line = output.toString()
+        assertTrue(line.endsWith("\n"))
+        assertEquals(1, line.count { it == '\n' })
+        val request = JSONObject(line.dropLast(1))
+        assertEquals("req", request.optString("id"))
+        assertEquals("first\nsecond", request.getJSONObject("payload").optString("text"))
+        assertEquals("workspace/file.png", request.getJSONObject("payload").optString("path"))
+    }
+
+    @Test
+    fun requestStreamsLargePayloadWithoutRetainingOutput() {
+        val payloadCharacters = 4 * 1024 * 1024
+        val output = CountingWriter()
+
+        PiBridgeRequest(
+            id = "req",
+            type = "run_turn",
+            payload = JSONObject().put("data", "a".repeat(payloadCharacters)),
+        ).writeJsonLine(output)
+
+        assertTrue(output.charactersWritten > payloadCharacters)
+        assertTrue(output.largestWrite <= payloadCharacters)
+    }
+
+    private class CountingWriter : Writer() {
+        var charactersWritten = 0L
+            private set
+        var largestWrite = 0
+            private set
+
+        override fun write(buffer: CharArray, offset: Int, length: Int) {
+            charactersWritten += length
+            largestWrite = maxOf(largestWrite, length)
+        }
+
+        override fun write(value: String, offset: Int, length: Int) {
+            charactersWritten += length
+            largestWrite = maxOf(largestWrite, length)
+        }
+
+        override fun flush() = Unit
+
+        override fun close() = Unit
     }
 }

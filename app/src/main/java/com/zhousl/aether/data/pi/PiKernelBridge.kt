@@ -455,10 +455,9 @@ class PiKernelBridge(
                 eventJob = eventJob,
             )
             onSetupProgress(PiCoreSetupUpdate(PiCoreSetupPhase.VerifyingBridge))
-            val line = PiBridgeRequest(id = id, type = type, payload = payload).toJsonLine()
+            val request = PiBridgeRequest(id = id, type = type, payload = payload)
             synchronized(requestProcess.writer) {
-                requestProcess.writer.write(line)
-                requestProcess.writer.newLine()
+                request.writeJsonLine(requestProcess.writer)
                 requestProcess.writer.flush()
             }
             val frame = if (timeoutMillis == null) {
