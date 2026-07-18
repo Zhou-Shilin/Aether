@@ -2,6 +2,7 @@ package com.zhousl.aether.data.pi
 
 import java.io.StringWriter
 import java.io.Writer
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -60,13 +61,23 @@ class PiBridgeProtocolTest {
     @Test
     fun requestStreamsOneLfDelimitedJsonRecord() {
         val output = StringWriter()
+        val escapedText = "\"\\\b\u000c\n\r\t\u0001\u2028\u2029"
 
         PiBridgeRequest(
             id = "req",
             type = "run_turn",
             payload = JSONObject()
                 .put("text", "first\nsecond")
-                .put("path", "workspace/file.png"),
+                .put("path", "workspace/file.png")
+                .put("escaped", escapedText)
+                .put(
+                    "nested",
+                    JSONObject()
+                        .put("number", 3.5)
+                        .put("boolean", true)
+                        .put("null", JSONObject.NULL)
+                        .put("array", JSONArray().put(1).put("two").put(JSONObject.NULL)),
+                ),
         ).writeJsonLine(output)
 
         val line = output.toString()
@@ -76,6 +87,14 @@ class PiBridgeProtocolTest {
         assertEquals("req", request.optString("id"))
         assertEquals("first\nsecond", request.getJSONObject("payload").optString("text"))
         assertEquals("workspace/file.png", request.getJSONObject("payload").optString("path"))
+        assertEquals(escapedText, request.getJSONObject("payload").optString("escaped"))
+        val nested = request.getJSONObject("payload").getJSONObject("nested")
+        assertEquals(3.5, nested.optDouble("number"), 0.0)
+        assertTrue(nested.optBoolean("boolean"))
+        assertTrue(nested.isNull("null"))
+        assertEquals(1, nested.getJSONArray("array").optInt(0))
+        assertEquals("two", nested.getJSONArray("array").optString(1))
+        assertTrue(nested.getJSONArray("array").isNull(2))
     }
 
     @Test

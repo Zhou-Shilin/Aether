@@ -1,6 +1,5 @@
 package com.zhousl.aether.data.pi
 
-import android.util.JsonWriter
 import java.io.StringWriter
 import java.io.Writer
 import org.json.JSONArray
@@ -56,44 +55,88 @@ data class PiBridgeRequest(
     }
 
     private fun writeJson(writer: Writer) {
-        JsonWriter(writer).apply {
-            beginObject()
-            name("id").value(id)
-            name("type").value(type)
-            name("payload")
-            writeJsonValue(payload)
-            endObject()
-            flush()
-        }
+        writer.write("{\"id\":")
+        writer.writeJsonString(id)
+        writer.write(",\"type\":")
+        writer.writeJsonString(type)
+        writer.write(",\"payload\":")
+        writer.writeJsonValue(payload)
+        writer.write("}")
     }
 }
 
-private fun JsonWriter.writeJsonValue(value: Any?) {
+private fun Writer.writeJsonValue(value: Any?) {
     when (value) {
-        null, JSONObject.NULL -> nullValue()
+        null, JSONObject.NULL -> write("null")
         is JSONObject -> {
-            beginObject()
+            write("{")
             val keys = value.keys()
+            var first = true
             while (keys.hasNext()) {
                 val key = keys.next()
-                name(key)
+                if (first) {
+                    first = false
+                } else {
+                    write(",")
+                }
+                writeJsonString(key)
+                write(":")
                 writeJsonValue(value.opt(key))
             }
-            endObject()
+            write("}")
         }
         is JSONArray -> {
-            beginArray()
+            write("[")
             for (index in 0 until value.length()) {
+                if (index > 0) write(",")
                 writeJsonValue(value.opt(index))
             }
-            endArray()
+            write("]")
         }
-        is String -> value(value)
-        is Number -> value(value)
-        is Boolean -> value(value)
-        else -> value(value.toString())
+        is String -> writeJsonString(value)
+        is Number -> write(JSONObject.numberToString(value))
+        is Boolean -> write(value.toString())
+        else -> writeJsonString(value.toString())
     }
 }
+
+private fun Writer.writeJsonString(value: String) {
+    write("\"")
+    var segmentStart = 0
+    value.forEachIndexed { index, character ->
+        val replacement = when (character) {
+            '"' -> "\\\""
+            '\\' -> "\\\\"
+            '\t' -> "\\t"
+            '\b' -> "\\b"
+            '\n' -> "\\n"
+            '\r' -> "\\r"
+            '\u000c' -> "\\f"
+            '\u2028' -> "\\u2028"
+            '\u2029' -> "\\u2029"
+            else -> null
+        }
+        if (replacement != null || character <= '\u001f') {
+            if (segmentStart < index) {
+                write(value, segmentStart, index - segmentStart)
+            }
+            if (replacement != null) {
+                write(replacement)
+            } else {
+                write("\\u00")
+                write(JSON_HEX_DIGITS[character.code shr 4].code)
+                write(JSON_HEX_DIGITS[character.code and 0x0f].code)
+            }
+            segmentStart = index + 1
+        }
+    }
+    if (segmentStart < value.length) {
+        write(value, segmentStart, value.length - segmentStart)
+    }
+    write("\"")
+}
+
+private const val JSON_HEX_DIGITS = "0123456789abcdef"
 
 class PiJsonlParser(
     private val onFrame: (PiBridgeFrame) -> Unit,
