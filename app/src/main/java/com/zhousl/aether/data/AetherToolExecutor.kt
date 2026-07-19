@@ -57,6 +57,7 @@ class AetherToolExecutor(
     private val runtimeWorkspaceFileBridge: RuntimeWorkspaceFileBridge? = null,
     private val piCompletionClient: PiCompletionClient? = null,
     private val agentModeController: AgentModeController? = null,
+    private val alpineChromeController: AlpineChromeController? = null,
 ) {
     private val filesystemTool = RuntimeFilesystemTool(runtimeRouter)
     private val shellTool = RuntimeShellTool(runtimeRouter)
@@ -73,6 +74,7 @@ class AetherToolExecutor(
         mcpClientManager: McpClientManager? = null,
         selfManagementTool: AetherSelfManagementTool? = null,
         agentModeEnabled: Boolean = false,
+        chromeEnabled: Boolean = false,
         onProgress: (suspend (String) -> Unit)? = null,
         onSkillActivated: suspend (ActiveSkillContext) -> Unit = {},
     ): AetherToolExecutionResult {
@@ -151,6 +153,14 @@ class AetherToolExecutor(
                 JSONObject().apply {
                     put("ok", false)
                     put("errmsg", "Agent Mode is not enabled for this chat.")
+                }.toString()
+            }
+            "chrome" -> if (chromeEnabled) {
+                alpineChromeController?.execute(argumentsJson) ?: toolUnavailableOutput("chrome")
+            } else {
+                JSONObject().apply {
+                    put("ok", false)
+                    put("errmsg", "Chrome is not enabled for this chat.")
                 }.toString()
             }
             in selfManagementToolNames -> selfManagementTool?.execute(
@@ -693,6 +703,7 @@ class AetherToolExecutor(
             "tavily_search",
             "analyze_image",
             "agent_display",
+            "chrome",
             "mcp_list_tools",
             "mcp_call_tool",
             "mcp_list_resources",
@@ -942,6 +953,7 @@ class AetherToolExecutor(
             mcpClientManager: McpClientManager?,
             mcpToolBindings: List<McpToolBinding>,
             agentModeEnabled: Boolean,
+            chromeEnabled: Boolean = false,
         ): JSONArray = JSONArray(hostToolDefinitions().toString()).apply {
             selfManagementTool?.toolDefinitions()?.forEach { definition ->
                 put(
@@ -995,13 +1007,16 @@ class AetherToolExecutor(
             if (agentModeEnabled) {
                 put(agentModeToolDefinition())
             }
+            if (chromeEnabled) {
+                put(chromeToolDefinition())
+            }
         }
 
         fun sanitizeToolOutputForConversation(
             toolName: String,
             output: String,
         ): String {
-            if (toolName != "agent_display") return output
+            if (toolName != "agent_display" && toolName != "chrome") return output
             val parsed = runCatching { JSONObject(output) }.getOrNull() ?: return output
             if (!parsed.has("screenshot_base64")) return output
             parsed.remove("screenshot_base64")
@@ -1231,6 +1246,26 @@ private fun agentModeToolDefinition(): JSONObject = toolDefinition(
         put("durationMs", integerProperty("Alias of duration_ms."))
         put("key", stringProperty("For key: Android key code name or number."))
         put("text", stringProperty("For text: text to type into the focused field."))
+    },
+    required = listOf("action"),
+    executionMode = "sequential",
+)
+
+private fun chromeToolDefinition(): JSONObject = toolDefinition(
+    name = "chrome",
+    description = "Operate the optional Chromium browser installed inside Aether's Alpine environment through Chrome DevTools Protocol. Use this only when Chrome is selected in the chat composer.",
+    properties = JSONObject().apply {
+        put("action", stringProperty("One of: start, status, navigate, tap, swipe, text, key, back, forward, reload, evaluate, screenshot, stop."))
+        put("url", stringProperty("For navigate: the URL to open."))
+        put("x", integerProperty("For tap: normalized X coordinate from 0 to 1000."))
+        put("y", integerProperty("For tap: normalized Y coordinate from 0 to 1000."))
+        put("x1", integerProperty("For swipe: normalized start X coordinate from 0 to 1000."))
+        put("y1", integerProperty("For swipe: normalized start Y coordinate from 0 to 1000."))
+        put("x2", integerProperty("For swipe: normalized end X coordinate from 0 to 1000."))
+        put("y2", integerProperty("For swipe: normalized end Y coordinate from 0 to 1000."))
+        put("text", stringProperty("For text: text to insert into the focused field."))
+        put("key", stringProperty("For key: Enter, Tab, Backspace, Escape, an arrow key, or a character."))
+        put("expression", stringProperty("For evaluate: JavaScript to evaluate in the current page."))
     },
     required = listOf("action"),
     executionMode = "sequential",

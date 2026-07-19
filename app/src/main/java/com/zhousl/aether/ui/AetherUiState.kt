@@ -17,6 +17,7 @@ import com.zhousl.aether.data.ScheduledTask
 import com.zhousl.aether.data.SessionExecutionState
 import com.zhousl.aether.data.pi.PiCoreSetupState
 import com.zhousl.aether.data.pi.PiProviderAuthState
+import com.zhousl.aether.runtime.AlpineSetupProgress
 import com.zhousl.aether.runtime.LocalRuntimeSetupState
 import com.zhousl.aether.termux.TermuxSetupState
 
@@ -209,6 +210,7 @@ data class ChatSession(
     val activeSkills: List<ActiveSkillContext> = emptyList(),
     val activeMcpServerIds: List<String> = emptyList(),
     val agentModeEnabled: Boolean = false,
+    val chromeEnabled: Boolean = false,
     val selectedModelKey: String = "",
 )
 
@@ -236,6 +238,7 @@ data class AetherUiState(
     val draftSelectedSkillIds: List<String> = emptyList(),
     val draftSelectedMcpServerIds: List<String> = emptyList(),
     val draftAgentModeEnabled: Boolean = false,
+    val draftChromeEnabled: Boolean = false,
     val draftWorkspaceId: String? = null,
     val editingSessionId: String? = null,
     val editingMessageId: String? = null,
@@ -254,6 +257,7 @@ data class AetherUiState(
     val alpineSetupState: LocalRuntimeSetupState = LocalRuntimeSetupState(
         runtimeId = com.zhousl.aether.data.LocalRuntimeId.Alpine,
     ),
+    val alpinePackageInstallProgress: Map<String, AlpineSetupProgress> = emptyMap(),
     val developerTermuxReadyOverride: Boolean? = null,
     val rootSetupState: RootSetupState = RootSetupState(),
     val rootSetupProgressReturnPage: RootSetupProgressReturnPage? = null,
@@ -281,6 +285,7 @@ data class AetherUiState(
     val awaitingFollowUpTour: Boolean = false,
     val showFollowUpTourCard: Boolean = false,
     val agentModeDisplayState: AgentModeDisplayState = AgentModeDisplayState(),
+    val chromeDisplayState: AgentModeDisplayState = AgentModeDisplayState(),
     val agentModeAuthorizationState: AgentModeAuthorizationState = AgentModeAuthorizationState(),
     val appUpdate: AppUpdateUiState = AppUpdateUiState(),
 )

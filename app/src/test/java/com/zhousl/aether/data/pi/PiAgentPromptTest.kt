@@ -20,4 +20,21 @@ class PiAgentPromptTest {
         assertTrue(instructions.contains("[report.pdf](file:///absolute/path/report.pdf)"))
         assertTrue(instructions.contains("Do not use another URI scheme for local file downloads."))
     }
+
+    @Test
+    fun chromeInstructionsAreOnlyAddedWhenSelected() {
+        val instructions = buildPiAgentInstructions(
+            settings = AppSettings(),
+            workspaceDirectory = "/workspace",
+            availableSkills = emptyList(),
+            activeSkills = emptyList(),
+            mcpSnapshots = emptyList(),
+            mcpToolBindings = emptyList(),
+            agentModeEnabled = false,
+            chromeEnabled = true,
+        )
+
+        assertTrue(instructions.contains("Alpine Chrome is enabled for this chat."))
+        assertTrue(instructions.contains("normalized 0..1000 range"))
+    }
 }

@@ -33,6 +33,7 @@ internal class QueuedTurnRequestBuilder(
                 activeSkills = updatedSession.activeSkills,
                 activeMcpServerIds = updatedSession.activeMcpServerIds,
                 agentModeEnabled = updatedSession.agentModeEnabled,
+                chromeEnabled = updatedSession.chromeEnabled,
                 selectedModelKey = updatedSession.selectedModelKey,
             )
             updatedSessions.add(0, updatedSession)
@@ -54,6 +55,7 @@ internal class QueuedTurnRequestBuilder(
             activeSkills = selection.activeSkills,
             activeMcpServerIds = selection.activeMcpServerIds,
             agentModeEnabled = selection.agentModeEnabled,
+            chromeEnabled = selection.chromeEnabled,
             providerConfigs = providerConfigs,
         )
     }
@@ -64,6 +66,7 @@ internal class QueuedTurnRequestBuilder(
         val activeSkills: List<ActiveSkillContext> = emptyList(),
         val activeMcpServerIds: List<String> = emptyList(),
         val agentModeEnabled: Boolean = false,
+        val chromeEnabled: Boolean = false,
         val selectedModelKey: String = "",
     )
 }

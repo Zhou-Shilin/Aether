@@ -586,6 +586,7 @@ class PiKernelBridge(
                     activity = when (progress.activity) {
                         AlpineSetupActivity.Extracting -> PiCoreSetupActivity.Extracting
                         AlpineSetupActivity.Downloading -> PiCoreSetupActivity.Downloading
+                        AlpineSetupActivity.Installing -> PiCoreSetupActivity.None
                         AlpineSetupActivity.None -> PiCoreSetupActivity.None
                     },
                     bytesPerSecond = progress.bytesPerSecond,

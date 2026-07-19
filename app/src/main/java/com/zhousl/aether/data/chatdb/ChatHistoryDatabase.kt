@@ -14,7 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ChatWorkspaceFileRefEntity::class,
         ChatStateMetaEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class ChatHistoryDatabase : RoomDatabase() {
@@ -29,7 +29,7 @@ abstract class ChatHistoryDatabase : RoomDatabase() {
                 context.applicationContext,
                 ChatHistoryDatabase::class.java,
                 "aether_chat_history.db",
-            ).addMigrations(Migration1To2, Migration2To3)
+            ).addMigrations(Migration1To2, Migration2To3, Migration3To4)
                 .build()
                 .also { instance = it }
         }
@@ -72,6 +72,14 @@ internal object Migration2To3 : Migration(2, 3) {
         )
         db.execSQL(
             "CREATE INDEX IF NOT EXISTS `index_chat_messages_hasUsageStatistics` ON `chat_messages` (`hasUsageStatistics`)",
+        )
+    }
+}
+
+internal object Migration3To4 : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "ALTER TABLE `chat_sessions` ADD COLUMN `chromeEnabled` INTEGER NOT NULL DEFAULT 0",
         )
     }
 }

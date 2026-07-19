@@ -366,6 +366,9 @@ private fun AetherAppContent(
         effectiveTermuxSetupState.isReady &&
         uiState.agentModeAuthorizationState.isReady
     val agentModeSelected = activeSession?.agentModeEnabled ?: uiState.draftAgentModeEnabled
+    val chromeAvailable = uiState.alpineSetupState.isReady &&
+        uiState.settings.alpinePackageProfiles["chrome"]?.installed == true
+    val chromeSelected = activeSession?.chromeEnabled ?: uiState.draftChromeEnabled
     val conversationModelOptions = remember(uiState.providerConfigs) {
         uiState.providerConfigs.availableModelOptions()
     }
@@ -622,7 +625,7 @@ private fun AetherAppContent(
 
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = uiState.currentScreen != AppScreen.Onboarding,
+        gesturesEnabled = uiState.currentScreen == AppScreen.Chat,
         scrimColor = AetherScrim,
         drawerContent = {
             ConversationDrawer(
@@ -780,6 +783,9 @@ private fun AetherAppContent(
                     agentModeAvailable = agentModeReady,
                     agentModeSelected = agentModeSelected,
                     agentModeDisplayState = uiState.agentModeDisplayState,
+                    chromeAvailable = chromeAvailable,
+                    chromeSelected = chromeSelected,
+                    chromeDisplayState = uiState.chromeDisplayState,
                     allowRootImageRead = uiState.rootSetupState.isReady ||
                         (
                             uiState.settings.agentModeAuthorizationEnabled &&
@@ -798,6 +804,7 @@ private fun AetherAppContent(
                     onSetSkillSelected = viewModel::setComposerSkillSelected,
                     onSetMcpServerSelected = viewModel::setComposerMcpServerSelected,
                     onSetAgentModeSelected = viewModel::setComposerAgentModeSelected,
+                    onSetChromeSelected = viewModel::setComposerChromeSelected,
                     onCancelEdit = viewModel::cancelMessageEdit,
                     onSend = viewModel::sendCurrentMessage,
                     onQueueFollowUp = viewModel::queueCurrentMessage,
@@ -908,6 +915,7 @@ private fun AetherAppContent(
                     enabledRuntimeIds = uiState.settings.enabledRuntimeIds,
                     defaultRuntimeId = uiState.settings.defaultRuntimeId,
                     alpinePackageProfiles = uiState.settings.alpinePackageProfiles,
+                    alpinePackageInstallProgress = uiState.alpinePackageInstallProgress,
                     developerTermuxReadyOverride = uiState.developerTermuxReadyOverride,
                     installedSkills = uiState.installedSkills,
                     installedPiExtensions = uiState.installedPiExtensions,
@@ -1005,6 +1013,8 @@ private fun AetherAppContent(
                     onRefreshAlpineSetup = viewModel::refreshAlpineSetup,
                     onInstallAlpinePackageProfile = viewModel::installAlpinePackageProfile,
                     onCreateAlpineTerminalLaunchSpec = viewModel::createAlpineTerminalLaunchSpec,
+                    onStartAlpineChrome = viewModel::startAlpineChrome,
+                    onShouldShowAlpineChromeKeyboard = viewModel::shouldShowAlpineChromeKeyboard,
                     onSetDefaultRuntime = viewModel::setDefaultRuntime,
                     onRefreshRootSetup = viewModel::refreshRootSetup,
                     onStartRootSetupFromSettings = viewModel::startRootSetupFromSettings,

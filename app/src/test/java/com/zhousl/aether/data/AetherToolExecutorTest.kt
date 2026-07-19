@@ -75,6 +75,24 @@ class AetherToolExecutorTest {
     }
 
     @Test
+    fun sanitizeChromeOutputRemovesScreenshotBytes() {
+        val sanitized = AetherToolExecutor.sanitizeToolOutputForConversation(
+            toolName = "chrome",
+            output = JSONObject().apply {
+                put("ok", true)
+                put("screenshot_base64", "chrome-bytes")
+                put("screenshot_mime_type", "image/jpeg")
+                put("preview_path", "/cache/chrome-preview.jpg")
+            }.toString(),
+        )
+
+        val json = JSONObject(sanitized)
+        assertFalse(json.has("screenshot_base64"))
+        assertTrue(json.getBoolean("screenshot_injected_into_next_model_request"))
+        assertEquals("/cache/chrome-preview.jpg", json.getString("preview_path"))
+    }
+
+    @Test
     fun dynamicHostToolDefinitionsIncludeMcpAndAgentMode() {
         val definitions = AetherToolExecutor.hostToolDefinitions(
             selfManagementTool = null,
@@ -98,6 +116,7 @@ class AetherToolExecutorTest {
                 )
             ),
             agentModeEnabled = true,
+            chromeEnabled = true,
         )
         val names = (0 until definitions.length())
             .map { definitions.getJSONObject(it).getString("name") }
@@ -105,11 +124,19 @@ class AetherToolExecutorTest {
         assertTrue("mcp_list_tools" in names)
         assertTrue("mcp__docs__search" in names)
         assertTrue("agent_display" in names)
+        assertTrue("chrome" in names)
         assertEquals(
             "sequential",
             (0 until definitions.length())
                 .map { definitions.getJSONObject(it) }
                 .first { it.getString("name") == "agent_display" }
+                .getString("execution_mode"),
+        )
+        assertEquals(
+            "sequential",
+            (0 until definitions.length())
+                .map { definitions.getJSONObject(it) }
+                .first { it.getString("name") == "chrome" }
                 .getString("execution_mode"),
         )
     }

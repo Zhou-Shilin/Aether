@@ -145,6 +145,25 @@ class ChatRepositorySerializationTest {
     }
 
     @Test
+    fun sessionRoundTripPreservesChromeSelection() {
+        val serialized = serializeChatSessions(
+            listOf(
+                ChatSession(
+                    id = "session-chrome",
+                    title = "Chrome",
+                    preview = "Chrome",
+                    messages = emptyList(),
+                    chromeEnabled = true,
+                )
+            )
+        )
+
+        val reparsed = parseChatSessions(serialized)
+
+        assertTrue(reparsed.single().chromeEnabled)
+    }
+
+    @Test
     fun migrationKeepsLegacyCurrentSessionWhenItExists() {
         val sessions = listOf(
             ChatSession(id = "session-1", title = "First", preview = "First", messages = emptyList()),

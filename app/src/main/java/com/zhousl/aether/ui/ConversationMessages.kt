@@ -3882,6 +3882,7 @@ private fun formatToolInvocationTitleLabel(
         "ls" -> context.getString(if (isRunning) R.string.tool_title_ls_running else R.string.tool_title_ls_done)
         "analyze_image" -> context.getString(if (isRunning) R.string.tool_title_analyze_image_running else R.string.tool_title_analyze_image_done)
         "agent_display" -> formatAgentDisplayTitle(context = context, isRunning = isRunning, arguments = arguments)
+        "chrome" -> formatChromeTitle(context = context, isRunning = isRunning, arguments = arguments)
         "tavily_search" -> formatArgumentDrivenTitle(
             isRunning = isRunning,
             progressiveVerb = context.getString(R.string.tool_title_searching),
@@ -3965,6 +3966,7 @@ private fun summarizeToolInvocationCommandLabel(
             }
         }
         "agent_display" -> summarizeAgentDisplayCommand(arguments)
+        "chrome" -> summarizeChromeCommand(arguments)
         "tavily_search" -> "search ${arguments.optString("query").trim()}"
         "fetch_web_url" -> "fetch ${arguments.optString("url").trim()}"
         "aether_config_get",
@@ -4087,6 +4089,7 @@ private fun summarizeToolInvocationCommand(
         "find" -> "find ${arguments.optString("pattern").trim()} in ${arguments.optString("path").trim()}"
         "ls" -> "ls ${arguments.optString("path").trim()}"
         "agent_display" -> summarizeAgentDisplayCommand(arguments)
+        "chrome" -> summarizeChromeCommand(arguments)
         "tavily_search" -> "search ${arguments.optString("query").trim()}"
         "fetch_web_url" -> "fetch ${arguments.optString("url").trim()}"
         "aether_config_get",
@@ -4348,11 +4351,16 @@ private fun buildAgentModeReplayFrames(
     toolInvocations: List<ChatToolInvocation>,
 ): List<AgentModeReplayFrame> = buildList {
     toolInvocations.forEach { invocation ->
-        if (!invocation.toolName.equals("agent_display", ignoreCase = true)) return@forEach
+        if (
+            !invocation.toolName.equals("agent_display", ignoreCase = true) &&
+            !invocation.toolName.equals("chrome", ignoreCase = true)
+        ) return@forEach
         val output = parseJsonObject(invocation.outputJson) ?: return@forEach
         if (!output.optBoolean("ok")) return@forEach
         val previewPath = output.optString("preview_path").ifBlank {
-            output.optString("previewPath")
+            output.optString("previewPath").ifBlank {
+                output.optString("screenshot_path")
+            }
         }
         if (previewPath.isBlank()) return@forEach
         add(
@@ -4376,7 +4384,8 @@ private fun buildAgentModeReplayFrames(
 }
 
 private fun ChatToolInvocation.isAgentModeDisplayInvocation(): Boolean =
-    toolName.equals("agent_display", ignoreCase = true)
+    toolName.equals("agent_display", ignoreCase = true) ||
+        toolName.equals("chrome", ignoreCase = true)
 
 private fun agentModeReplayBackdropBrush(): Brush = Brush.linearGradient(
     colorStops = arrayOf(
@@ -4449,6 +4458,101 @@ internal fun highlightToolResult(result: String): AnnotatedString = buildAnnotat
         }
         appendStyled(token, style)
     }
+}
+
+private fun formatChromeTitle(
+    context: Context,
+    isRunning: Boolean,
+    arguments: JSONObject?,
+): String = when (arguments?.optString("action")?.trim()?.lowercase()) {
+    "start" -> context.getString(
+        if (isRunning) R.string.tool_title_starting_chrome else R.string.tool_title_started_chrome,
+    )
+    "status" -> context.getString(
+        if (isRunning) R.string.tool_title_checking_chrome else R.string.tool_title_checked_chrome,
+    )
+    "navigate", "open" -> {
+        val url = arguments?.optString("url").orEmpty().trim()
+        if (url.isBlank()) {
+            context.getString(
+                if (isRunning) {
+                    R.string.tool_title_navigating_chrome
+                } else {
+                    R.string.tool_title_navigated_chrome
+                },
+            )
+        } else {
+            context.getString(
+                if (isRunning) {
+                    R.string.tool_title_navigating_chrome_url
+                } else {
+                    R.string.tool_title_navigated_chrome_url
+                },
+                url.take(72) + if (url.length > 72) "..." else "",
+            )
+        }
+    }
+    "tap" -> context.getString(
+        if (isRunning) R.string.tool_title_tapping_chrome else R.string.tool_title_tapped_chrome,
+    )
+    "swipe", "scroll" -> context.getString(
+        if (isRunning) R.string.tool_title_scrolling_chrome else R.string.tool_title_scrolled_chrome,
+    )
+    "text", "type" -> context.getString(
+        if (isRunning) R.string.tool_title_typing_chrome else R.string.tool_title_typed_chrome,
+    )
+    "key" -> {
+        val key = arguments?.optString("key").orEmpty().trim()
+        if (key.isBlank()) {
+            context.getString(
+                if (isRunning) R.string.tool_title_pressing_chrome else R.string.tool_title_pressed_chrome,
+            )
+        } else {
+            context.getString(
+                if (isRunning) {
+                    R.string.tool_title_pressing_chrome_key
+                } else {
+                    R.string.tool_title_pressed_chrome_key
+                },
+                key.take(32),
+            )
+        }
+    }
+    "back" -> context.getString(
+        if (isRunning) R.string.tool_title_going_back_chrome else R.string.tool_title_went_back_chrome,
+    )
+    "forward" -> context.getString(
+        if (isRunning) R.string.tool_title_going_forward_chrome else R.string.tool_title_went_forward_chrome,
+    )
+    "reload" -> context.getString(
+        if (isRunning) R.string.tool_title_reloading_chrome else R.string.tool_title_reloaded_chrome,
+    )
+    "evaluate" -> context.getString(
+        if (isRunning) R.string.tool_title_evaluating_chrome else R.string.tool_title_evaluated_chrome,
+    )
+    "screenshot" -> context.getString(
+        if (isRunning) R.string.tool_title_capturing_chrome else R.string.tool_title_captured_chrome,
+    )
+    "stop" -> context.getString(
+        if (isRunning) R.string.tool_title_stopping_chrome else R.string.tool_title_stopped_chrome,
+    )
+    else -> context.getString(
+        if (isRunning) R.string.tool_title_using_chrome else R.string.tool_title_used_chrome,
+    )
+}
+
+private fun summarizeChromeCommand(arguments: JSONObject?): String {
+    if (arguments == null) return "chrome"
+    val action = arguments.optString("action").trim().ifBlank { "unknown" }
+    return when (action.lowercase()) {
+        "navigate", "open" -> "chrome navigate ${arguments.optString("url").trim()}"
+        "tap" -> "chrome tap x=${arguments.optString("x").trim()} y=${arguments.optString("y").trim()}"
+        "swipe", "scroll" -> "chrome swipe ${arguments.optString("x1").trim()},${arguments.optString("y1").trim()} -> ${arguments.optString("x2").trim()},${arguments.optString("y2").trim()}"
+        "key" -> "chrome key ${arguments.optString("key").trim()}"
+        "text", "type" -> "chrome text"
+        "evaluate" -> "chrome evaluate"
+        else -> "chrome $action"
+    }.trim()
 }
 
 internal fun highlightTerminalTranscript(result: String): AnnotatedString = buildAnnotatedString {

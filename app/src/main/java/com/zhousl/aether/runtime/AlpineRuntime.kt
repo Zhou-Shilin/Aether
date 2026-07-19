@@ -25,6 +25,7 @@ import org.json.JSONObject
 private const val AlpineWatchWindowMillis = 45_000L
 private const val AlpineDefaultTailBytes = 12 * 1024
 private const val AlpineMaxTailBytes = 64 * 1024
+private const val AlpineNetworkRateWindowMillis = 5_000L
 private const val AlpineAssetRoot = "runtimes/alpine/arm64-v8a"
 private const val AlpineHostLinker = "/system/bin/linker64"
 private val AlpineRootfsAssetCandidates = listOf(
@@ -226,19 +227,10 @@ class AlpineRuntime(
                 issue = LocalRuntimeIssue.Failed,
                 detail = "Unknown Alpine package profile: $profileId",
             )
-        onProgress(
-            AlpineSetupProgress(
-                activity = AlpineSetupActivity.Downloading,
-                output = "\$ $command\n",
-            )
-        )
+        val progressTracker = AlpinePackageInstallProgressTracker()
+        onProgress(progressTracker.onOutput("\$ $command\n"))
         val rateSampler = NetworkRateSampler { bytesPerSecond ->
-            onProgress(
-                AlpineSetupProgress(
-                    activity = AlpineSetupActivity.Downloading,
-                    bytesPerSecond = bytesPerSecond,
-                )
-            )
+            onProgress(progressTracker.onRate(bytesPerSecond))
         }
         rateSampler.start()
         val result = try {
@@ -248,12 +240,7 @@ class AlpineRuntime(
                     workingDirectory = homeDirectory,
                     awaitTimeoutMillis = 10 * 60 * 1000L,
                     onOutput = { output ->
-                        onProgress(
-                            AlpineSetupProgress(
-                                activity = AlpineSetupActivity.Downloading,
-                                output = output,
-                            )
-                        )
+                        onProgress(progressTracker.onOutput(output))
                     },
                 )
             )
@@ -279,6 +266,9 @@ class AlpineRuntime(
         val packages = AlpinePackageProfiles[profileId] ?: return null
         return "apk add --no-cache --no-chown ${packages.joinToString(" ")}"
     }
+
+    suspend fun isPackageProfileInstalled(profileId: String): Boolean =
+        verifyPackageProfile(profileId)
 
     override suspend fun inspectSetup(): LocalRuntimeSetupState = withContext(Dispatchers.IO) {
         when {
@@ -884,6 +874,10 @@ class AlpineRuntime(
             "node" -> "node --version && npm --version"
             "git_search" -> "git --version && rg --version"
             "ssh" -> "ssh -V"
+            "chrome" ->
+                "(chromium-browser --version || chromium --version) && " +
+                    "command -v Xvnc && command -v openbox && " +
+                    "command -v xprop && command -v websockify && test -d /usr/share/novnc"
             else -> return false
         }
         val result = JSONObject(executeCommand(command, homeDirectory, 30_000L))
@@ -1026,6 +1020,16 @@ class AlpineRuntime(
             "node" to listOf("nodejs", "npm"),
             "git_search" to listOf("git", "ripgrep"),
             "ssh" to listOf("openssh-client"),
+            "chrome" to listOf(
+                "chromium",
+                "font-noto",
+                "font-noto-cjk",
+                "openbox",
+                "tigervnc",
+                "xprop",
+                "novnc",
+                "websockify",
+            ),
         )
     }
 
@@ -1094,7 +1098,7 @@ class AlpineRuntime(
                     var previousAtMillis = System.currentTimeMillis()
                     runCatching {
                         while (running) {
-                            Thread.sleep(500L)
+                            Thread.sleep(AlpineNetworkRateWindowMillis)
                             val now = System.currentTimeMillis()
                             val currentBytes = TrafficStats.getUidRxBytes(android.os.Process.myUid())
                             val elapsed = now - previousAtMillis
@@ -1137,13 +1141,63 @@ enum class AlpineSetupActivity {
     None,
     Extracting,
     Downloading,
+    Installing,
 }
 
 data class AlpineSetupProgress(
     val activity: AlpineSetupActivity = AlpineSetupActivity.None,
     val bytesPerSecond: Long = 0L,
+    val progressPercent: Int? = null,
     val output: String = "",
 )
+
+internal class AlpinePackageInstallProgressTracker {
+    private val outputTail = StringBuilder()
+    private var activity = AlpineSetupActivity.Downloading
+    private var bytesPerSecond = 0L
+    private var progressPercent: Int? = null
+
+    @Synchronized
+    fun onOutput(output: String): AlpineSetupProgress {
+        outputTail.append(output)
+        if (outputTail.length > MaxTrackedOutputChars) {
+            outputTail.delete(0, outputTail.length - MaxTrackedOutputChars)
+        }
+        ApkInstallProgressRegex.findAll(outputTail).lastOrNull()?.let { match ->
+            val completed = match.groupValues[1].toIntOrNull() ?: 0
+            val total = match.groupValues[2].toIntOrNull() ?: 0
+            activity = AlpineSetupActivity.Installing
+            progressPercent = if (total > 0) {
+                (completed * 100 / total).coerceIn(0, 100)
+            } else {
+                null
+            }
+        }
+        return snapshot(output)
+    }
+
+    @Synchronized
+    fun onRate(rate: Long): AlpineSetupProgress {
+        bytesPerSecond = rate.coerceAtLeast(0L)
+        return snapshot()
+    }
+
+    private fun snapshot(output: String = ""): AlpineSetupProgress =
+        AlpineSetupProgress(
+            activity = activity,
+            bytesPerSecond = bytesPerSecond,
+            progressPercent = progressPercent,
+            output = output,
+        )
+
+    private companion object {
+        const val MaxTrackedOutputChars = 8_192
+        val ApkInstallProgressRegex = Regex(
+            """\((\d+)/(\d+)\)\s+(?:Installing|Upgrading|Downgrading|Replacing)\b""",
+            RegexOption.IGNORE_CASE,
+        )
+    }
+}
 
 internal data class AlpineWorkspaceHostPath(
     val guestPath: String,

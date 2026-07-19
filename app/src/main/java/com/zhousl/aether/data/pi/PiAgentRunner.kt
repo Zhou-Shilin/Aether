@@ -49,6 +49,7 @@ class PiAgentRunner(
         mcpClientManager: McpClientManager? = null,
         selfManagementTool: AetherSelfManagementTool? = null,
         agentModeEnabled: Boolean = false,
+        chromeEnabled: Boolean = false,
         providerConfigs: List<LlmProviderConfig> = emptyList(),
         sessionId: String = "",
         onToolEvent: suspend (AgentToolEvent) -> Unit = {},
@@ -80,6 +81,7 @@ class PiAgentRunner(
                         mcpSnapshots = mcpClientManager?.snapshots().orEmpty(),
                         mcpToolBindings = mcpToolBindings,
                         agentModeEnabled = agentModeEnabled,
+                        chromeEnabled = chromeEnabled,
                     )
                 }
                 val payload = JSONObject().apply {
@@ -105,6 +107,7 @@ class PiAgentRunner(
                             mcpClientManager = mcpClientManager,
                             mcpToolBindings = mcpToolBindings,
                             agentModeEnabled = agentModeEnabled,
+                            chromeEnabled = chromeEnabled,
                         ),
                     )
                 }
@@ -128,6 +131,7 @@ class PiAgentRunner(
                                 selfManagementTool = selfManagementTool,
                                 mcpToolBindings = mcpToolBindings,
                                 agentModeEnabled = agentModeEnabled,
+                                chromeEnabled = chromeEnabled,
                                 updatedSystemPrompt = prompt,
                                 onSkillActivated = onSkillActivated,
                             )
@@ -161,6 +165,7 @@ class PiAgentRunner(
                                     selfManagementTool = selfManagementTool,
                                     mcpToolBindings = mcpToolBindings,
                                     agentModeEnabled = agentModeEnabled,
+                                    chromeEnabled = chromeEnabled,
                                     updatedSystemPrompt = prompt,
                                     onSkillActivated = onSkillActivated,
                                 )
@@ -295,6 +300,7 @@ class PiAgentRunner(
         selfManagementTool: AetherSelfManagementTool?,
         mcpToolBindings: List<McpToolBinding>,
         agentModeEnabled: Boolean,
+        chromeEnabled: Boolean,
         updatedSystemPrompt: () -> String,
         onSkillActivated: suspend (ActiveSkillContext) -> Unit,
     ) {
@@ -339,6 +345,7 @@ class PiAgentRunner(
                 mcpClientManager = mcpClientManager,
                 selfManagementTool = selfManagementTool,
                 agentModeEnabled = agentModeEnabled,
+                chromeEnabled = chromeEnabled,
                 onProgress = { progress ->
                     bridge.sendHostToolProgress(
                         hostToolPayload(
@@ -471,7 +478,7 @@ private fun hostToolPayload(
                     put("text", visibleOutput)
                 }
             )
-            if (toolName == "agent_display") {
+            if (toolName == "agent_display" || toolName == "chrome") {
                 val parsed = runCatching { JSONObject(rawOutput) }.getOrNull()
                 val imageData = parsed?.optString("screenshot_base64").orEmpty()
                 if (parsed?.optBoolean("ok") == true && imageData.isNotBlank()) {

@@ -16,6 +16,7 @@ data class ChatSessionEntity(
     val activeSkillsJson: String,
     val activeMcpServerIdsJson: String,
     val agentModeEnabled: Boolean,
+    val chromeEnabled: Boolean,
     val selectedModelKey: String,
     val sortOrder: Long,
 )

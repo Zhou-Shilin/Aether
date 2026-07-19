@@ -20,6 +20,7 @@ internal fun buildPiAgentInstructions(
     mcpSnapshots: List<McpServerSnapshot>,
     mcpToolBindings: List<McpToolBinding>,
     agentModeEnabled: Boolean,
+    chromeEnabled: Boolean = false,
 ): String = buildString {
     val configuredPrompt = expandDynamicPromptPlaceholders(settings.systemPrompt).trim()
     if (configuredPrompt.isNotBlank()) {
@@ -53,6 +54,16 @@ internal fun buildPiAgentInstructions(
             "Agent Mode is enabled for this chat. Use agent_display only for tasks that require operating the isolated Android virtual display. " +
                 "Tap and swipe coordinates use the normalized 0..1000 range. " +
                 "After display actions, screenshot image content is inserted directly into the Pi tool result for the next model step."
+        )
+    }
+
+    if (chromeEnabled) {
+        append("\n\n")
+        append(
+            "Alpine Chrome is enabled for this chat. Use the chrome tool only for tasks that require operating the dedicated Chromium browser. " +
+                "Tap and swipe coordinates use the normalized 0..1000 range. " +
+                "Use navigate for URLs, text and key for focused fields, and screenshot after actions when you need the current page. " +
+                "Screenshot image content is inserted directly into the next model step."
         )
     }
 

@@ -86,6 +86,7 @@ data class SessionTurnRequest(
     val activeSkills: List<ActiveSkillContext>,
     val activeMcpServerIds: List<String>,
     val agentModeEnabled: Boolean,
+    val chromeEnabled: Boolean,
     val providerConfigs: List<LlmProviderConfig> = emptyList(),
 )
 
@@ -325,6 +326,7 @@ class SessionExecutionManager(
         var activeSkills: List<ActiveSkillContext> = emptyList()
         var activeMcpServerIds: List<String> = emptyList()
         var agentModeEnabled = false
+        var chromeEnabled = false
 
         val persistedSessionWithMessages = chatRepository.getSessionWithMessages(sessionId)
 
@@ -353,6 +355,7 @@ class SessionExecutionManager(
             activeSkills = updatedSession.activeSkills
             activeMcpServerIds = updatedSession.activeMcpServerIds
             agentModeEnabled = updatedSession.agentModeEnabled
+            chromeEnabled = updatedSession.chromeEnabled
             updatedSessions.add(0, updatedSession)
             persisted.copy(
                 sessions = updatedSessions,
@@ -374,6 +377,7 @@ class SessionExecutionManager(
                 activeSkills = activeSkills,
                 activeMcpServerIds = activeMcpServerIds,
                 agentModeEnabled = agentModeEnabled,
+                chromeEnabled = chromeEnabled,
                 providerConfigs = providerConfigs,
             )
         )
@@ -575,6 +579,7 @@ class SessionExecutionManager(
                 mcpClientManager = mcpClientManager,
                 selfManagementTool = selfManagementTool,
                 agentModeEnabled = request.agentModeEnabled,
+                chromeEnabled = request.chromeEnabled,
                 providerConfigs = request.providerConfigs,
                 sessionId = handle.sessionId,
                 onToolEvent = emitToolEvent,
@@ -1393,6 +1398,10 @@ class SessionExecutionManager(
     private fun validateRequest(request: SessionTurnRequest): String? = when {
         request.agentModeEnabled && !request.settings.agentModeAuthorizationEnabled ->
                 "Agent Mode is selected, but authorization is disabled. Enable it in Settings > Agent Mode first."
+
+        request.chromeEnabled &&
+            request.settings.alpinePackageProfiles["chrome"]?.installed != true ->
+                "Chrome is selected, but it is not installed. Install it in Settings > Alpine first."
 
         else -> validateSettings(request.settings)
     }
