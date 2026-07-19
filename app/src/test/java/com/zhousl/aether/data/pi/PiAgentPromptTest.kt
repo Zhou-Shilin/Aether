@@ -1,6 +1,7 @@
 package com.zhousl.aether.data.pi
 
 import com.zhousl.aether.data.AppSettings
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -23,7 +24,16 @@ class PiAgentPromptTest {
 
     @Test
     fun chromeInstructionsAreOnlyAddedWhenSelected() {
-        val instructions = buildPiAgentInstructions(
+        val disabledInstructions = buildPiAgentInstructions(
+            settings = AppSettings(),
+            workspaceDirectory = "/workspace",
+            availableSkills = emptyList(),
+            activeSkills = emptyList(),
+            mcpSnapshots = emptyList(),
+            mcpToolBindings = emptyList(),
+            agentModeEnabled = false,
+        )
+        val enabledInstructions = buildPiAgentInstructions(
             settings = AppSettings(),
             workspaceDirectory = "/workspace",
             availableSkills = emptyList(),
@@ -34,7 +44,9 @@ class PiAgentPromptTest {
             chromeEnabled = true,
         )
 
-        assertTrue(instructions.contains("Alpine Chrome is enabled for this chat."))
-        assertTrue(instructions.contains("normalized 0..1000 range"))
+        assertFalse(disabledInstructions.contains("Alpine Chrome is enabled for this chat."))
+        assertFalse(disabledInstructions.contains("normalized 0..1000 range"))
+        assertTrue(enabledInstructions.contains("Alpine Chrome is enabled for this chat."))
+        assertTrue(enabledInstructions.contains("normalized 0..1000 range"))
     }
 }
