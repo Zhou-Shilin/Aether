@@ -26,6 +26,9 @@ interface ChatHistoryDao {
     @Query("SELECT COUNT(*) FROM chat_messages WHERE sessionId = :sessionId")
     suspend fun getMessageCountForSession(sessionId: String): Int
 
+    @Query("SELECT COUNT(*) FROM chat_messages WHERE sessionId = :sessionId AND responseGroupId = :responseGroupId")
+    suspend fun getMessageCountForResponseGroup(sessionId: String, responseGroupId: String): Int
+
     @Query("""
         SELECT sessionId, COUNT(*) AS messageCount, MAX(COALESCE(createdAtMillis, 0)) AS lastMessageAtMillis
         FROM chat_messages
@@ -139,6 +142,9 @@ interface ChatHistoryDao {
     @Query("DELETE FROM chat_workspace_file_refs WHERE sessionId = :sessionId AND messageId = :messageId")
     suspend fun deleteWorkspaceFileRefsForMessage(sessionId: String, messageId: String)
 
+    @Query("DELETE FROM chat_workspace_file_refs WHERE sessionId = :sessionId AND messageId IN (SELECT id FROM chat_messages WHERE sessionId = :sessionId AND responseGroupId = :responseGroupId)")
+    suspend fun deleteWorkspaceFileRefsForResponseGroup(sessionId: String, responseGroupId: String)
+
     @Query("DELETE FROM chat_workspace_file_refs WHERE sessionId = :sessionId AND messageId IN (SELECT id FROM chat_messages WHERE sessionId = :sessionId AND position >= :fromPosition)")
     suspend fun deleteWorkspaceFileRefsFromPosition(sessionId: String, fromPosition: Int)
 
@@ -153,6 +159,36 @@ interface ChatHistoryDao {
 
     @Query("DELETE FROM chat_messages WHERE sessionId = :sessionId AND position >= :fromPosition")
     suspend fun deleteMessagesFromPosition(sessionId: String, fromPosition: Int)
+
+    @Query("DELETE FROM chat_messages WHERE sessionId = :sessionId AND responseGroupId = :responseGroupId")
+    suspend fun deleteMessagesForResponseGroup(sessionId: String, responseGroupId: String)
+
+    @Query("""
+        UPDATE chat_messages
+        SET position = -position - 1
+        WHERE sessionId = :sessionId
+            AND position >= :fromPosition
+            AND (responseGroupId IS NULL OR responseGroupId != :responseGroupId)
+    """)
+    suspend fun parkMessagesFromPositionOutsideResponseGroup(
+        sessionId: String,
+        responseGroupId: String,
+        fromPosition: Int,
+    )
+
+    @Query("""
+        UPDATE chat_messages
+        SET position = (-position - 1) + :positionDelta
+        WHERE sessionId = :sessionId
+            AND position <= -:fromPosition - 1
+            AND (responseGroupId IS NULL OR responseGroupId != :responseGroupId)
+    """)
+    suspend fun restoreParkedMessagesOutsideResponseGroup(
+        sessionId: String,
+        responseGroupId: String,
+        fromPosition: Int,
+        positionDelta: Int,
+    )
 
     @Query("DELETE FROM chat_sessions WHERE id = :sessionId")
     suspend fun deleteSession(sessionId: String)

@@ -61,22 +61,63 @@ data class ChatUsageStatisticsSnapshot(
     val statistics: ChatUsageStatistics,
 )
 
-enum class PersistedChatWriteIntent {
-    SyncSnapshot,
-    DeleteSession,
-    ReplaceFromImport,
+data class AssistantResponseCheckpointTarget(
+    val sessionId: String,
+    val responseGroupId: String,
+)
+
+data class AssistantResponseCheckpoint(
+    val target: AssistantResponseCheckpointTarget,
+    val fromPosition: Int,
+    val messages: List<ChatMessage>,
+) {
+    init {
+        require(fromPosition >= 0) { "fromPosition must be non-negative" }
+        require(messages.isNotEmpty()) { "messages must not be empty" }
+        require(messages.all { it.responseGroupId == target.responseGroupId }) {
+            "checkpoint messages must belong to the target response"
+        }
+    }
+}
+
+private data class AssistantResponseCheckpointUpsert(
+    val sessionId: String,
+    val responseGroupId: String,
+    val fromPosition: Int,
+    val messages: List<ChatMessage>,
+    val entities: List<ChatMessageEntity>,
+)
+
+sealed interface PersistedChatWriteIntent {
+    data object SyncSnapshot : PersistedChatWriteIntent
+    data object DeleteSession : PersistedChatWriteIntent
+    data object ReplaceFromImport : PersistedChatWriteIntent
+}
+
+interface ChatStatePersistence {
+    val chatState: Flow<PersistedChatState>
+
+    suspend fun updateChatState(
+        sessions: List<ChatSession>,
+        currentSessionId: String,
+        writeIntent: PersistedChatWriteIntent = PersistedChatWriteIntent.SyncSnapshot,
+    )
+
+    suspend fun upsertAssistantResponseCheckpoints(
+        checkpoints: List<AssistantResponseCheckpoint>,
+    )
 }
 
 class ChatRepository(
     private val context: Context,
     private val database: ChatHistoryDatabase = ChatHistoryDatabase.getInstance(context),
-) {
+) : ChatStatePersistence {
     private val chatHistoryDao: ChatHistoryDao = database.chatHistoryDao()
     private val restoredMessageCache = mutableMapOf<ChatMessageCacheKey, LoadedChatMessage>()
     private val restoredMessageCacheMutex = Mutex()
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val chatState: Flow<PersistedChatState> = flow {
+    override val chatState: Flow<PersistedChatState> = flow {
         migrateLegacyChatStateIfNeeded()
         emitAll(
             combine(
@@ -140,10 +181,10 @@ class ChatRepository(
         )
     }
 
-    suspend fun updateChatState(
+    override suspend fun updateChatState(
         sessions: List<ChatSession>,
         currentSessionId: String,
-        writeIntent: PersistedChatWriteIntent = PersistedChatWriteIntent.SyncSnapshot,
+        writeIntent: PersistedChatWriteIntent,
     ) {
         migrateLegacyChatStateIfNeeded()
         replaceChatState(
@@ -342,6 +383,68 @@ class ChatRepository(
         }
     }
 
+    override suspend fun upsertAssistantResponseCheckpoints(
+        checkpoints: List<AssistantResponseCheckpoint>,
+    ) {
+        if (checkpoints.isEmpty()) return
+        val latestCheckpoints = checkpoints.associateBy { it.target }.values
+        val upserts = latestCheckpoints.map { checkpoint ->
+            AssistantResponseCheckpointUpsert(
+                sessionId = checkpoint.target.sessionId,
+                responseGroupId = checkpoint.target.responseGroupId,
+                fromPosition = checkpoint.fromPosition,
+                messages = checkpoint.messages,
+                entities = checkpoint.messages.mapIndexed { index, message ->
+                    ChatMessageEntityMapper.toEntity(
+                        sessionId = checkpoint.target.sessionId,
+                        position = checkpoint.fromPosition + index,
+                        message = message,
+                    )
+                },
+            )
+        }
+
+        upserts.forEach { upsert ->
+            invalidateRestoredMessagesFromPosition(
+                sessionId = upsert.sessionId,
+                fromPosition = upsert.fromPosition,
+            )
+        }
+        database.withTransaction {
+            upserts.forEach { upsert ->
+                if (chatHistoryDao.getSession(upsert.sessionId) == null) return@forEach
+                val previousMessageCount = chatHistoryDao.getMessageCountForResponseGroup(
+                    sessionId = upsert.sessionId,
+                    responseGroupId = upsert.responseGroupId,
+                )
+                chatHistoryDao.parkMessagesFromPositionOutsideResponseGroup(
+                    sessionId = upsert.sessionId,
+                    responseGroupId = upsert.responseGroupId,
+                    fromPosition = upsert.fromPosition,
+                )
+                chatHistoryDao.deleteWorkspaceFileRefsForResponseGroup(
+                    sessionId = upsert.sessionId,
+                    responseGroupId = upsert.responseGroupId,
+                )
+                chatHistoryDao.deleteMessagesForResponseGroup(
+                    sessionId = upsert.sessionId,
+                    responseGroupId = upsert.responseGroupId,
+                )
+                chatHistoryDao.upsertMessages(upsert.entities)
+                chatHistoryDao.restoreParkedMessagesOutsideResponseGroup(
+                    sessionId = upsert.sessionId,
+                    responseGroupId = upsert.responseGroupId,
+                    fromPosition = upsert.fromPosition,
+                    positionDelta = upsert.entities.size - previousMessageCount,
+                )
+                replaceWorkspaceFileRefsForMessagesInTransaction(
+                    sessionId = upsert.sessionId,
+                    messages = upsert.messages,
+                )
+            }
+        }
+    }
+
     private suspend fun replaceChatState(
         sessions: List<ChatSessionSnapshot>,
         currentSessionId: String,
@@ -355,7 +458,10 @@ class ChatRepository(
                 ?: sessions.firstOrNull()?.session?.id
                 ?: DraftSessionId
             if (sessions.isEmpty()) {
-                if (writeIntent == PersistedChatWriteIntent.SyncSnapshot && chatHistoryDao.getSessions().isNotEmpty()) {
+                if (writeIntent !is PersistedChatWriteIntent.ReplaceFromImport &&
+                    writeIntent !is PersistedChatWriteIntent.DeleteSession &&
+                    chatHistoryDao.getSessions().isNotEmpty()
+                ) {
                     return@withTransaction
                 }
                 chatHistoryDao.upsertMeta(
@@ -390,7 +496,7 @@ class ChatRepository(
 
             sessions.forEach { snapshot ->
                 val existingMessageCount = existingMessageCounts[snapshot.session.id] ?: 0
-                val isMetadataOnlySnapshot = writeIntent != PersistedChatWriteIntent.ReplaceFromImport &&
+                val isMetadataOnlySnapshot = writeIntent !is PersistedChatWriteIntent.ReplaceFromImport &&
                     snapshot.session.id != safeCurrentSessionId &&
                     snapshot.messages.isEmpty() &&
                     existingMessageCount > 0
@@ -941,6 +1047,7 @@ internal fun parseMessage(message: JSONObject, messageIndex: Int): ChatMessage =
     branchGroup = parseBranchGroup(message.optJSONObject("branchGroup")),
     responseGroupId = message.optString("responseGroupId").ifBlank { null },
     assistantActionsHidden = message.optBoolean("assistantActionsHidden"),
+    isIncomplete = message.optBoolean("isIncomplete"),
     providerPayloadJson = message.optString("providerPayloadJson"),
     displayKind = parseMessageDisplayKind(message.optString("displayKind")),
     usageStatistics = parseUsageStatistics(message.optJSONObject("usageStatistics")),
@@ -962,6 +1069,9 @@ internal fun ChatMessage.toJson(): JSONObject = JSONObject().apply {
     responseGroupId?.let { put("responseGroupId", it) }
     if (assistantActionsHidden) {
         put("assistantActionsHidden", true)
+    }
+    if (isIncomplete) {
+        put("isIncomplete", true)
     }
     providerPayloadJson.takeIf { it.isNotBlank() }?.let {
         put("providerPayloadJson", it)

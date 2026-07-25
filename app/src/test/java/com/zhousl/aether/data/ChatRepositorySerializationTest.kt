@@ -145,6 +145,34 @@ class ChatRepositorySerializationTest {
     }
 
     @Test
+    fun sessionRoundTripPreservesIncompleteStreamingCheckpoint() {
+        val serialized = serializeChatSessions(
+            listOf(
+                ChatSession(
+                    id = "session-checkpoint",
+                    title = "Checkpoint",
+                    preview = "partial",
+                    messages = listOf(
+                        ChatMessage(
+                            id = "agent-checkpoint",
+                            author = MessageAuthor.Agent,
+                            text = "partial output",
+                            isIncomplete = true,
+                            responseGroupId = "agent-group-turn-1",
+                        )
+                    ),
+                )
+            )
+        )
+
+        val restored = parseChatSessions(serialized).single().messages.single()
+
+        assertTrue(restored.isIncomplete)
+        assertEquals("partial output", restored.text)
+        assertEquals("agent-group-turn-1", restored.responseGroupId)
+    }
+
+    @Test
     fun sessionRoundTripPreservesChromeSelection() {
         val serialized = serializeChatSessions(
             listOf(

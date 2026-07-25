@@ -1,5 +1,6 @@
 package com.zhousl.aether.data.pi
 
+import android.os.SystemClock
 import com.zhousl.aether.data.PiExtensionLoadOptions
 import com.zhousl.aether.data.AetherDiagnosticLogger
 import com.zhousl.aether.data.DiagnosticRedactor
@@ -9,6 +10,7 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
@@ -20,6 +22,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.selects.onTimeout
+import kotlinx.coroutines.selects.select
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.BufferedWriter
@@ -38,6 +42,8 @@ private const val PiAiVersion = "0.80.6"
 private const val PiAgentCoreVersion = "0.80.6"
 private const val PiCodingAgentVersion = "0.80.6"
 private const val PiBridgeRequestTimeoutMillis = 10 * 60 * 1000L
+private const val PiBridgeInactivityTimeoutMillis = PiBridgeRequestTimeoutMillis
+private const val PiBridgeInactivityTimeoutCode = "bridge_inactive"
 private const val PiBridgeOAuthTimeoutMillis = 15 * 60 * 1000L
 private const val PiBridgePingTimeoutMillis = 15_000L
 private const val CancelledRequestRetentionMillis = 5 * 60 * 1000L
@@ -45,6 +51,8 @@ private const val CancelledRequestRetentionMillis = 5 * 60 * 1000L
 private data class PendingPiBridgeRequest(
     val response: CompletableDeferred<PiBridgeFrame>,
     val processGeneration: Long,
+    val lastFrameUptimeMillis: AtomicLong,
+    val activityChannel: Channel<Unit>? = null,
     val eventChannel: Channel<PiBridgeFrame>? = null,
     val eventJob: Job? = null,
 )
@@ -143,7 +151,9 @@ class PiKernelBridge(
         request(
             type = "run_turn",
             payload = payload,
-            timeoutMillis = PiBridgeRequestTimeoutMillis,
+            // Agent turns use an inactivity deadline instead of a wall-clock deadline.
+            timeoutMillis = null,
+            inactivityTimeoutMillis = PiBridgeInactivityTimeoutMillis,
             onEvent = onEvent,
         )
 
@@ -169,7 +179,8 @@ class PiKernelBridge(
             payload = JSONObject()
                 .put("session_id", sessionId)
                 .put("message", message),
-            timeoutMillis = PiBridgeRequestTimeoutMillis,
+            timeoutMillis = null,
+            inactivityTimeoutMillis = PiBridgeInactivityTimeoutMillis,
             onEvent = onEvent,
         )
 
@@ -398,6 +409,7 @@ class PiKernelBridge(
         type: String,
         payload: JSONObject = JSONObject(),
         timeoutMillis: Long?,
+        inactivityTimeoutMillis: Long? = null,
         onEvent: (suspend (String, JSONObject) -> Unit)? = null,
         abortOnCancellation: Boolean = type == "run_turn" || type == "complete_once" || type == "follow_up",
         onSetupProgress: (PiCoreSetupUpdate) -> Unit = {},
@@ -405,6 +417,7 @@ class PiKernelBridge(
     ): JSONObject = withContext(Dispatchers.IO) {
         val id = nextRequestId(type)
         val response = CompletableDeferred<PiBridgeFrame>()
+        val activityChannel = inactivityTimeoutMillis?.let { Channel<Unit>(Channel.CONFLATED) }
         val eventChannel = onEvent?.let { Channel<PiBridgeFrame>(Channel.UNLIMITED) }
         val eventJob = if (onEvent != null && eventChannel != null) {
             eventScope.launch {
@@ -448,23 +461,28 @@ class PiKernelBridge(
             } else {
                 currentLiveProcess() ?: return@withContext JSONObject().put("closed", false)
             }
-            pendingRequests[id] = PendingPiBridgeRequest(
+            val pendingRequest = PendingPiBridgeRequest(
                 response = response,
                 processGeneration = requestProcess.generation,
+                lastFrameUptimeMillis = AtomicLong(SystemClock.uptimeMillis()),
+                activityChannel = activityChannel,
                 eventChannel = eventChannel,
                 eventJob = eventJob,
             )
+            pendingRequests[id] = pendingRequest
             onSetupProgress(PiCoreSetupUpdate(PiCoreSetupPhase.VerifyingBridge))
             val request = PiBridgeRequest(id = id, type = type, payload = payload)
             synchronized(requestProcess.writer) {
                 request.writeJsonLine(requestProcess.writer)
                 requestProcess.writer.flush()
             }
-            val frame = if (timeoutMillis == null) {
-                response.await()
-            } else {
-                withTimeout(timeoutMillis) { response.await() }
-            }
+            val frame = awaitResponse(
+                response = response,
+                activityChannel = activityChannel,
+                timeoutMillis = timeoutMillis,
+                inactivityTimeoutMillis = inactivityTimeoutMillis,
+                lastFrameUptimeMillis = pendingRequest.lastFrameUptimeMillis,
+            )
             if (!frame.ok || frame.type == "error") {
                 val error = frame.error
                 throw PiBridgeException(
@@ -480,6 +498,28 @@ class PiKernelBridge(
                 details = diagnosticDetails + mapOf("frame_type" to frame.type),
             )
             frame.payload
+        } catch (bridgeException: PiBridgeException) {
+            if (bridgeException.code == PiBridgeInactivityTimeoutCode) {
+                diagnosticLogger.event(
+                    category = "pi_bridge",
+                    event = "request_inactive",
+                    level = "warn",
+                    requestId = id,
+                    details = diagnosticDetails,
+                )
+                if (abortOnCancellation) {
+                    abortRequest(id, payload)
+                }
+            } else {
+                diagnosticLogger.exception(
+                    category = "pi_bridge",
+                    event = "request_failed",
+                    throwable = bridgeException,
+                    requestId = id,
+                    details = diagnosticDetails,
+                )
+            }
+            throw bridgeException
         } catch (cancellationException: CancellationException) {
             diagnosticLogger.event(
                 category = "pi_bridge",
@@ -489,19 +529,7 @@ class PiKernelBridge(
                 details = diagnosticDetails,
             )
             if (abortOnCancellation) {
-                markRequestCancelled(id)
-                withContext(NonCancellable) {
-                    runCatching {
-                        request(
-                            type = "abort",
-                            payload = JSONObject()
-                                .put("request_id", id)
-                                .put("session_id", payload.optString("session_id")),
-                            timeoutMillis = PiBridgePingTimeoutMillis,
-                            abortOnCancellation = false,
-                        )
-                    }
-                }
+                abortRequest(id, payload)
             }
             throw cancellationException
         } catch (throwable: Throwable) {
@@ -515,8 +543,60 @@ class PiKernelBridge(
             throw throwable
         } finally {
             pendingRequests.remove(id)
+            activityChannel?.close()
             eventChannel?.close()
             eventJob?.cancelAndJoin()
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private suspend fun awaitResponse(
+        response: CompletableDeferred<PiBridgeFrame>,
+        activityChannel: Channel<Unit>?,
+        timeoutMillis: Long?,
+        inactivityTimeoutMillis: Long?,
+        lastFrameUptimeMillis: AtomicLong?,
+    ): PiBridgeFrame {
+        if (timeoutMillis != null) {
+            return withTimeout(timeoutMillis) { response.await() }
+        }
+        if (inactivityTimeoutMillis == null || activityChannel == null || lastFrameUptimeMillis == null) {
+            return response.await()
+        }
+        while (!response.isCompleted) {
+            val elapsedMillis = SystemClock.uptimeMillis() - lastFrameUptimeMillis.get()
+            val remainingMillis = inactivityTimeoutMillis - elapsedMillis
+            if (remainingMillis <= 0L) {
+                throw PiBridgeException(
+                    message = "Pi bridge stopped responding.",
+                    code = PiBridgeInactivityTimeoutCode,
+                )
+            }
+            select<Unit> {
+                response.onAwait { }
+                activityChannel.onReceiveCatching { }
+                onTimeout(remainingMillis) { }
+            }
+        }
+        return response.await()
+    }
+
+    private suspend fun abortRequest(
+        requestId: String,
+        payload: JSONObject,
+    ) {
+        markRequestCancelled(requestId)
+        withContext(NonCancellable) {
+            runCatching {
+                request(
+                    type = "abort",
+                    payload = JSONObject()
+                        .put("request_id", requestId)
+                        .put("session_id", payload.optString("session_id")),
+                    timeoutMillis = PiBridgePingTimeoutMillis,
+                    abortOnCancellation = false,
+                )
+            }
         }
     }
 
@@ -736,6 +816,8 @@ class PiKernelBridge(
     ) {
         val pending = pendingRequests[frame.id]
         if (pending != null && pending.processGeneration != processGeneration) return
+        pending?.lastFrameUptimeMillis?.set(SystemClock.uptimeMillis())
+        pending?.activityChannel?.trySend(Unit)
         when {
             pending != null && pending.eventChannel != null -> {
                 if (pending.eventChannel.trySend(frame).isFailure) {

@@ -355,7 +355,14 @@ private fun AetherAppContent(
     val activeProviderConfig = uiState.providerConfigs.firstOrNull { it.isEnabled }
         ?: uiState.providerConfigs.firstOrNull()
     val currentSessionExecution = uiState.sessionExecutionStates[uiState.currentSessionId]
-    val currentMessages = activeSession?.messages.orEmpty()
+    val activeStreamingResponseGroupId = currentSessionExecution
+        ?.takeIf { it.isRunning }
+        ?.activeResponseGroupId
+    val currentMessages = activeSession?.messages.orEmpty().filterNot { message ->
+        activeStreamingResponseGroupId != null &&
+            message.isIncomplete &&
+            message.responseGroupId == activeStreamingResponseGroupId
+    }
     val selectedSkillIds = activeSession?.selectedSkillIds ?: uiState.draftSelectedSkillIds
     val selectedMcpServerIds = activeSession?.activeMcpServerIds ?: uiState.draftSelectedMcpServerIds
     val effectiveTermuxSetupState = effectiveTermuxSetupState(
