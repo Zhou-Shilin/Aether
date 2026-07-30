@@ -230,6 +230,7 @@ class AetherAppRuntime(
         bashTool = bashTool,
         runtimeRouter = runtimeRouter,
         workspaceFileBridge = workspaceFileBridge,
+        runtimeWorkspaceFileBridge = runtimeWorkspaceFileBridge,
         rootSetupController = rootSetupController,
         agentModeController = agentModeController,
         skillManager = skillManager,
