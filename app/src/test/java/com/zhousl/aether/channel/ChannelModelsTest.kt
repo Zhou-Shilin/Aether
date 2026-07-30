@@ -14,6 +14,7 @@ class ChannelModelsTest {
             enabled = true,
             appId = "app-id",
             appSecret = "secret",
+            baseUrl = "https://api.dingtalk.com",
             accessPolicy = ChannelAccessPolicy(
                 mode = ChannelAccessMode.AllowList,
                 allowedUserIds = setOf("alice", "bob"),
