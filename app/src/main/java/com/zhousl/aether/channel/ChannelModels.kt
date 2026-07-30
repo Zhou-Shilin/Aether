@@ -24,6 +24,41 @@ data class ChannelAccessPolicy(
     val allowedUserIds: Set<String> = emptySet(),
 )
 
+/**
+ * User-visible Agent event controls. Defaults intentionally match QwenPaw:
+ * rich events are visible, while remote streaming is opt-in.
+ */
+data class ChannelDisplayOptions(
+    val showToolCalls: Boolean = true,
+    val showToolResults: Boolean = true,
+    val showThinking: Boolean = true,
+    val streamingEnabled: Boolean = false,
+    val toolCallMaxLength: Int = 200,
+    val toolResultMaxLength: Int = 500,
+) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("showToolCalls", showToolCalls)
+        .put("showToolResults", showToolResults)
+        .put("showThinking", showThinking)
+        .put("streamingEnabled", streamingEnabled)
+        .put("toolCallMaxLength", toolCallMaxLength)
+        .put("toolResultMaxLength", toolResultMaxLength)
+
+    companion object {
+        fun fromJson(json: JSONObject?): ChannelDisplayOptions {
+            if (json == null) return ChannelDisplayOptions()
+            return ChannelDisplayOptions(
+                showToolCalls = json.optBoolean("showToolCalls", true),
+                showToolResults = json.optBoolean("showToolResults", true),
+                showThinking = json.optBoolean("showThinking", true),
+                streamingEnabled = json.optBoolean("streamingEnabled", false),
+                toolCallMaxLength = json.optInt("toolCallMaxLength", 200).coerceIn(0, 20_000),
+                toolResultMaxLength = json.optInt("toolResultMaxLength", 500).coerceIn(0, 50_000),
+            )
+        }
+    }
+}
+
 /** Platform credentials stay in Android private storage and never enter AgentHarness. */
 data class ChannelConfig(
     val kind: ChannelKind,
@@ -34,6 +69,12 @@ data class ChannelConfig(
     val baseUrl: String = "",
     val accessPolicy: ChannelAccessPolicy = ChannelAccessPolicy(),
     val mergeWindowMillis: Long = 600,
+    val display: ChannelDisplayOptions = ChannelDisplayOptions(),
+    /** DingTalk robot code is distinct from the Stream client ID for some applications. */
+    val robotCode: String = "",
+    /** DingTalk AI Card template used when streaming is enabled. */
+    val cardTemplateId: String = "",
+    val cardTemplateKey: String = "content",
 ) {
     val isConfigured: Boolean
         get() = when (kind) {
@@ -52,6 +93,10 @@ data class ChannelConfig(
         .put("accessMode", accessPolicy.mode.name)
         .put("allowedUserIds", JSONArray(accessPolicy.allowedUserIds.toList()))
         .put("mergeWindowMillis", mergeWindowMillis)
+        .put("display", display.toJson())
+        .put("robotCode", robotCode)
+        .put("cardTemplateId", cardTemplateId)
+        .put("cardTemplateKey", cardTemplateKey)
 
     companion object {
         fun default(kind: ChannelKind) = ChannelConfig(
@@ -83,6 +128,10 @@ data class ChannelConfig(
                     },
                 ),
                 mergeWindowMillis = json.optLong("mergeWindowMillis", 600).coerceIn(0, 5_000),
+                display = ChannelDisplayOptions.fromJson(json.optJSONObject("display")),
+                robotCode = json.optString("robotCode"),
+                cardTemplateId = json.optString("cardTemplateId"),
+                cardTemplateKey = json.optString("cardTemplateKey").ifBlank { "content" },
             )
         }
     }
@@ -101,6 +150,7 @@ data class ChannelAddress(
     val conversationId: String,
     val userId: String,
     val replyToken: String = "",
+    val attributes: Map<String, String> = emptyMap(),
 )
 
 data class ChannelIncomingMessage(
@@ -119,8 +169,30 @@ data class ChannelIncomingMessage(
 
 data class ChannelReply(
     val address: ChannelAddress,
-    val text: String,
+    val text: String = "",
+    val files: List<ChannelFile> = emptyList(),
     val isFinal: Boolean = true,
+)
+
+enum class ChannelFileKind { Image, Audio, Video, File }
+
+data class ChannelFile(
+    val name: String,
+    val mimeType: String,
+    val bytes: ByteArray,
+) {
+    val kind: ChannelFileKind
+        get() = when {
+            mimeType.startsWith("image/") -> ChannelFileKind.Image
+            mimeType.startsWith("audio/") -> ChannelFileKind.Audio
+            mimeType.startsWith("video/") -> ChannelFileKind.Video
+            else -> ChannelFileKind.File
+        }
+}
+
+data class ChannelSendReceipt(
+    /** Platform message/card identifier, when the transport exposes one. */
+    val messageId: String = "",
 )
 
 interface AetherChannel {
@@ -130,5 +202,8 @@ interface AetherChannel {
     val incomingMessages: Flow<ChannelIncomingMessage>
     suspend fun start()
     suspend fun stop()
-    suspend fun send(reply: ChannelReply)
+    suspend fun onProcessing(message: ChannelIncomingMessage) = Unit
+    suspend fun onCompleted(message: ChannelIncomingMessage, receipt: ChannelSendReceipt) = Unit
+    suspend fun onFailed(message: ChannelIncomingMessage) = Unit
+    suspend fun send(reply: ChannelReply): ChannelSendReceipt
 }
