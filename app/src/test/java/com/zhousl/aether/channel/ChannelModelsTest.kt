@@ -10,7 +10,7 @@ class ChannelModelsTest {
     @Test
     fun configRoundTripPreservesCredentialsAndPolicy() {
         val original = ChannelConfig(
-            kind = ChannelKind.Feishu,
+            kind = ChannelKind.DingTalk,
             enabled = true,
             appId = "app-id",
             appSecret = "secret",
@@ -19,9 +19,27 @@ class ChannelModelsTest {
                 allowedUserIds = setOf("alice", "bob"),
             ),
             mergeWindowMillis = 900,
+            display = ChannelDisplayOptions(
+                showToolCalls = false,
+                showToolResults = true,
+                showThinking = false,
+                streamingEnabled = true,
+            ),
+            robotCode = "robot-code",
+            cardTemplateId = "card-template",
+            cardTemplateKey = "answer",
         )
 
         assertEquals(original, ChannelConfig.fromJson(original.toJson()))
+    }
+
+    @Test
+    fun oldConfigDefaultsToQwenPawDisplayBehavior() {
+        val decoded = ChannelConfig.fromJson(
+            ChannelConfig.default(ChannelKind.Feishu).toJson().apply { remove("display") }
+        )
+
+        assertEquals(ChannelDisplayOptions(), decoded?.display)
     }
 
     @Test
