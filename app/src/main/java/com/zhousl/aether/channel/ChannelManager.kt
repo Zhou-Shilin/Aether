@@ -5,8 +5,8 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -97,6 +97,9 @@ class ChannelManager(
     private fun route(config: ChannelConfig, message: ChannelIncomingMessage) {
         if (!deduplicator.accept(message.channel, message.messageId)) return
         if (!ChannelAccessController.isAllowed(config.accessPolicy, message.address.userId)) return
+        synchronized(lock) { channels[message.channel] }?.let { channel ->
+            scope.launch { runCatching { channel.onProcessing(message) } }
+        }
         val actor = sessionActors.computeIfAbsent(message.sessionId) { sessionId ->
             val queue = Channel<ChannelIncomingMessage>(Channel.UNLIMITED)
             val job = scope.launch { consumeSession(sessionId, config, queue) }
@@ -119,19 +122,28 @@ class ChannelManager(
                 }
                 val latest = messages.last()
                 val input = messages.joinToString("\n") { it.text.trim() }
+                val channel = synchronized(lock) { channels[latest.channel] } ?: continue
+                val renderer = ChannelMessageRenderer(initialConfig.display)
                 var finalText = ""
+                var reasoningText = ""
                 var failure: String? = null
-                val channel = synchronized(lock) { channels[latest.channel] }
-                val keepAlive = if (channel?.supportsStreamingReplies == true) {
+                var finalReceipt = ChannelSendReceipt()
+                val toolTimeline = mutableListOf<String>()
+                var latestSnapshot = ""
+                val streaming = channel.supportsStreamingReplies &&
+                    initialConfig.display.streamingEnabled
+                val keepAlive = if (streaming) {
                     scope.launch {
                         var lastSent = ""
                         while (isActive) {
-                            val rendered = finalText.ifBlank { "Aether is thinking…" }.normalizedChannelReply()
-                            if (rendered != lastSent) {
-                                runCatching { channel.send(ChannelReply(latest.address, rendered, isFinal = false)) }
+                            val rendered = latestSnapshot.normalizedChannelReply()
+                            if (rendered.isNotBlank() && rendered != lastSent) {
+                                runCatching {
+                                    channel.send(ChannelReply(latest.address, rendered, isFinal = false))
+                                }
                                 lastSent = rendered
                             }
-                            delay(2_500)
+                            delay(750)
                         }
                     }
                 } else {
@@ -148,7 +160,56 @@ class ChannelManager(
                     ).collect { event ->
                         when (event) {
                             SessionAgentEvent.Started -> Unit
-                            is SessionAgentEvent.TextDelta -> finalText = event.accumulatedText
+                            is SessionAgentEvent.TextDelta -> {
+                                finalText = event.accumulatedText
+                                latestSnapshot = renderer.streamingSnapshot(
+                                    reasoningText,
+                                    toolTimeline,
+                                    finalText,
+                                )
+                            }
+                            is SessionAgentEvent.ReasoningDelta -> {
+                                reasoningText = event.accumulatedText
+                                latestSnapshot = renderer.streamingSnapshot(
+                                    reasoningText,
+                                    toolTimeline,
+                                    finalText,
+                                )
+                            }
+                            is SessionAgentEvent.ToolCall -> {
+                                renderer.toolCall(event.name, event.argumentsJson)?.let { rendered ->
+                                    toolTimeline += rendered
+                                    latestSnapshot = renderer.streamingSnapshot(
+                                        reasoningText,
+                                        toolTimeline,
+                                        finalText,
+                                    )
+                                    if (!streaming) {
+                                        channel.send(ChannelReply(latest.address, rendered))
+                                    }
+                                }
+                            }
+                            is SessionAgentEvent.ToolResult -> {
+                                renderer.toolResult(event.name, event.output, event.isError)?.let { rendered ->
+                                    toolTimeline += rendered
+                                    latestSnapshot = renderer.streamingSnapshot(
+                                        reasoningText,
+                                        toolTimeline,
+                                        finalText,
+                                    )
+                                    if (!streaming) {
+                                        channel.send(ChannelReply(latest.address, rendered))
+                                    }
+                                }
+                            }
+                            is SessionAgentEvent.FileReady -> {
+                                channel.send(
+                                    ChannelReply(
+                                        address = latest.address,
+                                        files = listOf(event.file),
+                                    )
+                                )
+                            }
                             is SessionAgentEvent.Completed -> finalText = event.text
                             is SessionAgentEvent.Failed -> failure = event.message
                         }
@@ -160,10 +221,24 @@ class ChannelManager(
                 } finally {
                     keepAlive?.cancelAndJoin()
                 }
-                if (channel != null) {
+                try {
+                    if (!streaming) {
+                        renderer.thinking(reasoningText)?.let { rendered ->
+                            channel.send(ChannelReply(latest.address, rendered))
+                        }
+                    }
                     val output = failure?.let { "Aether could not complete this turn: $it" }
                         ?: finalText.normalizedChannelReply()
-                    runCatching { channel.send(ChannelReply(latest.address, output)) }
+                    finalReceipt = channel.send(ChannelReply(latest.address, output))
+                    if (failure == null) {
+                        channel.onCompleted(latest, finalReceipt)
+                    } else {
+                        channel.onFailed(latest)
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (sendError: Throwable) {
+                    runCatching { channel.onFailed(latest) }
                 }
             }
         } finally {
