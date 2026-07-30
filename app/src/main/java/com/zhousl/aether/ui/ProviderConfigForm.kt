@@ -88,6 +88,7 @@ import com.zhousl.aether.data.normalizeLlmUserAgent
 import com.zhousl.aether.data.sanitizeProviderId
 import com.zhousl.aether.data.pi.PiOAuthPrompt
 import com.zhousl.aether.data.pi.PiProviderAuthState
+import com.zhousl.aether.ui.theme.AetherOnPrimary
 import com.zhousl.aether.ui.theme.AetherOnSurface
 import com.zhousl.aether.ui.theme.AetherOnSurfaceVariant
 import com.zhousl.aether.ui.theme.AetherPrimary
@@ -1290,7 +1291,7 @@ internal fun ProviderWizardChoiceRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(28.dp))
-            .background(Color.White)
+            .background(AetherSurface)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1408,13 +1409,13 @@ private fun ProviderWizardPrimaryButton(
             CircularProgressIndicator(
                 modifier = Modifier.size(20.dp),
                 strokeWidth = 2.dp,
-                color = Color.White,
+                color = AetherOnPrimary,
             )
         } else {
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
-                color = if (enabled) Color.White else AetherOnSurfaceVariant.copy(alpha = 0.6f),
+                color = if (enabled) AetherOnPrimary else AetherOnSurfaceVariant.copy(alpha = 0.6f),
             )
         }
     }
@@ -1431,7 +1432,7 @@ private fun ProviderWizardSecondaryButton(
             .fillMaxWidth()
             .height(48.dp)
             .clip(RoundedCornerShape(24.dp))
-            .background(Color.White)
+            .background(AetherSurface)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -1839,7 +1840,7 @@ private fun ProviderOAuthField(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(28.dp))
-                        .background(Color.White)
+                        .background(AetherSurface)
                         .clickable { onCopyDeviceCode(deviceCode) }
                         .padding(horizontal = 14.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1904,7 +1905,7 @@ private fun ProviderActionRow(
             .fillMaxWidth()
             .heightIn(min = 56.dp)
             .clip(RoundedCornerShape(28.dp))
-            .background(Color.White)
+            .background(AetherSurface)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
