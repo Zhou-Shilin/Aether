@@ -8,6 +8,8 @@ import com.zhousl.aether.AppForegroundTracker
 import com.zhousl.aether.channel.SessionAgentEvent
 import com.zhousl.aether.channel.SessionAgentProcessor
 import com.zhousl.aether.channel.SessionAgentRequest
+import com.zhousl.aether.channel.ChannelFile
+import com.zhousl.aether.channel.ChannelMessageRenderer
 import com.zhousl.aether.runtime.RuntimeRouter
 import com.zhousl.aether.runtime.RuntimeShellTool
 import com.zhousl.aether.data.pi.PiAgentRunner
@@ -44,6 +46,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -55,6 +58,7 @@ private const val ReasoningTimedSummaryIntervalMillis = 5_000L
 private const val ReasoningSummaryMaxInputChars = 8_000
 private const val ReasoningSummaryTitleMaxChars = 120
 private const val ReasoningSummaryDetailMaxChars = 520
+private const val ChannelFileMaxBytes = 30 * 1024 * 1024
 private const val ReasoningSummarySystemPrompt =
     "You write concise user-visible progress summaries for assistant reasoning. Use a consistent first-person planning style, and never quote long private reasoning verbatim."
 
@@ -124,6 +128,11 @@ private data class ReasoningSummary(
     val detail: String,
 )
 
+private data class ScopedSessionAgentEvent(
+    val sessionId: String,
+    val event: SessionAgentEvent,
+)
+
 class SessionExecutionManager(
     private val application: Application,
     private val scope: CoroutineScope,
@@ -134,6 +143,7 @@ class SessionExecutionManager(
     private val bashTool: TermuxBashTool,
     private val runtimeRouter: RuntimeRouter,
     private val workspaceFileBridge: WorkspaceFileBridge,
+    private val runtimeWorkspaceFileBridge: RuntimeWorkspaceFileBridge,
     private val rootSetupController: RootSetupController,
     private val agentModeController: AgentModeController,
     private val skillManager: AgentSkillManager,
@@ -150,6 +160,9 @@ class SessionExecutionManager(
     private val currentExtensionsState = MutableStateFlow(AgentExtensionsState())
     private val _executionStates = MutableStateFlow<Map<String, SessionExecutionState>>(emptyMap())
     private val _turnEvents = MutableSharedFlow<SessionTurnEvent>(extraBufferCapacity = 8)
+    private val externalAgentEvents = MutableSharedFlow<ScopedSessionAgentEvent>(
+        extraBufferCapacity = 128,
+    )
     private val executionHandles = ConcurrentHashMap<String, SessionExecutionHandle>()
     private val queuedTurnRequestBuilder = QueuedTurnRequestBuilder(chatStateStore)
 
@@ -188,18 +201,14 @@ class SessionExecutionManager(
         }
         var previousText = ""
         val streaming = launch(start = CoroutineStart.UNDISPATCHED) {
-            executionStates
-                .map { states -> states[request.sessionId]?.pendingAssistantText.orEmpty() }
-                .distinctUntilChanged()
-                .collect { accumulated ->
-                    if (accumulated.isBlank() || accumulated == previousText) return@collect
-                    val delta = if (accumulated.startsWith(previousText)) {
-                        accumulated.removePrefix(previousText)
-                    } else {
-                        accumulated
+            externalAgentEvents
+                .filter { it.sessionId == request.sessionId }
+                .collect { scoped ->
+                    val event = scoped.event
+                    if (event is SessionAgentEvent.TextDelta) {
+                        previousText = event.accumulatedText
                     }
-                    previousText = accumulated
-                    send(SessionAgentEvent.TextDelta(delta, accumulated))
+                    send(event)
                 }
         }
 
@@ -209,7 +218,7 @@ class SessionExecutionManager(
             val persistedText = chatStateStore.state.value.sessions
                 .firstOrNull { it.id == request.sessionId }
                 ?.messages
-                ?.lastOrNull { it.author == MessageAuthor.Agent }
+                ?.lastOrNull { it.author == MessageAuthor.Agent && it.text.isNotBlank() }
                 ?.text
                 .orEmpty()
             send(
@@ -576,6 +585,9 @@ class SessionExecutionManager(
         val turnStartedAtMillis = System.currentTimeMillis()
         val turnId = "turn-$turnStartedAtMillis"
         var firstAssistantTokenAtMillis: Long? = null
+        var externalAssistantText = ""
+        var externalReasoningText = ""
+        val externalToolCalls = mutableSetOf<String>()
         diagnosticLogger.event(
             category = "session",
             event = "turn_start",
@@ -690,6 +702,37 @@ class SessionExecutionManager(
                         event = event,
                         reasoningTraceToolRoutingEnabled = reasoningTraceToolRoutingEnabled,
                     )
+                    if (event.outputJson == null) {
+                        if (externalToolCalls.add(event.id)) {
+                            emitExternalAgentEvent(
+                                handle.sessionId,
+                                SessionAgentEvent.ToolCall(
+                                    id = event.id,
+                                    name = event.name,
+                                    argumentsJson = event.argumentsJson,
+                                ),
+                            )
+                        }
+                    } else if (event.isRunning == false) {
+                        emitExternalAgentEvent(
+                            handle.sessionId,
+                            SessionAgentEvent.ToolResult(
+                                id = event.id,
+                                name = event.name,
+                                output = event.outputJson,
+                                isError = !AetherToolExecutor.inferToolOutputOk(event.outputJson),
+                            ),
+                        )
+                        resolveOutgoingChannelFile(
+                            settings = request.settings,
+                            runtimeWorkspaceDirectory = runtimeWorkspaceDirectory,
+                            termuxWorkspaceDirectory = workspaceDirectory,
+                            toolCallId = event.id,
+                            output = event.outputJson,
+                        )?.let { fileEvent ->
+                            emitExternalAgentEvent(handle.sessionId, fileEvent)
+                        }
+                    }
                 }
             }
 
@@ -720,6 +763,11 @@ class SessionExecutionManager(
                         handle = handle,
                         delta = delta,
                     )
+                    externalReasoningText += delta
+                    emitExternalAgentEvent(
+                        handle.sessionId,
+                        SessionAgentEvent.ReasoningDelta(delta, externalReasoningText),
+                    )
                 },
                 onAssistantReasoningSummaryDelta = { delta ->
                     if (handle.pauseRequested) return@runTurn
@@ -727,6 +775,11 @@ class SessionExecutionManager(
                     appendDirectReasoningSummaryDelta(
                         handle = handle,
                         delta = delta,
+                    )
+                    externalReasoningText += delta
+                    emitExternalAgentEvent(
+                        handle.sessionId,
+                        SessionAgentEvent.ReasoningDelta(delta, externalReasoningText),
                     )
                 },
                 onAssistantTextDelta = { delta ->
@@ -752,6 +805,11 @@ class SessionExecutionManager(
                             pendingResponseBlocks = pendingResponseBlocks,
                         )
                     }
+                    externalAssistantText += delta
+                    emitExternalAgentEvent(
+                        handle.sessionId,
+                        SessionAgentEvent.TextDelta(delta, externalAssistantText),
+                    )
                 },
                 onAssistantTextReset = {
                     if (handle.pauseRequested) return@runTurn
@@ -762,6 +820,7 @@ class SessionExecutionManager(
                             current.copy(pendingAssistantText = "")
                         }
                     }
+                    externalAssistantText = ""
                 },
                 onStreamingStatus = { status ->
                     if (handle.pauseRequested) return@runTurn
@@ -937,6 +996,53 @@ class SessionExecutionManager(
                 }
             }
         }
+    }
+
+    private suspend fun emitExternalAgentEvent(sessionId: String, event: SessionAgentEvent) {
+        if (!sessionId.startsWith("channel:")) return
+        externalAgentEvents.emit(ScopedSessionAgentEvent(sessionId, event))
+    }
+
+    private suspend fun resolveOutgoingChannelFile(
+        settings: AppSettings,
+        runtimeWorkspaceDirectory: String,
+        termuxWorkspaceDirectory: String,
+        toolCallId: String,
+        output: String,
+    ): SessionAgentEvent.FileReady? {
+        val marker = runCatching { JSONObject(output) }.getOrNull()
+            ?.optJSONObject(ChannelMessageRenderer.AetherChannelFileMarker)
+            ?: return null
+        val path = marker.optString("path").trim()
+        if (path.isBlank()) return null
+        val declaredSize = marker.optLong("size_bytes", -1L)
+        val byteLimit = if (declaredSize in 0..ChannelFileMaxBytes.toLong()) {
+            declaredSize.toInt().coerceAtLeast(1)
+        } else {
+            ChannelFileMaxBytes
+        }
+        val payload = runtimeWorkspaceFileBridge.readWorkspaceFile(
+            settings = settings,
+            workspaceDirectory = runtimeWorkspaceDirectory,
+            termuxWorkspaceDirectory = termuxWorkspaceDirectory,
+            path = path,
+            workingDirectory = runtimeWorkspaceDirectory,
+            byteLimit = byteLimit,
+            enforceWorkspaceRoot = true,
+        ).getOrNull() ?: return null
+        return SessionAgentEvent.FileReady(
+            toolCallId = toolCallId,
+            file = ChannelFile(
+                name = marker.optString("name").ifBlank {
+                    payload.absolutePath.substringAfterLast('/').ifBlank { "file" }
+                },
+                mimeType = marker.optString("mime_type").ifBlank {
+                    runtimeWorkspaceFileBridge.guessMimeType(payload.absolutePath)
+                        .ifBlank { "application/octet-stream" }
+                },
+                bytes = payload.bytes,
+            ),
+        )
     }
 
     private fun buildQueuedTurnRequest(
