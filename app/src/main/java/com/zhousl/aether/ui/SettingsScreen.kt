@@ -138,6 +138,7 @@ import com.zhousl.aether.channel.ChannelAccessPolicy
 import com.zhousl.aether.channel.ChannelBindingState
 import com.zhousl.aether.channel.ChannelConfig
 import com.zhousl.aether.channel.ChannelConnectionState
+import com.zhousl.aether.channel.ChannelDisplayOptions
 import com.zhousl.aether.channel.ChannelKind
 import com.zhousl.aether.channel.ChannelStatus
 import com.google.zxing.BarcodeFormat
@@ -3179,8 +3180,30 @@ private fun ChannelDetailPage(
     var mergeWindow by rememberSaveable(config.kind, stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(config.mergeWindowMillis.toString()))
     }
+    var robotCode by rememberSaveable(config.kind, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(config.robotCode))
+    }
+    var cardTemplateId by rememberSaveable(config.kind, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(config.cardTemplateId))
+    }
+    var cardTemplateKey by rememberSaveable(config.kind, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(config.cardTemplateKey))
+    }
+    var showToolCalls by rememberSaveable(config.kind) {
+        mutableStateOf(config.display.showToolCalls)
+    }
+    var showToolResults by rememberSaveable(config.kind) {
+        mutableStateOf(config.display.showToolResults)
+    }
+    var showThinking by rememberSaveable(config.kind) {
+        mutableStateOf(config.display.showThinking)
+    }
+    var streamingEnabled by rememberSaveable(config.kind) {
+        mutableStateOf(config.display.streamingEnabled)
+    }
     var accessMode by rememberSaveable(config.kind) { mutableStateOf(config.accessPolicy.mode) }
     var manualExpanded by rememberSaveable(config.kind) { mutableStateOf(false) }
+    var displayExpanded by rememberSaveable(config.kind) { mutableStateOf(true) }
     var advancedExpanded by rememberSaveable(config.kind) { mutableStateOf(false) }
 
     fun snapshot(isEnabled: Boolean = enabled) = config.copy(
@@ -3189,6 +3212,17 @@ private fun ChannelDetailPage(
         appSecret = appSecret.text.trim(),
         token = token.text.trim(),
         baseUrl = baseUrl.text.trim(),
+        robotCode = robotCode.text.trim(),
+        cardTemplateId = cardTemplateId.text.trim(),
+        cardTemplateKey = cardTemplateKey.text.trim().ifBlank { "content" },
+        display = ChannelDisplayOptions(
+            showToolCalls = showToolCalls,
+            showToolResults = showToolResults,
+            showThinking = showThinking,
+            streamingEnabled = streamingEnabled,
+            toolCallMaxLength = config.display.toolCallMaxLength,
+            toolResultMaxLength = config.display.toolResultMaxLength,
+        ),
         accessPolicy = ChannelAccessPolicy(
             mode = accessMode,
             allowedUserIds = allowList.text.split(',', '\n')
@@ -3286,6 +3320,51 @@ private fun ChannelDetailPage(
 
         Spacer(Modifier.height(18.dp))
         ExpandableChannelSection(
+            icon = Icons.Rounded.Info,
+            title = stringResource(R.string.settings_channel_reply_display),
+            subtitle = stringResource(R.string.settings_channel_reply_display_subtitle),
+            expanded = displayExpanded,
+            onToggle = { displayExpanded = !displayExpanded },
+        ) {
+            ChannelDisplayToggle(
+                title = stringResource(R.string.settings_channel_show_tool_calls),
+                subtitle = stringResource(R.string.settings_channel_show_tool_calls_subtitle),
+                checked = showToolCalls,
+                onCheckedChange = { showToolCalls = it },
+            )
+            CardDivider()
+            ChannelDisplayToggle(
+                title = stringResource(R.string.settings_channel_show_tool_results),
+                subtitle = stringResource(R.string.settings_channel_show_tool_results_subtitle),
+                checked = showToolResults,
+                onCheckedChange = { showToolResults = it },
+            )
+            CardDivider()
+            ChannelDisplayToggle(
+                title = stringResource(R.string.settings_channel_show_thinking),
+                subtitle = stringResource(R.string.settings_channel_show_thinking_subtitle),
+                checked = showThinking,
+                onCheckedChange = { showThinking = it },
+            )
+            if (config.kind != ChannelKind.WeChat) {
+                CardDivider()
+                ChannelDisplayToggle(
+                    title = stringResource(R.string.settings_channel_streaming),
+                    subtitle = stringResource(
+                        if (config.kind == ChannelKind.DingTalk) {
+                            R.string.settings_channel_streaming_dingtalk_subtitle
+                        } else {
+                            R.string.settings_channel_streaming_subtitle
+                        }
+                    ),
+                    checked = streamingEnabled,
+                    onCheckedChange = { streamingEnabled = it },
+                )
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        ExpandableChannelSection(
             icon = Icons.Rounded.Edit,
             title = stringResource(R.string.settings_channel_manual_setup),
             subtitle = stringResource(R.string.settings_channel_manual_setup_subtitle),
@@ -3319,6 +3398,26 @@ private fun ChannelDetailPage(
                     value = appSecret,
                     isSecret = true,
                     onValueChange = { appSecret = it },
+                )
+            }
+            if (config.kind == ChannelKind.DingTalk) {
+                CardDivider()
+                ChatGptTextField(
+                    label = stringResource(R.string.settings_channel_robot_code),
+                    value = robotCode,
+                    onValueChange = { robotCode = it },
+                )
+                CardDivider()
+                ChatGptTextField(
+                    label = stringResource(R.string.settings_channel_card_template_id),
+                    value = cardTemplateId,
+                    onValueChange = { cardTemplateId = it },
+                )
+                CardDivider()
+                ChatGptTextField(
+                    label = stringResource(R.string.settings_channel_card_template_key),
+                    value = cardTemplateKey,
+                    onValueChange = { cardTemplateKey = it },
                 )
             }
             CardDivider()
@@ -3373,6 +3472,40 @@ private fun ChannelDetailPage(
             label = stringResource(R.string.settings_channel_save),
             onClick = ::save,
             modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+private fun ChannelDisplayToggle(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.labelLarge, color = AetherOnSurface)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = AetherOnSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = AetherOnPrimary,
+                checkedTrackColor = AetherPrimary,
+            ),
         )
     }
 }
