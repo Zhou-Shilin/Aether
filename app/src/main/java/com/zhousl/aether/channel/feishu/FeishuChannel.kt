@@ -57,6 +57,7 @@ class FeishuChannel(
         .openBaseUrl(config.baseUrl.trimEnd('/'))
         .build()
     private val streamingCards = ConcurrentHashMap<String, StreamingCard>()
+    private val completedReplyIds = ConcurrentHashMap.newKeySet<String>()
     private var receiveJob: Job? = null
     private var socketClient: com.lark.oapi.ws.Client? = null
 
@@ -108,6 +109,7 @@ class FeishuChannel(
         socketClient?.close()
         socketClient = null
         streamingCards.clear()
+        completedReplyIds.clear()
         updateStatus(ChannelConnectionState.Disabled)
     }
 
@@ -119,7 +121,8 @@ class FeishuChannel(
         message: ChannelIncomingMessage,
         receipt: ChannelSendReceipt,
     ) {
-        receipt.messageId.takeIf(String::isNotBlank)?.let { addReaction(it, "DONE") }
+        receipt.messageId.takeIf { it.isNotBlank() && completedReplyIds.add(it) }
+            ?.let { addReaction(it, "DONE") }
     }
 
     override suspend fun send(reply: ChannelReply): ChannelSendReceipt = withContext(Dispatchers.IO) {
