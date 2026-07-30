@@ -60,6 +60,11 @@ class ChannelManager(
     }
 
     private suspend fun reconfigure(configs: List<ChannelConfig>) {
+        sessionActors.values.forEach { actor ->
+            actor.queue.close()
+            actor.job.cancel()
+        }
+        sessionActors.clear()
         val previous = synchronized(lock) {
             channelJobs.forEach { it.cancel() }
             channelJobs.clear()
@@ -231,14 +236,18 @@ class ChannelManager(
                         ?: finalText.normalizedChannelReply()
                     finalReceipt = channel.send(ChannelReply(latest.address, output))
                     if (failure == null) {
-                        channel.onCompleted(latest, finalReceipt)
+                        messages.forEach { message ->
+                            channel.onCompleted(message, finalReceipt)
+                        }
                     } else {
-                        channel.onFailed(latest)
+                        messages.forEach { message -> channel.onFailed(message) }
                     }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (sendError: Throwable) {
-                    runCatching { channel.onFailed(latest) }
+                    messages.forEach { message ->
+                        runCatching { channel.onFailed(message) }
+                    }
                 }
             }
         } finally {
