@@ -402,101 +402,13 @@ private fun LandingStep(
     onPrimary: () -> Unit,
     onSecondary: () -> Unit,
 ) {
-
-    var visible by remember(stepIndex, replayMode) { mutableStateOf(false) }
-    LaunchedEffect(stepIndex, replayMode) {
-        delay(180)
-        visible = true
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(TourBackground),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .navigationBarsPadding()
-        ) {
-            TourChromeBar(
-                stepIndex = stepIndex,
-                stepCount = stepCount,
-                onBack = null,
-                topRightLabel = if (replayMode) stringResource(R.string.common_close) else stringResource(R.string.common_skip),
-                onTopRight = onSecondary,
-            )
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(start = 28.dp, top = 4.dp, end = 28.dp, bottom = 20.dp),
-            ) {
-                Spacer(modifier = Modifier.weight(0.72f))
-                AnimatedVisibility(
-                    visible = visible,
-                    enter = fadeIn(
-                        animationSpec = tween(
-                            durationMillis = ContentFadeDuration,
-                            easing = TourEasing,
-                        )
-                    ),
-                    label = "landing_content",
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.aether_mark),
-                            contentDescription = stringResource(R.string.onboarding_aether_icon),
-                            modifier = Modifier
-                                .size(104.dp),
-                        )
-                        Spacer(modifier = Modifier.height(28.dp))
-                        Text(
-                            text = stringResource(R.string.onboarding_welcome_title),
-                            modifier = Modifier.fillMaxWidth(),
-                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = TourTextPrimary,
-                            textAlign = TextAlign.Center,
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = stringResource(R.string.onboarding_welcome_subtitle),
-                            modifier = Modifier.fillMaxWidth(),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TourTextSecondary,
-                            textAlign = TextAlign.Center,
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.weight(1.28f))
-                AnimatedVisibility(
-                    visible = visible,
-                    enter = fadeIn(
-                        animationSpec = tween(
-                            durationMillis = ContentFadeDuration,
-                            delayMillis = 220,
-                            easing = TourEasing,
-                        )
-                    ),
-                    label = "landing_actions",
-                ) {
-                    Button(
-                        onClick = onPrimary,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(24.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = TourButton,
-                            contentColor = Color.White,
-                        ),
-                    ) {
-                        Text(stringResource(R.string.onboarding_get_started))
-                    }
-                }
-            }
-        }
-    }
+    OnboardingLandingStep(
+        stepIndex = stepIndex,
+        stepCount = stepCount,
+        replayMode = replayMode,
+        onPrimary = onPrimary,
+        onSecondary = onSecondary,
+    )
 }
 
 @Composable
@@ -540,81 +452,16 @@ private fun ConversationStepPage(
     isExiting: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val pageKey = remember(stepIndex, stepCount, message) { "$stepIndex/$stepCount:$message" }
-    val contentVisible = rememberStepContentVisible(pageKey, message)
-    val topPadding by animateDpAsState(
-        targetValue = if (contentVisible) 56.dp else 168.dp,
-        animationSpec = tween(
-            durationMillis = MessageTravelDuration,
-            easing = TourEasing,
-        ),
-        label = "tour_message_travel",
+    OnboardingConversationStepPage(
+        stepIndex = stepIndex,
+        stepCount = stepCount,
+        message = message,
+        onBack = onBack,
+        topRightLabel = topRightLabel,
+        onTopRight = onTopRight,
+        isExiting = isExiting,
+        content = content,
     )
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(TourBackground),
-    ) {
-        AnimatedVisibility(
-            visible = !isExiting,
-            enter = fadeIn(animationSpec = tween(durationMillis = 0)),
-            exit = fadeOut(
-                animationSpec = tween(
-                    durationMillis = 280,
-                    easing = TourEasing,
-                )
-            ),
-            label = "step_page_visibility",
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .imePadding()
-                    .navigationBarsPadding(),
-            ) {
-                TourChromeBar(
-                    stepIndex = stepIndex,
-                    stepCount = stepCount,
-                    onBack = onBack,
-                    topRightLabel = topRightLabel,
-                    onTopRight = onTopRight,
-                )
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                        .padding(start = 28.dp, top = 12.dp, end = 28.dp, bottom = 20.dp),
-                ) {
-                    Spacer(modifier = Modifier.height(topPadding))
-                    StreamingStepMessage(
-                        playKey = pageKey,
-                        text = message,
-                    )
-                    Spacer(modifier = Modifier.height(32.dp))
-                    AnimatedVisibility(
-                        visible = contentVisible,
-                        enter = fadeIn(
-                            animationSpec = tween(
-                                durationMillis = ContentFadeDuration,
-                                delayMillis = 180,
-                                easing = TourEasing,
-                            )
-                        ),
-                        exit = fadeOut(animationSpec = tween(durationMillis = 180)),
-                        label = "step_content_fade",
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(0.dp),
-                            content = content,
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(28.dp))
-                }
-            }
-        }
-    }
 }
 
 @Composable
@@ -1756,39 +1603,7 @@ private fun StepLead(
     title: String,
     body: String,
 ) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(accent.copy(alpha = 0.14f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = accent,
-                )
-            }
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = TourTextPrimary,
-            )
-        }
-        Text(
-            text = body,
-            style = MaterialTheme.typography.bodyMedium,
-            color = TourTextSecondary,
-        )
-    }
+    OnboardingStepLead(icon = icon, accent = accent, title = title, body = body)
 }
 
 @Composable
@@ -2128,28 +1943,13 @@ private fun PrimaryActionButton(
     onClick: () -> Unit,
     isLoading: Boolean = false,
 ) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
+    OnboardingPrimaryActionButton(
+        label = label,
         modifier = modifier,
-        shape = RoundedCornerShape(24.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = TourButton,
-            contentColor = Color.White,
-            disabledContainerColor = TourDivider,
-            disabledContentColor = TourTextSecondary,
-        ),
-    ) {
-        if (isLoading) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(16.dp),
-                strokeWidth = 1.8.dp,
-                color = Color.White,
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-        }
-        Text(label)
-    }
+        enabled = enabled,
+        onClick = onClick,
+        isLoading = isLoading,
+    )
 }
 
 @Composable
@@ -2161,30 +1961,14 @@ private fun TourActionRow(
     primaryEnabled: Boolean = true,
     primaryLoading: Boolean = false,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        PrimaryActionButton(
-            label = primaryLabel,
-            modifier = Modifier.weight(1f),
-            enabled = primaryEnabled,
-            isLoading = primaryLoading,
-            onClick = onPrimary,
-        )
-        TextButton(
-            onClick = onSecondary,
-            modifier = Modifier.weight(0.62f),
-        ) {
-            Text(
-                text = secondaryLabel,
-                color = TourTextSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
+    OnboardingActionRow(
+        primaryLabel = primaryLabel,
+        onPrimary = onPrimary,
+        secondaryLabel = secondaryLabel,
+        onSecondary = onSecondary,
+        primaryEnabled = primaryEnabled,
+        primaryLoading = primaryLoading,
+    )
 }
 
 @Composable

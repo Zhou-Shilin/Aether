@@ -1,0 +1,153 @@
+name: Aether
+options:
+  bundleIdPrefix: com.baimoqilin
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+configs:
+  Debug: debug
+  Release: release
+configFiles:
+  Debug: Configuration/Debug.xcconfig
+  Release: Configuration/Release.xcconfig
+projectReferences:
+  libarchive:
+    path: ../third_party/ish-arm64/deps/libarchive.xcodeproj
+targets:
+  Aether:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: App
+      - path: Runtime
+      - path: ../third_party/ish-arm64/tools/fakefs.c
+        group: iSH Runtime
+      - path: Resources
+        buildPhase: resources
+      - path: ../third_party/ish-arm64/app/RootfsPatch.bundle/files/lib/wasm-polyfill.js
+        group: Resources
+        buildPhase: resources
+      - path: ../third_party/ish-arm64/app/RootfsPatch.bundle/files/lib/fetch-polyfill.js
+        group: Resources
+        buildPhase: resources
+      - path: ../third_party/ish-arm64/deps/libapps/hterm/dist/js/hterm_all.js
+        group: Resources
+        buildPhase: resources
+      - path: ../third_party/ish-arm64/app/terminal/term.html
+        group: Resources
+        buildPhase: resources
+      - path: ../third_party/ish-arm64/app/terminal/term.js
+        group: Resources
+        buildPhase: resources
+      - path: ../third_party/ish-arm64/app/terminal/term.css
+        group: Resources
+        buildPhase: resources
+      - path: ../app/src/main/assets/fonts/JetBrainsMono-Regular.ttf
+        group: Resources
+        buildPhase: resources
+      - path: PrivacyInfo.xcprivacy
+        buildPhase: resources
+      - path: ../THIRD_PARTY_NOTICES.md
+        group: Licenses
+        buildPhase: resources
+      - path: ../LICENSE
+        group: Licenses
+        buildPhase: resources
+      - path: ../third_party/ish-arm64/LICENSE.md
+        group: Licenses
+        buildPhase: resources
+      - path: ../third_party/ish-arm64/LICENSE.IOS
+        group: Licenses
+        buildPhase: resources
+    info:
+      path: Info.plist
+      properties:
+        CADisableMinimumFrameDurationOnPhone: true
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UILaunchScreen: {}
+    dependencies:
+      - target: libarchive/libarchive
+      - sdk: SystemConfiguration.framework
+      - sdk: libbz2.tbd
+      - sdk: libiconv.tbd
+      - sdk: libresolv.tbd
+      - sdk: libsqlite3.tbd
+    preBuildScripts:
+      - name: Prepare Alpine and Pi Bridge
+        script: |
+          "$SRCROOT/../scripts/prepare-ios-runtime.sh" "$SRCROOT/Resources/Runtime"
+        basedOnDependencyAnalysis: false
+      - name: Build AetherShared
+        script: |
+          cd "$SRCROOT/.."
+          bash ./gradlew -Paether.sharedOnly=true :shared:embedAndSignAppleFrameworkForXcode
+        basedOnDependencyAnalysis: false
+      - name: Build iSH ARM64 Runtime
+        script: |
+          "$SRCROOT/../scripts/build-ios-ish-runtime.sh"
+        basedOnDependencyAnalysis: false
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: NO
+        CLANG_ENABLE_MODULES: YES
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
+        ONLY_ACTIVE_ARCH: YES
+  AetherRuntimeTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Tests/Runtime
+    dependencies:
+      - target: Aether
+    settings:
+      base:
+        PRODUCT_NAME: AetherRuntimeTests
+        PRODUCT_MODULE_NAME: AetherRuntimeTests
+        PRODUCT_BUNDLE_IDENTIFIER: com.baimoqilin.aether.runtime-tests
+        SWIFT_OBJC_BRIDGING_HEADER: ""
+        OTHER_LDFLAGS: -framework AetherShared
+        GENERATE_INFOPLIST_FILE: YES
+  AetherUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Tests/UI
+    dependencies:
+      - target: Aether
+    settings:
+      base:
+        PRODUCT_NAME: AetherUITests
+        PRODUCT_MODULE_NAME: AetherUITests
+        PRODUCT_BUNDLE_IDENTIFIER: com.baimoqilin.aether.ui-tests
+        SWIFT_OBJC_BRIDGING_HEADER: ""
+        OTHER_LDFLAGS: ""
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Aether:
+    build:
+      targets:
+        Aether: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - AetherRuntimeTests
+        - AetherUITests
+    archive:
+      config: Release

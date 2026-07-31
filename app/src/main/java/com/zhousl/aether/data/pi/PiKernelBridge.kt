@@ -143,7 +143,7 @@ class PiKernelBridge(
         request(
             type = "run_turn",
             payload = payload,
-            timeoutMillis = PiBridgeRequestTimeoutMillis,
+            timeoutMillis = null,
             onEvent = onEvent,
         )
 
@@ -169,7 +169,7 @@ class PiKernelBridge(
             payload = JSONObject()
                 .put("session_id", sessionId)
                 .put("message", message),
-            timeoutMillis = PiBridgeRequestTimeoutMillis,
+            timeoutMillis = null,
             onEvent = onEvent,
         )
 

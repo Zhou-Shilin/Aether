@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="shared_chat_thought_process">思考过程</string>
+    <string name="shared_chat_previous_response">上一个回复</string>
+    <string name="shared_chat_next_response">下一个回复</string>
+    <string name="shared_statistics_cached">缓存</string>
+    <string name="shared_statistics_tokens_per_second">%1$s token/秒</string>
+    <string name="shared_tool_web_search">网页</string>
+</resources>

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="shared_extensions_security_warning">Extension package 会作为受信任的脚本代码运行，并可广泛访问 Agent、应用宿主、本地运行环境和工作区。</string>
+    <string name="shared_extensions_runtime_summary">%1$d 个 package · %2$d 个脚本入口 · %3$d 个已加载的 Aether UI Extension</string>
+    <string name="shared_extensions_runtime_enabled">已由脚本运行时启用</string>
+    <string name="shared_extensions_script_runtime_unavailable">当前平台不支持 Script Extension。</string>
+    <string name="shared_extensions_manual_install">安装 npm 来源</string>
+    <string name="shared_extensions_npm_source_hint">npm:package-name</string>
+    <string name="shared_extensions_import_file">导入 JavaScript、TypeScript 或 zip</string>
+    <string name="shared_extensions_refresh_description">刷新 Extension</string>
+    <string name="shared_extensions_import_description">导入 Extension</string>
+    <string name="shared_extensions_imported">已导入</string>
+    <string name="shared_extensions_installed_path">安装路径</string>
+    <string name="shared_extensions_script_resources">%1$d 个 Pi Extension · %2$d 个 Aether UI Extension · %3$d 个 Skill · %4$d 个 Prompt · %5$d 个 Theme</string>
+    <string name="shared_extensions_loaded_entries">已加载 %1$d 个入口</string>
+    <string name="shared_extensions_pi_entries_label">Pi Extension</string>
+    <string name="shared_extensions_aether_entries_label">Aether UI Extension</string>
+    <string name="shared_extensions_skills_label">Skill</string>
+    <string name="shared_extensions_prompts_label">Prompt</string>
+    <string name="shared_extensions_themes_label">Theme</string>
+    <string name="shared_extensions_loaded_entries_label">已加载的 Aether UI 入口</string>
+    <string name="shared_extensions_runtime_error_count">%1$d 个脚本运行时错误</string>
+    <string name="shared_extensions_remove_title">移除 Extension？</string>
+    <string name="shared_extensions_remove_body">将从本地运行环境中移除 %1$s，且无法撤销。</string>
+    <string name="shared_extensions_invalid_import">请选择 JavaScript、TypeScript 或 zip Extension 文件。</string>
+    <string name="shared_extensions_import_too_large">所选 Extension 文件超过 32 MB。</string>
+    <string name="shared_extensions_zip_unsafe">Extension 压缩包包含不安全的路径。</string>
+    <string name="shared_extensions_zip_invalid">压缩包必须包含脚本 Extension package，或 index JavaScript/TypeScript 文件。</string>
+    <string name="shared_extensions_platform_compatibility">该 package 似乎需要桌面操作系统或特定 CPU 架构，Aether 的 iOS Alpine 运行环境可能无法满足。</string>
+    <string name="shared_extensions_operation_in_progress">正在应用 Extension 更改…</string>
+    <string name="shared_extensions_refresh_complete">Extension 已刷新。</string>
+</resources>

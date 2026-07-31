@@ -98,7 +98,7 @@ abstract class SyncGeneratedSourceDirectory : Sync() {
 
 android {
     namespace = "com.zhousl.aether"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.baimoqilin.aether"
@@ -213,6 +213,7 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":shared"))
     implementation(project(":terminal-view"))
 
     implementation(libs.androidx.core.ktx)

@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Soar with local AI.</strong><br>
-  A stunning, localized, general-purpose AI Agent for Android.
+  A stunning, localized, general-purpose AI Agent for Android, iOS and MacOS.
 </p>
 
 <p align="center">
@@ -33,7 +33,7 @@
 
 > "When the great Peng bird journeys to the Southern Ocean, it flaps the water for three thousand miles, spiraling upward on a whirlwind (*Aether/Fuyao*) to ninety thousand miles, and travels for six months before resting."
 
-**Aether** is dedicated to bringing a modern, local AI Agent experience to Android devices. Built on the robust Pi framework, it pairs a minimalist, lightweight UI with immense extensibility and a seamless tool-calling experience.
+**Aether** is dedicated to bringing a modern, local AI Agent experience to Android, iOS and Mac devices. Built on the robust Pi framework, it pairs a minimalist, lightweight UI with immense extensibility and a seamless tool-calling experience.
 
 ---
 
@@ -58,8 +58,8 @@ Aether's UI and interactions are heavily inspired by excellent, mature applicati
 - **Stunning UI & Silky Smooth Interactions**: Distilling the design essence of top-tier apps like ChatGPT to create a minimalist, modern, and elegant interface.
 - **Pi Harness Kernel**: Powered by the Pi framework, providing the widest LLM provider compatibility and a lightweight, highly efficient Agent execution engine.
 - **Built-in Alpine VM**: Includes an automatically installed Alpine Linux environment to run shell commands and tools out of the box.
-- **Extensible Host Control**: Supports optional Shizuku and Termux integration for direct device manipulation and automation.
-- **Extensions**: Compatible with Pi Extensions, allowing for highly flexible modifications to Aether's UI and application logic.
+- **Extensible Host Control**: Supports optional Shizuku and Termux integration for direct device manipulation and automation. (Android only)
+- **Extensions**: Compatible with Pi Extensions, allowing for highly flexible modifications to Aether's UI and application logic. (limited on iOS)
 
 ## 🚀 Quick Start
 

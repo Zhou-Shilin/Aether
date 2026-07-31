@@ -20,8 +20,6 @@ private const val MinFetchMarkdownChars = 500
 private const val MaxFetchMarkdownChars = 100_000
 private const val DefaultUserAgent =
     "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Mobile Safari/537.36"
-const val DefaultTavilyBaseUrl = "https://api.tavily.com/"
-
 data class FetchedWebPage(
     val requestUrl: String,
     val finalUrl: String,

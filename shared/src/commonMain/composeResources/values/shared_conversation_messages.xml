@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="shared_chat_thought_process">Thought process</string>
+    <string name="shared_chat_previous_response">Previous response</string>
+    <string name="shared_chat_next_response">Next response</string>
+    <string name="shared_statistics_cached">Cached</string>
+    <string name="shared_statistics_tokens_per_second">%1$s tok/s</string>
+    <string name="shared_tool_web_search">the web</string>
+</resources>

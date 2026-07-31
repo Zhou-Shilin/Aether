@@ -10,7 +10,6 @@ local.properties
 .idea/
 *.iml
 captures/
-
 # Release artifacts and signing material
 dist/
 *.apk
@@ -23,6 +22,10 @@ dist/
 *.key
 keystore.properties
 signing.properties
+iosApp/Configuration/Local.xcconfig
+iosApp/Resources/Runtime/root.tar.gz
+iosApp/Resources/Runtime/bridge.mjs
+DerivedData/
 
 # Secrets and local service configuration
 .env
@@ -50,3 +53,4 @@ reports/
 *.log
 Thumbs.db
 .DS_Store
+xcuserdata/

@@ -126,7 +126,6 @@ interface PendingHostToolRequest {
   resolve: (result: AgentToolResult<JsonObject>) => void;
   reject: (error: Error) => void;
   onUpdate?: (partialResult: AgentToolResult<JsonObject>) => void;
-  timeout: NodeJS.Timeout;
 }
 
 interface PendingAetherHostCall {
@@ -1190,7 +1189,6 @@ function resolveHostToolResult(payload: JsonObject): boolean {
   const pending = toolRequestId ? pendingHostToolRequests.get(toolRequestId) : undefined;
   if (!pending) return false;
   pendingHostToolRequests.delete(toolRequestId);
-  clearTimeout(pending.timeout);
   pending.resolve(hostToolResultFromPayload(payload));
   return true;
 }
@@ -1229,12 +1227,7 @@ function requestHostTool(
       reject(new Error("Host tool execution aborted."));
       return;
     }
-    const timeout = setTimeout(() => {
-      pendingHostToolRequests.delete(toolRequestId);
-      reject(new Error(`Host tool ${toolName} timed out waiting for Kotlin result.`));
-    }, 10 * 60 * 1000);
     const abortListener = () => {
-      clearTimeout(timeout);
       pendingHostToolRequests.delete(toolRequestId);
       reject(new Error("Host tool execution aborted."));
     };
@@ -1250,7 +1243,6 @@ function requestHostTool(
         reject(error);
       },
       onUpdate,
-      timeout,
     });
   });
 }
@@ -1935,7 +1927,6 @@ async function canReuseHarnessSession(
 function rejectPendingHostToolsForSession(sessionId: string, message: string): void {
   for (const [toolRequestId, pending] of pendingHostToolRequests) {
     if (pending.sessionId !== sessionId) continue;
-    clearTimeout(pending.timeout);
     pending.reject(new Error(message));
     pendingHostToolRequests.delete(toolRequestId);
   }
@@ -2597,7 +2588,6 @@ async function abortBridgeTarget(payload: JsonObject): Promise<JsonObject> {
   }
   for (const [toolRequestId, pending] of pendingHostToolRequests) {
     if (sessionId && pending.sessionId === sessionId) {
-      clearTimeout(pending.timeout);
       pending.reject(new Error("Host tool execution aborted with the Pi session."));
       pendingHostToolRequests.delete(toolRequestId);
     }

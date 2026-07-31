@@ -875,21 +875,15 @@ private fun ConversationTopBar(
     onReasoningEffortSelected: (String) -> Unit,
     onNewChat: () -> Unit,
 ) {
-    Row(
+    AetherConversationTopBarFrame(
         modifier = modifier
             .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(horizontal = 15.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .statusBarsPadding(),
+        menuDescription = stringResource(R.string.common_menu),
+        newChatDescription = stringResource(R.string.common_new_chat),
+        onMenu = onMenu,
+        onNewChat = onNewChat,
     ) {
-        HeaderCircleButton(
-            icon = Icons.Rounded.Menu,
-            contentDescription = stringResource(R.string.common_menu),
-            onClick = onMenu,
-            size = 38.dp,
-            iconSize = 19.dp,
-            containerColor = AetherSurface.copy(alpha = 0.96f),
-        )
         ConversationModelSelector(
             options = modelOptions,
             modelCatalogInfo = modelCatalogInfo,
@@ -900,17 +894,7 @@ private fun ConversationTopBar(
             onSelected = onModelSelected,
             onOpened = onModelSelectorOpened,
             onReasoningEffortSelected = onReasoningEffortSelected,
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 12.dp),
-        )
-        HeaderCircleButton(
-            icon = LucideIcons.SquarePen,
-            contentDescription = stringResource(R.string.common_new_chat),
-            onClick = onNewChat,
-            size = 38.dp,
-            iconSize = 19.dp,
-            containerColor = AetherSurface.copy(alpha = 0.96f),
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }
@@ -1460,95 +1444,16 @@ private fun ConversationEmptyState(
     inputFocused: Boolean,
     onStarterPromptSelected: (String) -> Unit,
 ) {
-    val titleOffset by animateDpAsState(
-        targetValue = if (inputFocused) (-34).dp else (-24).dp,
-        animationSpec = tween(durationMillis = 260, easing = ChatGptMotionEasing),
-        label = "empty_state_title_offset",
+    AetherConversationEmptyState(
+        modifier = modifier,
+        welcomeLabel = stringResource(R.string.chat_welcome_help),
+        analyzeImageLabel = stringResource(R.string.chat_analyze_image_chip),
+        codeLabel = stringResource(R.string.chat_code_chip),
+        helpWriteLabel = stringResource(R.string.chat_help_me_write_chip),
+        summarizeFileLabel = stringResource(R.string.chat_summarize_file_chip),
+        inputFocused = inputFocused,
+        onStarterPromptSelected = onStarterPromptSelected,
     )
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 26.dp)
-            .offset(y = titleOffset),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(
-            text = stringResource(R.string.chat_welcome_help),
-            style = MaterialTheme.typography.titleLarge.copy(
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 24.sp,
-                lineHeight = 30.sp,
-                letterSpacing = (-0.2).sp,
-            ),
-            color = AetherOnSurface,
-        )
-        Spacer(modifier = Modifier.height(26.dp))
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                EmptyStateChip(
-                    icon = Icons.Rounded.Image,
-                    label = stringResource(R.string.chat_analyze_image_chip),
-                    iconTint = Color(0xFF38A961),
-                    onClick = { onStarterPromptSelected("Analyze this image and describe the important details.") },
-                )
-                EmptyStateChip(
-                    icon = Icons.Rounded.Terminal,
-                    label = stringResource(R.string.chat_code_chip),
-                    iconTint = Color(0xFF7D70DD),
-                    onClick = { onStarterPromptSelected("Help me write or debug this code: ") },
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                EmptyStateChip(
-                    icon = Icons.Rounded.AutoAwesome,
-                    label = stringResource(R.string.chat_help_me_write_chip),
-                    iconTint = Color(0xFFE48AAE),
-                    onClick = { onStarterPromptSelected("Help me write a clear, polished message about ") },
-                )
-                EmptyStateChip(
-                    icon = Icons.Rounded.AttachFile,
-                    label = stringResource(R.string.chat_summarize_file_chip),
-                    iconTint = Color(0xFF66C7D4),
-                    onClick = { onStarterPromptSelected("Summarize this file and list the key points.") },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun EmptyStateChip(
-    icon: ImageVector,
-    label: String,
-    iconTint: Color,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .shadow(6.dp, RoundedCornerShape(999.dp), ambientColor = ChatGptControlShadow, spotColor = ChatGptControlShadow)
-            .clip(RoundedCornerShape(999.dp))
-            .background(AetherSurface.copy(alpha = 0.98f))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Icon(
-            icon,
-            contentDescription = null,
-            tint = iconTint,
-            modifier = Modifier.size(19.dp),
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
-            color = AetherOnSurfaceVariant,
-        )
-    }
 }
 
 @Composable

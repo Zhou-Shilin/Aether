@@ -529,7 +529,20 @@ class AetherViewModel(
             val setupState = withContext(Dispatchers.IO) {
                 runtime.alpineRuntime.inspectSetup()
             }
-            _uiState.update { current -> current.copy(alpineSetupState = setupState) }
+            _uiState.update { current ->
+                current.copy(
+                    alpineSetupState = setupState,
+                    piCoreSetupState = if (setupState.isReady) {
+                        current.piCoreSetupState.copy(
+                            isChecking = false,
+                            activity = PiCoreSetupActivity.None,
+                            bytesPerSecond = 0L,
+                        )
+                    } else {
+                        current.piCoreSetupState
+                    },
+                )
+            }
             if (setupState.isReady) {
                 val settings = _uiState.value.settings
                 val verifiedProfiles = withContext(Dispatchers.IO) {

@@ -1,0 +1,17 @@
+PRODUCT_BUNDLE_IDENTIFIER = com.baimoqilin.aether
+PRODUCT_NAME = Aether
+MARKETING_VERSION = 2.1.0
+CURRENT_PROJECT_VERSION = 11
+IPHONEOS_DEPLOYMENT_TARGET = 17.0
+TARGETED_DEVICE_FAMILY = 1,2
+SWIFT_VERSION = 5.10
+ENABLE_BITCODE = NO
+GCC_C_LANGUAGE_STANDARD = gnu11
+GCC_PREPROCESSOR_DEFINITIONS = $(inherited) GUEST_ARM64=1 ISH_INTERNAL=1
+HEADER_SEARCH_PATHS = $(inherited) $(SRCROOT)/Runtime $(SRCROOT)/../third_party/ish-arm64 $(SRCROOT)/../third_party/ish-arm64/deps/libarchive/libarchive
+FRAMEWORK_SEARCH_PATHS = $(inherited) $(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)
+OTHER_LDFLAGS = $(inherited) -ObjC -framework AetherShared $(TARGET_TEMP_DIR)/aether-ish-meson/libish.a $(TARGET_TEMP_DIR)/aether-ish-meson/libish_emu.a $(TARGET_TEMP_DIR)/aether-ish-meson/libfakefs.a -lsqlite3 -lbz2 -liconv -lresolv
+SWIFT_OBJC_BRIDGING_HEADER = $(SRCROOT)/App/Aether-Bridging-Header.h
+CODE_SIGN_STYLE = Automatic
+
+#include? "Local.xcconfig"

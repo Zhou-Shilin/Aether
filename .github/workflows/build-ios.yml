@@ -1,0 +1,52 @@
+name: Build iOS
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  ios:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.19.0"
+          cache: npm
+          cache-dependency-path: pi-bridge/package-lock.json
+
+      - name: Install iOS build tools
+        run: brew install llvm lld meson ninja xcodegen
+
+      - name: Build Pi Bridge
+        working-directory: pi-bridge
+        run: |
+          npm ci --ignore-scripts --legacy-peer-deps
+          npm run build
+
+      - name: Generate iOS project
+        run: scripts/bootstrap-ios.sh
+
+      - name: Build iPhone simulator app
+        run: |
+          xcodebuild \
+            -project iosApp/Aether.xcodeproj \
+            -scheme Aether \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' \
+            CODE_SIGNING_ALLOWED=NO \
+            build

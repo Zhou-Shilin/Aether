@@ -1,0 +1,3 @@
+// Copy to Local.xcconfig. This file is intentionally ignored by git.
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
+CODE_SIGN_IDENTITY = Apple Development

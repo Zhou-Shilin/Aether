@@ -1,0 +1,817 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		07AEC078B1B8425CB1626CF8 /* JetBrainsMono-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2BD629A3C6EC0E3B2B729E35 /* JetBrainsMono-Regular.ttf */; };
+		08CF4E928C8BE1C146193EAC /* LICENSE.md in Resources */ = {isa = PBXBuildFile; fileRef = 6FB4FBD38ACC21BB9B40C297 /* LICENSE.md */; };
+		0A37C59A2026072700010001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0A37C59A2026072700010002 /* Assets.xcassets */; };
+		0B54DD41A9AC30FF012B8ABC /* libiconv.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 3727F800A2CD973EBC5B5911 /* libiconv.tbd */; };
+		1E011A81B7404737A35E9B0E /* fakefs.c in Sources */ = {isa = PBXBuildFile; fileRef = 1A2D0B8F33C4B5DA0835EC57 /* fakefs.c */; };
+		24743FC96595F01836CE4170 /* AetherRuntimeHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A7004BB95C901F53D40B60B /* AetherRuntimeHost.swift */; };
+		29422E116B5D611E33AB0B9D /* wasm-polyfill.js in Resources */ = {isa = PBXBuildFile; fileRef = F66BF0C15BAA8020F92F7D0D /* wasm-polyfill.js */; };
+		2A8EED7E02AB8DCCD1890366 /* AetherApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FA4FCFE0F0081C692280C9 /* AetherApp.swift */; };
+		30C81A227B16D6CABAF7BAF3 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B57B4E3EEEFF797875CB6F3D /* PrivacyInfo.xcprivacy */; };
+		3573907620374C94427D23CD /* LICENSE.IOS in Resources */ = {isa = PBXBuildFile; fileRef = E48205C39A16D1BC63209CA5 /* LICENSE.IOS */; };
+		37B3E506D9D519C3E2362C26 /* .gitkeep in Resources */ = {isa = PBXBuildFile; fileRef = 0E52DE9EBE0E6EC3717F15B4 /* .gitkeep */; };
+		4ABD7AA1799D98A805AC8334 /* AetherUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C4A84D8FFFDC6934C5070EA /* AetherUITests.swift */; };
+		53F71DB8B4F7DFC9DDF96CDB /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = EBEDBEDAC4B9C0DC6670F3D7 /* libsqlite3.tbd */; };
+		635948EDA8718FF3FF408733 /* libarchive.a in Frameworks */ = {isa = PBXBuildFile; fileRef = B7445370C9B563C2B17DA6E1 /* libarchive.a */; };
+		6BE12262DD755897AF043F37 /* hterm_all.js in Resources */ = {isa = PBXBuildFile; fileRef = 3F9CE49F90FFFE2756A65915 /* hterm_all.js */; };
+		6E6AF72DF4299C5E11F94B95 /* term.html in Resources */ = {isa = PBXBuildFile; fileRef = D2CEF5D43AF93EE3708D9567 /* term.html */; };
+		7940687B4F74E5160A8EB801 /* root.tar.gz in Resources */ = {isa = PBXBuildFile; fileRef = 95EE05EFD4A21740A10B6F14 /* root.tar.gz */; };
+		7D2F37B739B9ED878ED6F0DA /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1106FBE367ED336302C5A936 /* SystemConfiguration.framework */; };
+		8C67241097C756D2BC0EBD70 /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = 307932EC76CB1B3E8230BE0B /* LICENSE */; };
+		AED5FAD36A0258C86E33BFB8 /* term.css in Resources */ = {isa = PBXBuildFile; fileRef = DFA930739D10E3CD3E0B3416 /* term.css */; };
+		B0C7744DFFD5B0D7FF572295 /* fetch-polyfill.js in Resources */ = {isa = PBXBuildFile; fileRef = A28E41D7474D6ABA5E0A522A /* fetch-polyfill.js */; };
+		B4115544917270FECC7DD257 /* THIRD_PARTY_NOTICES.md in Resources */ = {isa = PBXBuildFile; fileRef = DF450430A92471EB5F32CDDE /* THIRD_PARTY_NOTICES.md */; };
+		BB61528BEE299540B5A3DEA8 /* AetherRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC9B2AB7A93925E98C19F251 /* AetherRuntimeTests.swift */; };
+		BD7B19718961B28EF1CD680C /* bridge.mjs in Resources */ = {isa = PBXBuildFile; fileRef = 7FC3C7F439C89DFF299C3D94 /* bridge.mjs */; };
+		C95A4D5886956E5801C13DA5 /* libbz2.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = D05C334CA852B14A36093D07 /* libbz2.tbd */; };
+		CB425A7A27C9C1222CC06CCA /* AetherISHRuntime.m in Sources */ = {isa = PBXBuildFile; fileRef = 6D8ECFC71EF1A7DF279E9E95 /* AetherISHRuntime.m */; };
+		D12A679DA1625C631D2A725D /* term.js in Resources */ = {isa = PBXBuildFile; fileRef = 29B6EB078F2DEC7743342A7D /* term.js */; };
+		D594FF03125DB507C9A38818 /* libresolv.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = D7AE7614B5115E8BA325D41F /* libresolv.tbd */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		3FCF8721CB6470008883B5FA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 093ABAAD7B72B9ED74843F83 /* libarchive */;
+			proxyType = 2;
+			remoteGlobalIDString = BB10E0D6248DA67B009C7A74;
+			remoteInfo = libarchive;
+		};
+		AB994626F6F1C26CD4F28C45 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 093ABAAD7B72B9ED74843F83 /* libarchive */;
+			proxyType = 1;
+			remoteGlobalIDString = BB10E0D5248DA67B009C7A74;
+			remoteInfo = libarchive;
+		};
+		CF516F68BB605FEB1BBCC327 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E7C705F7C33D8C121C974109 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D59EF0ACCA124A422E890B70;
+			remoteInfo = Aether;
+		};
+		D8ACF056F0E6CA5EBDE26FEF /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E7C705F7C33D8C121C974109 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D59EF0ACCA124A422E890B70;
+			remoteInfo = Aether;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		093ABAAD7B72B9ED74843F83 /* libarchive */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = libarchive; path = "../third_party/ish-arm64/deps/libarchive.xcodeproj"; sourceTree = "<group>"; };
+		0E52DE9EBE0E6EC3717F15B4 /* .gitkeep */ = {isa = PBXFileReference; lastKnownFileType = text; path = .gitkeep; sourceTree = "<group>"; };
+		0A37C59A2026072700010002 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		1106FBE367ED336302C5A936 /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = System/Library/Frameworks/SystemConfiguration.framework; sourceTree = SDKROOT; };
+		136A8126D80F2471CFB1013B /* Aether-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Aether-Bridging-Header.h"; sourceTree = "<group>"; };
+		1A2D0B8F33C4B5DA0835EC57 /* fakefs.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; name = fakefs.c; path = "../third_party/ish-arm64/tools/fakefs.c"; sourceTree = "<group>"; };
+		29B6EB078F2DEC7743342A7D /* term.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = term.js; path = "../../third_party/ish-arm64/app/terminal/term.js"; sourceTree = "<group>"; };
+		2A7004BB95C901F53D40B60B /* AetherRuntimeHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AetherRuntimeHost.swift; sourceTree = "<group>"; };
+		2BD629A3C6EC0E3B2B729E35 /* JetBrainsMono-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "JetBrainsMono-Regular.ttf"; path = "../../app/src/main/assets/fonts/JetBrainsMono-Regular.ttf"; sourceTree = "<group>"; };
+		307932EC76CB1B3E8230BE0B /* LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; name = LICENSE; path = ../LICENSE; sourceTree = "<group>"; };
+		3727F800A2CD973EBC5B5911 /* libiconv.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libiconv.tbd; path = usr/lib/libiconv.tbd; sourceTree = SDKROOT; };
+		3F9CE49F90FFFE2756A65915 /* hterm_all.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = hterm_all.js; path = "../../third_party/ish-arm64/deps/libapps/hterm/dist/js/hterm_all.js"; sourceTree = "<group>"; };
+		6D191CEE5D2F1B07416BE0FC /* AetherISHRuntime.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AetherISHRuntime.h; sourceTree = "<group>"; };
+		6D8ECFC71EF1A7DF279E9E95 /* AetherISHRuntime.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AetherISHRuntime.m; sourceTree = "<group>"; };
+		6FB4FBD38ACC21BB9B40C297 /* LICENSE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = LICENSE.md; path = "../third_party/ish-arm64/LICENSE.md"; sourceTree = "<group>"; };
+		7C4A84D8FFFDC6934C5070EA /* AetherUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AetherUITests.swift; sourceTree = "<group>"; };
+		7FC3C7F439C89DFF299C3D94 /* bridge.mjs */ = {isa = PBXFileReference; lastKnownFileType = text; path = bridge.mjs; sourceTree = "<group>"; };
+		95EE05EFD4A21740A10B6F14 /* root.tar.gz */ = {isa = PBXFileReference; lastKnownFileType = archive.gzip; path = root.tar.gz; sourceTree = "<group>"; };
+		96E90CBF38DF7D085E3CFAEA /* AetherUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AetherUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A28E41D7474D6ABA5E0A522A /* fetch-polyfill.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "fetch-polyfill.js"; path = "../../third_party/ish-arm64/app/RootfsPatch.bundle/files/lib/fetch-polyfill.js"; sourceTree = "<group>"; };
+		AF079DE4E9E495EEF6637D03 /* Aether.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Aether.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B57B4E3EEEFF797875CB6F3D /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		BC9B2AB7A93925E98C19F251 /* AetherRuntimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AetherRuntimeTests.swift; sourceTree = "<group>"; };
+		CE1755BDDA0F604686B21930 /* AetherRuntimeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AetherRuntimeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D05C334CA852B14A36093D07 /* libbz2.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libbz2.tbd; path = usr/lib/libbz2.tbd; sourceTree = SDKROOT; };
+		D2CEF5D43AF93EE3708D9567 /* term.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = term.html; path = "../../third_party/ish-arm64/app/terminal/term.html"; sourceTree = "<group>"; };
+		D7AE7614B5115E8BA325D41F /* libresolv.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libresolv.tbd; path = usr/lib/libresolv.tbd; sourceTree = SDKROOT; };
+		D926BFE20D8045848B67FED8 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		DF450430A92471EB5F32CDDE /* THIRD_PARTY_NOTICES.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = THIRD_PARTY_NOTICES.md; path = ../THIRD_PARTY_NOTICES.md; sourceTree = "<group>"; };
+		DFA930739D10E3CD3E0B3416 /* term.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = term.css; path = "../../third_party/ish-arm64/app/terminal/term.css"; sourceTree = "<group>"; };
+		E48205C39A16D1BC63209CA5 /* LICENSE.IOS */ = {isa = PBXFileReference; lastKnownFileType = text; name = LICENSE.IOS; path = "../third_party/ish-arm64/LICENSE.IOS"; sourceTree = "<group>"; };
+		E6FA4FCFE0F0081C692280C9 /* AetherApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AetherApp.swift; sourceTree = "<group>"; };
+		EBEDBEDAC4B9C0DC6670F3D7 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
+		EF75C9934FCC6B20C304F550 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		F66BF0C15BAA8020F92F7D0D /* wasm-polyfill.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "wasm-polyfill.js"; path = "../../third_party/ish-arm64/app/RootfsPatch.bundle/files/lib/wasm-polyfill.js"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		5046DF9BFF3D37DCD73624CE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				635948EDA8718FF3FF408733 /* libarchive.a in Frameworks */,
+				7D2F37B739B9ED878ED6F0DA /* SystemConfiguration.framework in Frameworks */,
+				C95A4D5886956E5801C13DA5 /* libbz2.tbd in Frameworks */,
+				0B54DD41A9AC30FF012B8ABC /* libiconv.tbd in Frameworks */,
+				D594FF03125DB507C9A38818 /* libresolv.tbd in Frameworks */,
+				53F71DB8B4F7DFC9DDF96CDB /* libsqlite3.tbd in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		01528BCFE67B0EC3DC7BBD9A /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				D05C334CA852B14A36093D07 /* libbz2.tbd */,
+				3727F800A2CD973EBC5B5911 /* libiconv.tbd */,
+				D7AE7614B5115E8BA325D41F /* libresolv.tbd */,
+				EBEDBEDAC4B9C0DC6670F3D7 /* libsqlite3.tbd */,
+				1106FBE367ED336302C5A936 /* SystemConfiguration.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		04511A2861F374B7B32C8CEB /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				7C4A84D8FFFDC6934C5070EA /* AetherUITests.swift */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		146D52B0F1D153A965A2EE9A /* Runtime */ = {
+			isa = PBXGroup;
+			children = (
+				6D191CEE5D2F1B07416BE0FC /* AetherISHRuntime.h */,
+				6D8ECFC71EF1A7DF279E9E95 /* AetherISHRuntime.m */,
+			);
+			path = Runtime;
+			sourceTree = "<group>";
+		};
+		534B34A52DE0C74150735138 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B7445370C9B563C2B17DA6E1 /* libarchive.a */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6CB5B6ED690A319EE33626D7 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				0A37C59A2026072700010002 /* Assets.xcassets */,
+				6F2AD441F3F77B9427B06061 /* Runtime */,
+				A28E41D7474D6ABA5E0A522A /* fetch-polyfill.js */,
+				3F9CE49F90FFFE2756A65915 /* hterm_all.js */,
+				2BD629A3C6EC0E3B2B729E35 /* JetBrainsMono-Regular.ttf */,
+				DFA930739D10E3CD3E0B3416 /* term.css */,
+				D2CEF5D43AF93EE3708D9567 /* term.html */,
+				29B6EB078F2DEC7743342A7D /* term.js */,
+				F66BF0C15BAA8020F92F7D0D /* wasm-polyfill.js */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		6F2AD441F3F77B9427B06061 /* Runtime */ = {
+			isa = PBXGroup;
+			children = (
+				0E52DE9EBE0E6EC3717F15B4 /* .gitkeep */,
+				7FC3C7F439C89DFF299C3D94 /* bridge.mjs */,
+				95EE05EFD4A21740A10B6F14 /* root.tar.gz */,
+			);
+			path = Runtime;
+			sourceTree = "<group>";
+		};
+		7CCE34B3C0A23C3EA91514B0 = {
+			isa = PBXGroup;
+			children = (
+				AEE74072359394A69EA78B41 /* App */,
+				F7E839E68AD64850B05EA791 /* Configuration */,
+				CA431338623A2DF9DA2FB118 /* iSH Runtime */,
+				DE96BC7960A59B0D9D94C61A /* Licenses */,
+				6CB5B6ED690A319EE33626D7 /* Resources */,
+				146D52B0F1D153A965A2EE9A /* Runtime */,
+				A8ECB5526B0054EB6D7EDAB9 /* Tests */,
+				B57B4E3EEEFF797875CB6F3D /* PrivacyInfo.xcprivacy */,
+				01528BCFE67B0EC3DC7BBD9A /* Frameworks */,
+				8A93DD82B280EDA489D217FB /* Products */,
+				85B0C644F2083158918621A6 /* Projects */,
+			);
+			sourceTree = "<group>";
+		};
+		85B0C644F2083158918621A6 /* Projects */ = {
+			isa = PBXGroup;
+			children = (
+				093ABAAD7B72B9ED74843F83 /* libarchive */,
+			);
+			name = Projects;
+			sourceTree = "<group>";
+		};
+		8A93DD82B280EDA489D217FB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AF079DE4E9E495EEF6637D03 /* Aether.app */,
+				CE1755BDDA0F604686B21930 /* AetherRuntimeTests.xctest */,
+				96E90CBF38DF7D085E3CFAEA /* AetherUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A8ECB5526B0054EB6D7EDAB9 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				F1D6F36770B86C896339068F /* Runtime */,
+				04511A2861F374B7B32C8CEB /* UI */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		AEE74072359394A69EA78B41 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				136A8126D80F2471CFB1013B /* Aether-Bridging-Header.h */,
+				E6FA4FCFE0F0081C692280C9 /* AetherApp.swift */,
+				2A7004BB95C901F53D40B60B /* AetherRuntimeHost.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		CA431338623A2DF9DA2FB118 /* iSH Runtime */ = {
+			isa = PBXGroup;
+			children = (
+				1A2D0B8F33C4B5DA0835EC57 /* fakefs.c */,
+			);
+			name = "iSH Runtime";
+			sourceTree = "<group>";
+		};
+		DE96BC7960A59B0D9D94C61A /* Licenses */ = {
+			isa = PBXGroup;
+			children = (
+				307932EC76CB1B3E8230BE0B /* LICENSE */,
+				E48205C39A16D1BC63209CA5 /* LICENSE.IOS */,
+				6FB4FBD38ACC21BB9B40C297 /* LICENSE.md */,
+				DF450430A92471EB5F32CDDE /* THIRD_PARTY_NOTICES.md */,
+			);
+			name = Licenses;
+			sourceTree = "<group>";
+		};
+		F1D6F36770B86C896339068F /* Runtime */ = {
+			isa = PBXGroup;
+			children = (
+				BC9B2AB7A93925E98C19F251 /* AetherRuntimeTests.swift */,
+			);
+			path = Runtime;
+			sourceTree = "<group>";
+		};
+		F7E839E68AD64850B05EA791 /* Configuration */ = {
+			isa = PBXGroup;
+			children = (
+				D926BFE20D8045848B67FED8 /* Debug.xcconfig */,
+				EF75C9934FCC6B20C304F550 /* Release.xcconfig */,
+			);
+			path = Configuration;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1BF8446A0AAC14E6D852F186 /* AetherUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5E18B12707564961AB741CCB /* Build configuration list for PBXNativeTarget "AetherUITests" */;
+			buildPhases = (
+				18D8AF0FAEAC8408DA67BC65 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				88DCBCE43A4DCFB83BD42BC5 /* PBXTargetDependency */,
+			);
+			name = AetherUITests;
+			packageProductDependencies = (
+			);
+			productName = AetherUITests;
+			productReference = 96E90CBF38DF7D085E3CFAEA /* AetherUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		D59EF0ACCA124A422E890B70 /* Aether */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1098AD2A372F4DD2918AFFA /* Build configuration list for PBXNativeTarget "Aether" */;
+			buildPhases = (
+				072DFC4618B64A23CA3D5C7F /* Prepare Alpine and Pi Bridge */,
+				6B087EF1E6A044AE130FD109 /* Build AetherShared */,
+				F8E88B47F7925FD7FD570932 /* Build iSH ARM64 Runtime */,
+				E885CAA05B4AF3999B54E2C7 /* Sources */,
+				54FC1522C074745B3897AA41 /* Resources */,
+				5046DF9BFF3D37DCD73624CE /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A219C6C364CF9DCC2B5715BB /* PBXTargetDependency */,
+			);
+			name = Aether;
+			packageProductDependencies = (
+			);
+			productName = Aether;
+			productReference = AF079DE4E9E495EEF6637D03 /* Aether.app */;
+			productType = "com.apple.product-type.application";
+		};
+		E6EE86DC0266969D1D3A888C /* AetherRuntimeTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D28880E77D90B44DBA286FBA /* Build configuration list for PBXNativeTarget "AetherRuntimeTests" */;
+			buildPhases = (
+				17524DC99A9E4A81D7B43005 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DE6A6951B1F94DA271599F76 /* PBXTargetDependency */,
+			);
+			name = AetherRuntimeTests;
+			packageProductDependencies = (
+			);
+			productName = AetherRuntimeTests;
+			productReference = CE1755BDDA0F604686B21930 /* AetherRuntimeTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E7C705F7C33D8C121C974109 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					1BF8446A0AAC14E6D852F186 = {
+						ProvisioningStyle = Automatic;
+						TestTargetID = D59EF0ACCA124A422E890B70;
+					};
+					D59EF0ACCA124A422E890B70 = {
+						ProvisioningStyle = Automatic;
+					};
+					E6EE86DC0266969D1D3A888C = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = B356F83369813E0209654ED2 /* Build configuration list for PBXProject "Aether" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 7CCE34B3C0A23C3EA91514B0;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 8A93DD82B280EDA489D217FB /* Products */;
+			projectDirPath = "";
+			projectReferences = (
+				{
+					ProductGroup = 534B34A52DE0C74150735138 /* Products */;
+					ProjectRef = 093ABAAD7B72B9ED74843F83 /* libarchive */;
+				},
+			);
+			projectRoot = "";
+			targets = (
+				D59EF0ACCA124A422E890B70 /* Aether */,
+				E6EE86DC0266969D1D3A888C /* AetherRuntimeTests */,
+				1BF8446A0AAC14E6D852F186 /* AetherUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXReferenceProxy section */
+		B7445370C9B563C2B17DA6E1 /* libarchive.a */ = {
+			isa = PBXReferenceProxy;
+			fileType = archive.ar;
+			path = libarchive.a;
+			remoteRef = 3FCF8721CB6470008883B5FA /* PBXContainerItemProxy */;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+/* End PBXReferenceProxy section */
+
+/* Begin PBXResourcesBuildPhase section */
+		54FC1522C074745B3897AA41 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0A37C59A2026072700010001 /* Assets.xcassets in Resources */,
+				37B3E506D9D519C3E2362C26 /* .gitkeep in Resources */,
+				07AEC078B1B8425CB1626CF8 /* JetBrainsMono-Regular.ttf in Resources */,
+				8C67241097C756D2BC0EBD70 /* LICENSE in Resources */,
+				3573907620374C94427D23CD /* LICENSE.IOS in Resources */,
+				08CF4E928C8BE1C146193EAC /* LICENSE.md in Resources */,
+				30C81A227B16D6CABAF7BAF3 /* PrivacyInfo.xcprivacy in Resources */,
+				B4115544917270FECC7DD257 /* THIRD_PARTY_NOTICES.md in Resources */,
+				BD7B19718961B28EF1CD680C /* bridge.mjs in Resources */,
+				B0C7744DFFD5B0D7FF572295 /* fetch-polyfill.js in Resources */,
+				6BE12262DD755897AF043F37 /* hterm_all.js in Resources */,
+				7940687B4F74E5160A8EB801 /* root.tar.gz in Resources */,
+				AED5FAD36A0258C86E33BFB8 /* term.css in Resources */,
+				6E6AF72DF4299C5E11F94B95 /* term.html in Resources */,
+				D12A679DA1625C631D2A725D /* term.js in Resources */,
+				29422E116B5D611E33AB0B9D /* wasm-polyfill.js in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		072DFC4618B64A23CA3D5C7F /* Prepare Alpine and Pi Bridge */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Prepare Alpine and Pi Bridge";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"$SRCROOT/../scripts/prepare-ios-runtime.sh\" \"$SRCROOT/Resources/Runtime\"\n";
+		};
+		6B087EF1E6A044AE130FD109 /* Build AetherShared */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build AetherShared";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "cd \"$SRCROOT/..\"\nbash ./gradlew -Paether.sharedOnly=true :shared:embedAndSignAppleFrameworkForXcode\n";
+		};
+		F8E88B47F7925FD7FD570932 /* Build iSH ARM64 Runtime */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build iSH ARM64 Runtime";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"$SRCROOT/../scripts/build-ios-ish-runtime.sh\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		17524DC99A9E4A81D7B43005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BB61528BEE299540B5A3DEA8 /* AetherRuntimeTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		18D8AF0FAEAC8408DA67BC65 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4ABD7AA1799D98A805AC8334 /* AetherUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E885CAA05B4AF3999B54E2C7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2A8EED7E02AB8DCCD1890366 /* AetherApp.swift in Sources */,
+				CB425A7A27C9C1222CC06CCA /* AetherISHRuntime.m in Sources */,
+				24743FC96595F01836CE4170 /* AetherRuntimeHost.swift in Sources */,
+				1E011A81B7404737A35E9B0E /* fakefs.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		88DCBCE43A4DCFB83BD42BC5 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D59EF0ACCA124A422E890B70 /* Aether */;
+			targetProxy = CF516F68BB605FEB1BBCC327 /* PBXContainerItemProxy */;
+		};
+		A219C6C364CF9DCC2B5715BB /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = libarchive;
+			targetProxy = AB994626F6F1C26CD4F28C45 /* PBXContainerItemProxy */;
+		};
+		DE6A6951B1F94DA271599F76 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D59EF0ACCA124A422E890B70 /* Aether */;
+			targetProxy = D8ACF056F0E6CA5EBDE26FEF /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		39F66F7451CB87EC7B336FAD /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"-framework",
+					AetherShared,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.baimoqilin.aether.runtime-tests";
+				PRODUCT_MODULE_NAME = AetherRuntimeTests;
+				PRODUCT_NAME = AetherRuntimeTests;
+				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Aether.app/Aether";
+			};
+			name = Release;
+		};
+		535B5BBD68E34C96ECFC5644 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = EF75C9934FCC6B20C304F550 /* Release.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		8F65DEFA5F0FDB923D7B6E4B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = 597476G224;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				INFOPLIST_FILE = Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				ONLY_ACTIVE_ARCH = YES;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				SDKROOT = iphoneos;
+			};
+			name = Debug;
+		};
+		A8EEC505C3358D2984B01B6E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"-framework",
+					AetherShared,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.baimoqilin.aether.runtime-tests";
+				PRODUCT_MODULE_NAME = AetherRuntimeTests;
+				PRODUCT_NAME = AetherRuntimeTests;
+				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Aether.app/Aether";
+			};
+			name = Debug;
+		};
+		B8DB78BCCD629F6EEA410E9C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				OTHER_LDFLAGS = "";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.baimoqilin.aether.ui-tests";
+				PRODUCT_MODULE_NAME = AetherUITests;
+				PRODUCT_NAME = AetherUITests;
+				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				TEST_TARGET_NAME = Aether;
+			};
+			name = Release;
+		};
+		D117200E3E6E0A8910494FAE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = 597476G224;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				INFOPLIST_FILE = Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				ONLY_ACTIVE_ARCH = YES;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				SDKROOT = iphoneos;
+			};
+			name = Release;
+		};
+		D31BFB8E8805FFAB029AB03F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = D926BFE20D8045848B67FED8 /* Debug.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		F2373246E9AFC7281DF80BDB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				OTHER_LDFLAGS = "";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.baimoqilin.aether.ui-tests";
+				PRODUCT_MODULE_NAME = AetherUITests;
+				PRODUCT_NAME = AetherUITests;
+				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				TEST_TARGET_NAME = Aether;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		5E18B12707564961AB741CCB /* Build configuration list for PBXNativeTarget "AetherUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F2373246E9AFC7281DF80BDB /* Debug */,
+				B8DB78BCCD629F6EEA410E9C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		A1098AD2A372F4DD2918AFFA /* Build configuration list for PBXNativeTarget "Aether" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8F65DEFA5F0FDB923D7B6E4B /* Debug */,
+				D117200E3E6E0A8910494FAE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B356F83369813E0209654ED2 /* Build configuration list for PBXProject "Aether" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D31BFB8E8805FFAB029AB03F /* Debug */,
+				535B5BBD68E34C96ECFC5644 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D28880E77D90B44DBA286FBA /* Build configuration list for PBXNativeTarget "AetherRuntimeTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A8EEC505C3358D2984B01B6E /* Debug */,
+				39F66F7451CB87EC7B336FAD /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = E7C705F7C33D8C121C974109 /* Project object */;
+}

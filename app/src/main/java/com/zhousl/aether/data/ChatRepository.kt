@@ -8,6 +8,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.withTransaction
 import com.zhousl.aether.data.chatdb.ChatHistoryDao
 import com.zhousl.aether.data.chatdb.ChatHistoryDatabase
+import com.zhousl.aether.data.chatdb.AndroidChatHistoryDatabaseFactory
 import com.zhousl.aether.data.chatdb.ChatMessageEntity
 import com.zhousl.aether.data.chatdb.ChatMessageSummaryEntity
 import com.zhousl.aether.data.chatdb.ChatSessionEntity
@@ -69,7 +70,7 @@ enum class PersistedChatWriteIntent {
 
 class ChatRepository(
     private val context: Context,
-    private val database: ChatHistoryDatabase = ChatHistoryDatabase.getInstance(context),
+    private val database: ChatHistoryDatabase = AndroidChatHistoryDatabaseFactory.getInstance(context),
 ) {
     private val chatHistoryDao: ChatHistoryDao = database.chatHistoryDao()
     private val restoredMessageCache = mutableMapOf<ChatMessageCacheKey, LoadedChatMessage>()

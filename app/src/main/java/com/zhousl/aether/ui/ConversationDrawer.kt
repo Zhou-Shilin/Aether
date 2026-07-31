@@ -190,6 +190,60 @@ fun ConversationDrawer(
 ) {
     val extensionController = LocalAetherExtensionUiController.current
     val extensionPages = extensionController?.snapshot?.pages.orEmpty()
+    AetherConversationDrawer(
+        sessions = sessions.map { session ->
+            SharedConversationSummary(
+                id = session.id,
+                title = session.title,
+                indicator = when {
+                    sessionExecutionStates[session.id]?.isRunning == true ->
+                        SharedConversationIndicator.Working
+                    unviewedCompletedSessionIds.contains(session.id) ->
+                        SharedConversationIndicator.UnviewedComplete
+                    else -> SharedConversationIndicator.None
+                },
+            )
+        },
+        selectedSessionId = selectedSessionId,
+        onNewChat = onNewChat,
+        onSessionSelected = onSessionSelected,
+        onRenameSession = onRenameSession,
+        onExportSession = { sessionId ->
+            sessions.firstOrNull { it.id == sessionId }?.let(onExportSession)
+        },
+        onDeleteSession = onDeleteSession,
+        onSettingsSelected = onSettingsSelected,
+        extraContent = { dismissSearch ->
+            AetherExtensionSlot(AetherExtensionSlotDrawer)
+            extensionPages.forEach { page ->
+                AetherExtensionPageLauncher(
+                    page = page,
+                    onClick = {
+                        dismissSearch()
+                        extensionController?.onOpenPage?.invoke(page.id)
+                    },
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+        },
+    )
+}
+
+@Composable
+private fun LegacyConversationDrawer(
+    sessions: List<ChatSession>,
+    selectedSessionId: String,
+    sessionExecutionStates: Map<String, SessionExecutionState>,
+    unviewedCompletedSessionIds: Set<String>,
+    onNewChat: () -> Unit,
+    onSessionSelected: (String) -> Unit,
+    onRenameSession: (String, String) -> Unit,
+    onExportSession: (ChatSession) -> Unit,
+    onDeleteSession: (String) -> Unit,
+    onSettingsSelected: () -> Unit,
+) {
+    val extensionController = LocalAetherExtensionUiController.current
+    val extensionPages = extensionController?.snapshot?.pages.orEmpty()
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var overlayHeightPx by remember { mutableIntStateOf(0) }
@@ -690,45 +744,5 @@ private fun DrawerFloatingChatButton(
             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
             color = Color.White,
         )
-    }
-}
-
-@Composable
-internal fun HeaderCircleButton(
-    icon: ImageVector? = null,
-    iconPainter: Painter? = null,
-    contentDescription: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    size: Dp = 44.dp,
-    iconSize: Dp = 22.dp,
-    containerColor: Color = Color.White,
-    iconTint: Color = AetherOnSurface,
-) {
-    Box(
-        modifier = modifier
-            .size(size)
-            .shadow(12.dp, CircleShape, ambientColor = AetherScrim, spotColor = AetherScrim)
-            .clip(CircleShape)
-            .background(if (enabled) containerColor else containerColor.copy(alpha = 0.55f))
-            .clickable(enabled = enabled, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        when {
-            iconPainter != null -> Icon(
-                painter = iconPainter,
-                contentDescription = contentDescription,
-                tint = if (enabled) iconTint else iconTint.copy(alpha = 0.4f),
-                modifier = Modifier.size(iconSize),
-            )
-
-            icon != null -> Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                tint = if (enabled) iconTint else iconTint.copy(alpha = 0.4f),
-                modifier = Modifier.size(iconSize),
-            )
-        }
     }
 }
