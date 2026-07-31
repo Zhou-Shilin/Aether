@@ -1,7 +1,9 @@
 package com.zhousl.aether.data
 
 import android.app.Application
+import android.net.Uri
 import android.os.SystemClock
+import android.util.Base64
 import com.zhousl.aether.AetherForegroundService
 import com.zhousl.aether.AetherNotificationController
 import com.zhousl.aether.AppForegroundTracker
@@ -9,6 +11,8 @@ import com.zhousl.aether.channel.SessionAgentEvent
 import com.zhousl.aether.channel.SessionAgentProcessor
 import com.zhousl.aether.channel.SessionAgentRequest
 import com.zhousl.aether.channel.ChannelFile
+import com.zhousl.aether.channel.ChannelFileKind
+import com.zhousl.aether.channel.ChannelIncomingAttachment
 import com.zhousl.aether.channel.ChannelMessageRenderer
 import com.zhousl.aether.runtime.RuntimeRouter
 import com.zhousl.aether.runtime.RuntimeShellTool
@@ -17,6 +21,7 @@ import com.zhousl.aether.data.pi.PiCompletionClient
 import com.zhousl.aether.data.pi.PiKernelBridge
 import com.zhousl.aether.termux.TermuxBashTool
 import com.zhousl.aether.ui.AttachmentKind
+import com.zhousl.aether.ui.AttachmentWorkspaceState
 import com.zhousl.aether.ui.AssistantResponseBlock
 import com.zhousl.aether.ui.ChatAttachment
 import com.zhousl.aether.ui.ChatMessage
@@ -29,6 +34,7 @@ import com.zhousl.aether.ui.ReasoningSummaryChunk
 import com.zhousl.aether.ui.ReasoningTrace
 import com.zhousl.aether.ui.syncActiveBranches
 import java.util.concurrent.ConcurrentHashMap
+import java.io.File
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -239,15 +245,19 @@ class SessionExecutionManager(
     }
 
     private suspend fun startExternalTurn(request: SessionAgentRequest) {
-        require(request.text.isNotBlank()) { "Channel message is empty" }
+        require(request.text.isNotBlank() || request.attachments.isNotEmpty()) {
+            "Channel message is empty"
+        }
         val settings = settingsRepository.settings.first()
         val providerConfigs = settingsRepository.providerConfigs.first()
         val now = System.currentTimeMillis()
+        val attachments = importChannelAttachments(request, settings)
         val userMessage = ChatMessage(
             id = "${request.source}-${request.sessionId.takeLast(8)}-$now",
             author = MessageAuthor.User,
             text = request.text,
             createdAtMillis = now,
+            attachments = attachments,
         )
         var selectedModelKey = ""
         var requestMessages: List<ChatMessage> = emptyList()
@@ -302,6 +312,36 @@ class SessionExecutionManager(
                 agentModeEnabled = agentModeEnabled,
                 chromeEnabled = chromeEnabled
             )
+        )
+    }
+
+    private suspend fun importChannelAttachments(
+        request: SessionAgentRequest,
+        settings: AppSettings,
+    ): List<ChatAttachment> = request.attachments.map { attachment ->
+        val localFile = File(attachment.localPath)
+        require(localFile.isFile && localFile.canRead()) {
+            "Channel attachment '${attachment.name}' is no longer available"
+        }
+        val sourceUri = Uri.fromFile(localFile)
+        val imported = runtimeWorkspaceFileBridge.importAttachmentToWorkspace(
+            settings = settings,
+            sourceUri = sourceUri,
+            sessionId = request.sessionId,
+            attachmentId = attachment.id,
+            displayName = attachment.name,
+        ).getOrElse { error ->
+            throw IllegalStateException(
+                "Could not import channel attachment '${attachment.name}' into the workspace: " +
+                    error.message.orEmpty(),
+                error,
+            )
+        }
+        attachment.toChatAttachment(
+            sourceUri = sourceUri,
+            workspacePath = imported.absolutePath,
+            bytesCopied = imported.bytesCopied,
+            inlineBytes = imported.inlineBytes,
         )
     }
 
@@ -2844,6 +2884,28 @@ class SessionExecutionManager(
         }
     }
 }
+
+private fun ChannelIncomingAttachment.toChatAttachment(
+    sourceUri: Uri,
+    workspacePath: String,
+    bytesCopied: Long,
+    inlineBytes: ByteArray,
+): ChatAttachment = ChatAttachment(
+    id = id,
+    uri = sourceUri.toString(),
+    name = name,
+    mimeType = mimeType,
+    sizeBytes = sizeBytes,
+    kind = if (kind == ChannelFileKind.Image) AttachmentKind.Image else AttachmentKind.File,
+    workspacePath = workspacePath,
+    workspaceState = AttachmentWorkspaceState.Ready,
+    workspaceBytesCopied = bytesCopied,
+    inlineBase64 = if (kind == ChannelFileKind.Image && inlineBytes.isNotEmpty()) {
+        Base64.encodeToString(inlineBytes, Base64.NO_WRAP)
+    } else {
+        ""
+    },
+)
 
 internal data class TurnSkillSelection(
     val selectedSkillIds: List<String>,

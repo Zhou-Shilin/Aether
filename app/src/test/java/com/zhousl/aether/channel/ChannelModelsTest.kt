@@ -20,6 +20,7 @@ class ChannelModelsTest {
                 allowedUserIds = setOf("alice", "bob"),
             ),
             mergeWindowMillis = 900,
+            noTextDebounce = false,
             display = ChannelDisplayOptions(
                 showToolCalls = false,
                 showToolResults = true,
@@ -41,6 +42,15 @@ class ChannelModelsTest {
         )
 
         assertEquals(ChannelDisplayOptions(), decoded?.display)
+    }
+
+    @Test
+    fun oldConfigEnablesNoTextDebounceByDefault() {
+        val decoded = ChannelConfig.fromJson(
+            ChannelConfig.default(ChannelKind.Feishu).toJson().apply { remove("noTextDebounce") }
+        )
+
+        assertTrue(decoded?.noTextDebounce == true)
     }
 
     @Test

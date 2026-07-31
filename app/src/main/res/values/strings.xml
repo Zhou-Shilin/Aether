@@ -1000,6 +1000,8 @@
     <string name="settings_channel_card_template_id">AI Card template ID</string>
     <string name="settings_channel_card_template_key">AI Card content key</string>
     <string name="settings_channel_merge_window">Message merge window (ms, 0–5000)</string>
+    <string name="settings_channel_no_text_debounce">Debounce messages without text</string>
+    <string name="settings_channel_no_text_debounce_subtitle">When enabled, media-only messages (images, videos, and files) wait for a later text message and are processed together. When disabled, every message is processed immediately.</string>
     <string name="settings_channel_app_id">App ID / Client ID</string>
     <string name="settings_channel_app_secret">App secret / Client secret</string>
     <string name="settings_channel_bot_id">Bot ID</string>

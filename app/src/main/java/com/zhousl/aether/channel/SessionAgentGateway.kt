@@ -8,6 +8,7 @@ data class SessionAgentRequest(
     val text: String,
     val sessionTitle: String,
     val source: String,
+    val attachments: List<ChannelIncomingAttachment> = emptyList(),
 )
 
 sealed interface SessionAgentEvent {

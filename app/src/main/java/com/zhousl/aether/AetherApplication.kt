@@ -30,8 +30,10 @@ import com.zhousl.aether.data.SettingsRepository
 import com.zhousl.aether.data.WebToolsClient
 import com.zhousl.aether.data.WorkspaceFileBridge
 import com.zhousl.aether.channel.ChannelConfigRepository
+import com.zhousl.aether.channel.ChannelInboundFileStore
 import com.zhousl.aether.channel.ChannelManager
 import com.zhousl.aether.channel.ChannelQrAuthManager
+import com.zhousl.aether.channel.ChannelRegistry
 import com.zhousl.aether.data.pi.PiCompletionClient
 import com.zhousl.aether.data.pi.PiAgentRunner
 import com.zhousl.aether.data.pi.PiKernelBridge
@@ -246,6 +248,12 @@ class AetherAppRuntime(
         scope = appScope,
         configRepository = channelConfigRepository,
         processor = sessionExecutionManager,
+        registry = ChannelRegistry(
+            scope = appScope,
+            inboundFileStore = ChannelInboundFileStore(
+                java.io.File(application.filesDir, "channel-inbox"),
+            ),
+        ),
         onKeepAliveRequired = { required ->
             if (required) runCatching { AetherForegroundService.ensureRunning(application) }
         },

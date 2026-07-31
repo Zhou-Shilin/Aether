@@ -7,15 +7,23 @@ import com.zhousl.aether.channel.ChannelConfig
 import com.zhousl.aether.channel.ChannelConnectionState
 import com.zhousl.aether.channel.ChannelFile
 import com.zhousl.aether.channel.ChannelFileKind
+import com.zhousl.aether.channel.ChannelInboundFileStore
+import com.zhousl.aether.channel.ChannelIncomingAttachment
 import com.zhousl.aether.channel.ChannelIncomingMessage
 import com.zhousl.aether.channel.ChannelKind
 import com.zhousl.aether.channel.ChannelReply
 import com.zhousl.aether.channel.ChannelSendReceipt
+import com.zhousl.aether.channel.awaitResponse
+import java.io.ByteArrayInputStream
 import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import javax.crypto.Cipher
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -33,6 +41,7 @@ class WeComChannel(
     private val config: ChannelConfig,
     private val scope: CoroutineScope,
     private val http: OkHttpClient,
+    private val inboundFileStore: ChannelInboundFileStore,
 ) : BaseAetherChannel(ChannelKind.WeCom) {
     override val supportsStreamingReplies: Boolean = config.display.streamingEnabled
     private var socket: WebSocket? = null
@@ -92,21 +101,12 @@ class WeComChannel(
             }
             if (command != "aibot_msg_callback" && command != "aibot_event_callback") return
             val body = frame.optJSONObject("body") ?: return
-            if (body.optString("msgtype") != "text") return
             val sender = body.optJSONObject("from")?.optString("userid").orEmpty()
             val chatId = body.optString("chatid").ifBlank { sender }
-            val content = body.optJSONObject("text")?.optString("content").orEmpty().trim()
-            if (content.isBlank()) return
+            if (sender.isBlank() || body.optString("msgtype").isBlank()) return
             requestIds[chatId] = requestId
-            scope.launch {
-                emitIncoming(
-                    ChannelIncomingMessage(
-                        kind,
-                        body.optString("msgid").ifBlank { "$sender:${body.optLong("send_time")}" },
-                        ChannelAddress(chatId, sender, requestId),
-                        content,
-                    )
-                )
+            scope.launch(Dispatchers.IO) {
+                parseIncomingBody(body, requestId)?.let { emitIncoming(it) }
             }
         }
 
@@ -147,6 +147,132 @@ class WeComChannel(
         pendingCommands.values.forEach { it.cancel() }
         pendingCommands.clear()
         updateStatus(ChannelConnectionState.Disabled)
+    }
+
+    private suspend fun parseIncomingBody(
+        body: JSONObject,
+        requestId: String,
+    ): ChannelIncomingMessage? {
+        val sender = body.optJSONObject("from")?.optString("userid").orEmpty()
+        if (sender.isBlank()) return null
+        val chatId = body.optString("chatid").ifBlank { sender }
+        val messageId = body.optString("msgid").ifBlank { "$sender:${body.optLong("send_time")}" }
+        val textParts = mutableListOf<String>()
+        val attachments = mutableListOf<ChannelIncomingAttachment>()
+        val messageType = body.optString("msgtype")
+
+        if (messageType == "mixed") {
+            val items = body.optJSONObject("mixed")?.optJSONArray("msg_item")
+            if (items != null) repeat(items.length()) { index ->
+                val item = items.optJSONObject(index) ?: return@repeat
+                parseMessagePart(item.optString("msgtype"), item, messageId, textParts, attachments)
+            }
+        } else {
+            parseMessagePart(messageType, body, messageId, textParts, attachments)
+        }
+
+        val text = textParts.distinct().joinToString("\n").trim()
+        if (text.isBlank() && attachments.isEmpty()) return null
+        return ChannelIncomingMessage(
+            channel = kind,
+            messageId = messageId,
+            address = ChannelAddress(chatId, sender, requestId),
+            text = text,
+            attachments = attachments,
+        )
+    }
+
+    private suspend fun parseMessagePart(
+        messageType: String,
+        container: JSONObject,
+        messageId: String,
+        textParts: MutableList<String>,
+        attachments: MutableList<ChannelIncomingAttachment>,
+    ) {
+        when (messageType) {
+            "text" -> container.optJSONObject("text")?.optString("content")
+                ?.trim()?.takeIf(String::isNotBlank)?.let(textParts::add)
+            "voice" -> {
+                val text = container.optJSONObject("voice")?.optString("content").orEmpty().trim()
+                textParts += text.ifBlank { "[voice: no text]" }
+            }
+            "image", "file", "video" -> {
+                val media = container.optJSONObject(messageType) ?: JSONObject()
+                val url = media.optString("url")
+                if (url.isBlank()) {
+                    textParts += "[$messageType: no url]"
+                    return
+                }
+                val fileName = media.optString("filename").ifBlank {
+                    when (messageType) {
+                        "image" -> "image.jpg"
+                        "video" -> "video.mp4"
+                        else -> "file.bin"
+                    }
+                }
+                runCatching {
+                    downloadMedia(
+                        messageId = messageId,
+                        url = url,
+                        encodedAesKey = media.optString("aeskey"),
+                        fileName = fileName,
+                        fileKind = when (messageType) {
+                            "image" -> ChannelFileKind.Image
+                            "video" -> ChannelFileKind.Video
+                            else -> ChannelFileKind.File
+                        },
+                    )
+                }.onSuccess { attachments += it }
+                    .onFailure { textParts += "[$messageType: download failed]" }
+            }
+            else -> if (messageType.isNotBlank()) textParts += "[$messageType]"
+        }
+    }
+
+    private suspend fun downloadMedia(
+        messageId: String,
+        url: String,
+        encodedAesKey: String,
+        fileName: String,
+        fileKind: ChannelFileKind,
+    ): ChannelIncomingAttachment {
+        val request = Request.Builder().url(url).get().build()
+        val downloaded = http.newCall(request).awaitResponse().use { response ->
+            if (!response.isSuccessful) error("WeCom media download failed: HTTP ${response.code}")
+            val body = response.body ?: error("WeCom media download returned no body")
+            inboundFileStore.readBytes(
+                declaredSize = body.contentLength().takeIf { it >= 0L },
+                input = body::byteStream,
+            )
+        }
+        val bytes = if (encodedAesKey.isBlank()) downloaded else decryptWeComMedia(downloaded, encodedAesKey)
+        return inboundFileStore.save(
+            channel = kind,
+            messageId = messageId,
+            name = fileName,
+            mimeType = "",
+            kind = fileKind,
+            declaredSize = bytes.size.toLong(),
+            input = { ByteArrayInputStream(bytes) },
+        )
+    }
+
+    private fun decryptWeComMedia(encrypted: ByteArray, encodedAesKey: String): ByteArray {
+        val key = Base64.decode(encodedAesKey, Base64.DEFAULT)
+        require(key.size == 32) { "Invalid WeCom media AES key" }
+        val aligned = if (encrypted.size % 16 == 0) encrypted else {
+            encrypted.copyOf(encrypted.size + (16 - encrypted.size % 16))
+        }
+        val decrypted = Cipher.getInstance("AES/CBC/NoPadding").run {
+            init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), IvParameterSpec(key.copyOfRange(0, 16)))
+            doFinal(aligned)
+        }
+        val padding = decrypted.lastOrNull()?.toInt()?.and(0xff) ?: error("Empty WeCom media")
+        require(padding in 1..32 && padding <= decrypted.size) { "Invalid WeCom media padding" }
+        require(decrypted.takeLast(padding).all { it.toInt().and(0xff) == padding }) {
+            "Invalid WeCom media padding"
+        }
+        return decrypted.copyOf(decrypted.size - padding)
     }
 
     override suspend fun onProcessing(message: ChannelIncomingMessage) {

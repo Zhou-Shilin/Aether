@@ -26,11 +26,15 @@ import com.zhousl.aether.channel.ChannelConfig
 import com.zhousl.aether.channel.ChannelConnectionState
 import com.zhousl.aether.channel.ChannelFile
 import com.zhousl.aether.channel.ChannelFileKind
+import com.zhousl.aether.channel.ChannelInboundFileStore
 import com.zhousl.aether.channel.ChannelIncomingMessage
 import com.zhousl.aether.channel.ChannelKind
 import com.zhousl.aether.channel.ChannelReply
 import com.zhousl.aether.channel.ChannelSendReceipt
+import com.zhousl.aether.channel.awaitResponse
+import com.zhousl.aether.channel.postJson
 import java.io.File
+import java.net.URLEncoder
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
@@ -38,6 +42,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -45,6 +51,8 @@ import org.json.JSONObject
 class FeishuChannel(
     private val config: ChannelConfig,
     private val scope: CoroutineScope,
+    private val http: OkHttpClient,
+    private val inboundFileStore: ChannelInboundFileStore,
 ) : BaseAetherChannel(ChannelKind.Feishu) {
     private data class StreamingCard(
         val cardId: String,
@@ -58,6 +66,8 @@ class FeishuChannel(
         .build()
     private val streamingCards = ConcurrentHashMap<String, StreamingCard>()
     private val completedReplyIds = ConcurrentHashMap.newKeySet<String>()
+    @Volatile private var tenantAccessToken = ""
+    @Volatile private var tenantAccessTokenExpiresAt = 0L
     private var receiveJob: Job? = null
     private var socketClient: com.lark.oapi.ws.Client? = null
 
@@ -72,20 +82,14 @@ class FeishuChannel(
                         val event = envelope.event
                         val message = event?.message
                         val sender = event?.sender?.senderId?.openId.orEmpty()
-                        if (message?.messageType == "text") {
-                            val text = runCatching {
-                                JSONObject(message.content.orEmpty()).optString("text")
-                            }.getOrDefault("")
-                            if (text.isNotBlank()) scope.launch {
-                                emitIncoming(
-                                    ChannelIncomingMessage(
-                                        channel = kind,
-                                        messageId = message.messageId.orEmpty(),
-                                        address = ChannelAddress(message.chatId.orEmpty(), sender),
-                                        text = text,
-                                    )
-                                )
-                            }
+                        if (message != null) scope.launch(Dispatchers.IO) {
+                            parseIncomingMessage(
+                                messageType = message.messageType.orEmpty(),
+                                contentRaw = message.content.orEmpty(),
+                                messageId = message.messageId.orEmpty(),
+                                chatId = message.chatId.orEmpty(),
+                                senderId = sender,
+                            )?.let { emitIncoming(it) }
                         }
                     }
                 }
@@ -111,6 +115,137 @@ class FeishuChannel(
         streamingCards.clear()
         completedReplyIds.clear()
         updateStatus(ChannelConnectionState.Disabled)
+    }
+
+    private suspend fun parseIncomingMessage(
+        messageType: String,
+        contentRaw: String,
+        messageId: String,
+        chatId: String,
+        senderId: String,
+    ): ChannelIncomingMessage? {
+        if (senderId.isBlank()) return null
+        val content = runCatching { JSONObject(contentRaw) }.getOrDefault(JSONObject())
+        val textParts = mutableListOf<String>()
+        val attachments = mutableListOf<com.zhousl.aether.channel.ChannelIncomingAttachment>()
+
+        when (messageType.lowercase()) {
+            "text" -> content.optString("text").trim().takeIf(String::isNotBlank)?.let(textParts::add)
+            "post" -> {
+                collectStringValues(content, setOf("text")).forEach { value ->
+                    value.trim().takeIf(String::isNotBlank)?.let(textParts::add)
+                }
+                collectStringValues(content, setOf("image_key", "imageKey")).distinct().forEachIndexed { index, key ->
+                    runCatching {
+                        downloadResource(messageId, key, "image-${index + 1}.jpg", ChannelFileKind.Image, "image")
+                    }.onSuccess { attachments += it }.onFailure { textParts += "[image: download failed]" }
+                }
+                collectStringValues(content, setOf("file_key", "fileKey")).distinct().forEachIndexed { index, key ->
+                    runCatching {
+                        downloadResource(messageId, key, "file-${index + 1}.bin", ChannelFileKind.File, "file")
+                    }.onSuccess { attachments += it }.onFailure { textParts += "[file: download failed]" }
+                }
+            }
+            "image" -> {
+                val key = firstString(content, "image_key", "imageKey", "file_key", "fileKey")
+                if (key.isBlank()) textParts += "[image: missing key]" else runCatching {
+                    downloadResource(messageId, key, "image.jpg", ChannelFileKind.Image, "image")
+                }.onSuccess { attachments += it }.onFailure { textParts += "[image: download failed]" }
+            }
+            "file", "media", "audio" -> {
+                val key = firstString(content, "file_key", "fileKey")
+                val name = firstString(content, "file_name", "fileName").ifBlank {
+                    when (messageType.lowercase()) {
+                        "audio" -> "audio.opus"
+                        "media" -> "video.mp4"
+                        else -> "file.bin"
+                    }
+                }
+                val fileKind = when (messageType.lowercase()) {
+                    "audio" -> ChannelFileKind.Audio
+                    "media" -> ChannelFileKind.Video
+                    else -> ChannelFileKind.File
+                }
+                if (key.isBlank()) textParts += "[$messageType: missing key]" else runCatching {
+                    downloadResource(messageId, key, name, fileKind, "file")
+                }.onSuccess { attachments += it }.onFailure { textParts += "[$messageType: download failed]" }
+            }
+            "interactive" -> collectStringValues(content, setOf("text", "content"))
+                .firstOrNull { it.isNotBlank() }
+                ?.let(textParts::add)
+            else -> textParts += "[$messageType]"
+        }
+
+        val text = textParts.distinct().joinToString("\n").trim()
+        if (text.isBlank() && attachments.isEmpty()) return null
+        return ChannelIncomingMessage(
+            channel = kind,
+            messageId = messageId.ifBlank { UUID.randomUUID().toString() },
+            address = ChannelAddress(chatId.ifBlank { senderId }, senderId),
+            text = text,
+            attachments = attachments,
+        )
+    }
+
+    private suspend fun downloadResource(
+        messageId: String,
+        resourceKey: String,
+        fileName: String,
+        fileKind: ChannelFileKind,
+        resourceType: String,
+    ): com.zhousl.aether.channel.ChannelIncomingAttachment {
+        val encodedMessageId = URLEncoder.encode(messageId, "UTF-8")
+        val encodedResourceKey = URLEncoder.encode(resourceKey, "UTF-8")
+        val request = Request.Builder()
+            .url(
+                "${config.baseUrl.trimEnd('/')}/open-apis/im/v1/messages/" +
+                    "$encodedMessageId/resources/$encodedResourceKey?type=$resourceType"
+            )
+            .header("Authorization", "Bearer ${tenantToken()}")
+            .get()
+            .build()
+        return http.newCall(request).awaitResponse().use { response ->
+            if (!response.isSuccessful) error("Feishu resource download failed: HTTP ${response.code}")
+            val body = response.body ?: error("Feishu resource download returned no body")
+            inboundFileStore.save(
+                channel = kind,
+                messageId = messageId,
+                name = fileName,
+                mimeType = body.contentType()?.toString().orEmpty(),
+                kind = fileKind,
+                declaredSize = body.contentLength().takeIf { it >= 0L },
+                input = body::byteStream,
+            )
+        }
+    }
+
+    private suspend fun tenantToken(): String {
+        val now = System.currentTimeMillis()
+        if (tenantAccessToken.isNotBlank() && now < tenantAccessTokenExpiresAt) return tenantAccessToken
+        val response = http.postJson(
+            "${config.baseUrl.trimEnd('/')}/open-apis/auth/v3/tenant_access_token/internal",
+            JSONObject().put("app_id", config.appId).put("app_secret", config.appSecret),
+        )
+        tenantAccessToken = response.optString("tenant_access_token")
+        require(tenantAccessToken.isNotBlank()) { "Feishu OAuth returned no tenant access token" }
+        tenantAccessTokenExpiresAt = now + (response.optLong("expire", 7_200L) - 120L).coerceAtLeast(60L) * 1_000L
+        return tenantAccessToken
+    }
+
+    private fun firstString(json: JSONObject, vararg keys: String): String =
+        keys.firstNotNullOfOrNull { key -> json.optString(key).trim().takeIf(String::isNotBlank) }.orEmpty()
+
+    private fun collectStringValues(value: Any?, keys: Set<String>): List<String> = buildList {
+        when (value) {
+            is JSONObject -> value.keys().forEach { key ->
+                val child = value.opt(key)
+                if (key in keys && child is String && child.isNotBlank()) add(child)
+                collectStringValues(child, keys).forEach(::add)
+            }
+            is JSONArray -> repeat(value.length()) { index ->
+                collectStringValues(value.opt(index), keys).forEach(::add)
+            }
+        }
     }
 
     override suspend fun onProcessing(message: ChannelIncomingMessage) {

@@ -3180,6 +3180,9 @@ private fun ChannelDetailPage(
     var mergeWindow by rememberSaveable(config.kind, stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(config.mergeWindowMillis.toString()))
     }
+    var noTextDebounce by rememberSaveable(config.kind) {
+        mutableStateOf(config.noTextDebounce)
+    }
     var robotCode by rememberSaveable(config.kind, stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(config.robotCode))
     }
@@ -3231,6 +3234,7 @@ private fun ChannelDetailPage(
                 .toSet(),
         ),
         mergeWindowMillis = mergeWindow.text.toLongOrNull()?.coerceIn(0, 5_000) ?: 600,
+        noTextDebounce = noTextDebounce,
     )
 
     fun save() = onUpsert(snapshot())
@@ -3452,6 +3456,13 @@ private fun ChannelDetailPage(
                     onValueChange = { allowList = it },
                 )
             }
+            CardDivider()
+            ChannelDisplayToggle(
+                title = stringResource(R.string.settings_channel_no_text_debounce),
+                subtitle = stringResource(R.string.settings_channel_no_text_debounce_subtitle),
+                checked = noTextDebounce,
+                onCheckedChange = { noTextDebounce = it },
+            )
             CardDivider()
             ChatGptTextField(
                 label = stringResource(R.string.settings_channel_merge_window),

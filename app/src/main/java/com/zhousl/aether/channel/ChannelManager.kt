@@ -102,9 +102,6 @@ class ChannelManager(
     private fun route(config: ChannelConfig, message: ChannelIncomingMessage) {
         if (!deduplicator.accept(message.channel, message.messageId)) return
         if (!ChannelAccessController.isAllowed(config.accessPolicy, message.address.userId)) return
-        synchronized(lock) { channels[message.channel] }?.let { channel ->
-            scope.launch { runCatching { channel.onProcessing(message) } }
-        }
         val actor = sessionActors.computeIfAbsent(message.sessionId) { sessionId ->
             val queue = Channel<ChannelIncomingMessage>(Channel.UNLIMITED)
             val job = scope.launch { consumeSession(sessionId, config, queue) }
@@ -118,16 +115,28 @@ class ChannelManager(
         initialConfig: ChannelConfig,
         queue: Channel<ChannelIncomingMessage>,
     ) {
+        val noTextDebouncer = ChannelNoTextDebouncer()
         try {
             for (first in queue) {
-                val messages = mutableListOf(first)
+                val receivedBatch = mutableListOf(first)
                 if (initialConfig.mergeWindowMillis > 0) {
                     delay(initialConfig.mergeWindowMillis)
-                    while (true) messages += queue.tryReceive().getOrNull() ?: break
+                    while (true) receivedBatch += queue.tryReceive().getOrNull() ?: break
                 }
+                val messages = noTextDebouncer.offer(
+                    messages = receivedBatch,
+                    enabled = initialConfig.noTextDebounce,
+                ) ?: continue
                 val latest = messages.last()
-                val input = messages.joinToString("\n") { it.text.trim() }
+                val input = messages.map { it.text.trim() }
+                    .filter(String::isNotBlank)
+                    .joinToString("\n")
+                val attachments = messages.flatMap(ChannelIncomingMessage::attachments)
+                if (input.isBlank() && attachments.isEmpty()) continue
                 val channel = synchronized(lock) { channels[latest.channel] } ?: continue
+                messages.forEach { message ->
+                    runCatching { channel.onProcessing(message) }
+                }
                 val renderer = ChannelMessageRenderer(initialConfig.display)
                 var finalText = ""
                 var reasoningText = ""
@@ -161,6 +170,7 @@ class ChannelManager(
                             text = input,
                             sessionTitle = "${latest.channel.displayName} · ${latest.address.conversationId.take(18)}",
                             source = latest.channel.storageValue,
+                            attachments = attachments,
                         )
                     ).collect { event ->
                         when (event) {
@@ -251,6 +261,7 @@ class ChannelManager(
                 }
             }
         } finally {
+            noTextDebouncer.clear()
             sessionActors.remove(sessionId)
         }
     }

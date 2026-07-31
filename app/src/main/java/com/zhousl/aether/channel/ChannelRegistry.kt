@@ -10,6 +10,7 @@ import okhttp3.OkHttpClient
 
 class ChannelRegistry(
     private val scope: CoroutineScope,
+    private val inboundFileStore: ChannelInboundFileStore = ChannelInboundFileStore(),
     private val http: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
@@ -17,9 +18,9 @@ class ChannelRegistry(
         .build(),
 ) {
     fun create(config: ChannelConfig): AetherChannel = when (config.kind) {
-        ChannelKind.Feishu -> FeishuChannel(config, scope)
-        ChannelKind.DingTalk -> DingTalkChannel(config, scope, http)
-        ChannelKind.WeChat -> WeChatChannel(config, scope, http)
-        ChannelKind.WeCom -> WeComChannel(config, scope, http)
+        ChannelKind.Feishu -> FeishuChannel(config, scope, http, inboundFileStore)
+        ChannelKind.DingTalk -> DingTalkChannel(config, scope, http, inboundFileStore)
+        ChannelKind.WeChat -> WeChatChannel(config, scope, http, inboundFileStore)
+        ChannelKind.WeCom -> WeComChannel(config, scope, http, inboundFileStore)
     }
 }

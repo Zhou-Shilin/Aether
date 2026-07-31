@@ -7,12 +7,15 @@ import com.zhousl.aether.channel.ChannelConfig
 import com.zhousl.aether.channel.ChannelConnectionState
 import com.zhousl.aether.channel.ChannelFile
 import com.zhousl.aether.channel.ChannelFileKind
+import com.zhousl.aether.channel.ChannelInboundFileStore
+import com.zhousl.aether.channel.ChannelIncomingAttachment
 import com.zhousl.aether.channel.ChannelIncomingMessage
 import com.zhousl.aether.channel.ChannelKind
 import com.zhousl.aether.channel.ChannelReply
 import com.zhousl.aether.channel.ChannelSendReceipt
 import com.zhousl.aether.channel.awaitResponse
 import com.zhousl.aether.channel.postJson
+import java.io.ByteArrayInputStream
 import java.net.URLEncoder
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -39,6 +42,7 @@ class WeChatChannel(
     private val config: ChannelConfig,
     private val scope: CoroutineScope,
     private val http: OkHttpClient,
+    private val inboundFileStore: ChannelInboundFileStore,
 ) : BaseAetherChannel(ChannelKind.WeChat) {
     private data class UploadedMedia(
         val encryptedQueryParameter: String,
@@ -71,27 +75,7 @@ class WeChatChannel(
                     val messages = response.optJSONArray("msgs")
                     if (messages != null) repeat(messages.length()) { index ->
                         val message = messages.optJSONObject(index) ?: return@repeat
-                        val from = message.optString("from_user_id")
-                        val contextToken = message.optString("context_token")
-                        val items = message.optJSONArray("item_list")
-                        val text = buildList {
-                            if (items != null) repeat(items.length()) { itemIndex ->
-                                items.optJSONObject(itemIndex)?.optJSONObject("text_item")
-                                    ?.optString("text")?.trim()?.takeIf(String::isNotBlank)?.let(::add)
-                            }
-                        }.joinToString("\n")
-                        if (from.isNotBlank() && text.isNotBlank()) {
-                            emitIncoming(
-                                ChannelIncomingMessage(
-                                    kind,
-                                    contextToken.ifBlank {
-                                        message.optString("msg_id").ifBlank { UUID.randomUUID().toString() }
-                                    },
-                                    ChannelAddress(from, from, contextToken),
-                                    text,
-                                )
-                            )
-                        }
+                        parseIncomingMessage(message)?.let { emitIncoming(it) }
                     }
                     failures = 0
                     updateStatus(ChannelConnectionState.Connected)
@@ -113,6 +97,160 @@ class WeChatChannel(
         typingJobs.clear()
         typingTickets.clear()
         updateStatus(ChannelConnectionState.Disabled)
+    }
+
+    private suspend fun parseIncomingMessage(message: JSONObject): ChannelIncomingMessage? {
+        if (message.optInt("message_type") != 1) return null
+        val from = message.optString("from_user_id")
+        if (from.isBlank()) return null
+        val contextToken = message.optString("context_token")
+        val messageId = contextToken.ifBlank {
+            message.optString("msg_id").ifBlank { UUID.randomUUID().toString() }
+        }
+        val textParts = mutableListOf<String>()
+        val attachments = mutableListOf<ChannelIncomingAttachment>()
+        val items = message.optJSONArray("item_list") ?: JSONArray()
+        repeat(items.length()) { index ->
+            val item = items.optJSONObject(index) ?: return@repeat
+            when (item.optInt("type")) {
+                1 -> item.optJSONObject("text_item")?.optString("text")
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() && !looksLikeFileName(it) }
+                    ?.let(textParts::add)
+                2 -> {
+                    val image = item.optJSONObject("image_item") ?: JSONObject()
+                    val media = image.optJSONObject("media") ?: JSONObject()
+                    val parameter = media.optString("encrypt_query_param")
+                    val aesKey = image.optString("aeskey").ifBlank { media.optString("aes_key") }
+                    if (parameter.isBlank()) {
+                        textParts += "[image: no url]"
+                    } else {
+                        runCatching {
+                            downloadMedia(messageId, parameter, aesKey, "image.jpg", ChannelFileKind.Image)
+                        }.onSuccess { attachments += it }
+                            .onFailure { textParts += "[image: download failed]" }
+                    }
+                }
+                3 -> {
+                    val voice = item.optJSONObject("voice_item") ?: JSONObject()
+                    val transcription = voice.optJSONObject("text_item")?.optString("text")
+                        ?.ifBlank { voice.optString("text") }
+                        .orEmpty()
+                        .trim()
+                    textParts += transcription.ifBlank { "[voice: no transcription]" }
+                }
+                4 -> {
+                    val file = item.optJSONObject("file_item") ?: JSONObject()
+                    val media = file.optJSONObject("media") ?: JSONObject()
+                    val parameter = media.optString("encrypt_query_param")
+                    val fileName = file.optString("file_name").ifBlank { "file.bin" }
+                    if (parameter.isBlank()) {
+                        textParts += "[file: no url]"
+                    } else {
+                        runCatching {
+                            downloadMedia(
+                                messageId,
+                                parameter,
+                                media.optString("aes_key"),
+                                fileName,
+                                ChannelFileKind.File,
+                            )
+                        }.onSuccess { attachments += it }
+                            .onFailure { textParts += "[file: download failed]" }
+                    }
+                }
+                5 -> {
+                    val video = item.optJSONObject("video_item") ?: JSONObject()
+                    val media = video.optJSONObject("media") ?: JSONObject()
+                    val parameter = media.optString("encrypt_query_param")
+                    if (parameter.isBlank()) {
+                        textParts += "[video: no url]"
+                    } else {
+                        runCatching {
+                            downloadMedia(
+                                messageId,
+                                parameter,
+                                media.optString("aes_key"),
+                                "video.mp4",
+                                ChannelFileKind.Video,
+                            )
+                        }.onSuccess { attachments += it }
+                            .onFailure { textParts += "[video: download failed]" }
+                    }
+                }
+                else -> textParts += "[unsupported type: ${item.optInt("type")}]"
+            }
+        }
+        val text = textParts.distinct().joinToString("\n").trim()
+        if (text.isBlank() && attachments.isEmpty()) return null
+        val groupId = message.optString("group_id")
+        return ChannelIncomingMessage(
+            channel = kind,
+            messageId = messageId,
+            address = ChannelAddress(groupId.ifBlank { from }, from, contextToken),
+            text = text,
+            attachments = attachments,
+        )
+    }
+
+    private suspend fun downloadMedia(
+        messageId: String,
+        encryptedQueryParameter: String,
+        encodedAesKey: String,
+        fileName: String,
+        kind: ChannelFileKind,
+    ): ChannelIncomingAttachment {
+        val url = "https://novac2c.cdn.weixin.qq.com/c2c/download?encrypted_query_param=" +
+            URLEncoder.encode(encryptedQueryParameter, "UTF-8")
+        val request = Request.Builder().url(url).get().build()
+        val encrypted = http.newCall(request).awaitResponse().use { response ->
+            if (!response.isSuccessful) error("WeChat media download failed: HTTP ${response.code}")
+            val body = response.body ?: error("WeChat media download returned no body")
+            inboundFileStore.readBytes(
+                declaredSize = body.contentLength().takeIf { it >= 0L },
+                input = body::byteStream,
+            )
+        }
+        val bytes = if (encodedAesKey.isBlank()) encrypted else decryptWechatMedia(encrypted, encodedAesKey)
+        return inboundFileStore.save(
+            channel = this@WeChatChannel.kind,
+            messageId = messageId,
+            name = fileName,
+            mimeType = "",
+            kind = kind,
+            declaredSize = bytes.size.toLong(),
+            input = { ByteArrayInputStream(bytes) },
+        )
+    }
+
+    private fun decryptWechatMedia(encrypted: ByteArray, encodedKey: String): ByteArray {
+        val raw = encodedKey.trim()
+        val key = when {
+            raw.length in setOf(32, 48, 64) && raw.all { it.isHexDigit() } -> raw.hexToBytes()
+            else -> {
+                val decoded = Base64.decode(raw, Base64.DEFAULT)
+                if (decoded.size == 32 && decoded.all { it.toInt().toChar().isHexDigit() }) {
+                    decoded.toString(Charsets.US_ASCII).hexToBytes()
+                } else {
+                    decoded
+                }
+            }
+        }
+        require(key.size in setOf(16, 24, 32)) { "Invalid WeChat media AES key" }
+        return Cipher.getInstance("AES/ECB/PKCS5Padding").run {
+            init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"))
+            doFinal(encrypted)
+        }
+    }
+
+    private fun String.hexToBytes(): ByteArray = chunked(2)
+        .map { it.toInt(16).toByte() }
+        .toByteArray()
+
+    private fun Char.isHexDigit(): Boolean = this in '0'..'9' || this in 'a'..'f' || this in 'A'..'F'
+
+    private fun looksLikeFileName(text: String): Boolean = FileNameExtensions.any {
+        text.lowercase().endsWith(it)
     }
 
     override suspend fun onProcessing(message: ChannelIncomingMessage) {
@@ -297,5 +435,10 @@ class WeChatChannel(
 
     private companion object {
         const val ChannelVersion = "2.0.1"
+        val FileNameExtensions = setOf(
+            ".txt", ".doc", ".docx", ".pdf", ".jpg", ".jpeg", ".png", ".gif",
+            ".mp4", ".avi", ".mov", ".mp3", ".wav", ".zip", ".rar", ".xlsx",
+            ".xls", ".ppt", ".pptx",
+        )
     }
 }

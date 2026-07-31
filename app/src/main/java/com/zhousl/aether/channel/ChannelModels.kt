@@ -69,6 +69,8 @@ data class ChannelConfig(
     val baseUrl: String = "",
     val accessPolicy: ChannelAccessPolicy = ChannelAccessPolicy(),
     val mergeWindowMillis: Long = 600,
+    /** Buffer media-only messages until text arrives, matching QwenPaw. */
+    val noTextDebounce: Boolean = true,
     val display: ChannelDisplayOptions = ChannelDisplayOptions(),
     /** DingTalk robot code is distinct from the Stream client ID for some applications. */
     val robotCode: String = "",
@@ -93,6 +95,7 @@ data class ChannelConfig(
         .put("accessMode", accessPolicy.mode.name)
         .put("allowedUserIds", JSONArray(accessPolicy.allowedUserIds.toList()))
         .put("mergeWindowMillis", mergeWindowMillis)
+        .put("noTextDebounce", noTextDebounce)
         .put("display", display.toJson())
         .put("robotCode", robotCode)
         .put("cardTemplateId", cardTemplateId)
@@ -128,6 +131,7 @@ data class ChannelConfig(
                     },
                 ),
                 mergeWindowMillis = json.optLong("mergeWindowMillis", 600).coerceIn(0, 5_000),
+                noTextDebounce = json.optBoolean("noTextDebounce", true),
                 display = ChannelDisplayOptions.fromJson(json.optJSONObject("display")),
                 robotCode = json.optString("robotCode"),
                 cardTemplateId = json.optString("cardTemplateId"),
@@ -158,6 +162,7 @@ data class ChannelIncomingMessage(
     val messageId: String,
     val address: ChannelAddress,
     val text: String,
+    val attachments: List<ChannelIncomingAttachment> = emptyList(),
     val receivedAtMillis: Long = System.currentTimeMillis(),
 ) {
     val sessionId: String by lazy {
@@ -166,6 +171,16 @@ data class ChannelIncomingMessage(
         "channel:${channel.storageValue}:${digest.take(12).joinToString("") { "%02x".format(it) }}"
     }
 }
+
+/** A platform attachment already downloaded into Aether's private staging area. */
+data class ChannelIncomingAttachment(
+    val id: String,
+    val name: String,
+    val mimeType: String,
+    val kind: ChannelFileKind,
+    val localPath: String,
+    val sizeBytes: Long,
+)
 
 data class ChannelReply(
     val address: ChannelAddress,

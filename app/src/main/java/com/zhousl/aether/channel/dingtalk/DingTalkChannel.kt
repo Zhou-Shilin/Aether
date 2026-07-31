@@ -6,11 +6,14 @@ import com.zhousl.aether.channel.ChannelConfig
 import com.zhousl.aether.channel.ChannelConnectionState
 import com.zhousl.aether.channel.ChannelFile
 import com.zhousl.aether.channel.ChannelFileKind
+import com.zhousl.aether.channel.ChannelInboundFileStore
+import com.zhousl.aether.channel.ChannelIncomingAttachment
 import com.zhousl.aether.channel.ChannelIncomingMessage
 import com.zhousl.aether.channel.ChannelKind
 import com.zhousl.aether.channel.ChannelReply
 import com.zhousl.aether.channel.ChannelSendReceipt
 import com.zhousl.aether.channel.JsonMediaType
+import com.zhousl.aether.channel.awaitResponse
 import com.zhousl.aether.channel.postJson
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -34,6 +37,7 @@ class DingTalkChannel(
     private val config: ChannelConfig,
     private val scope: CoroutineScope,
     private val http: OkHttpClient,
+    private val inboundFileStore: ChannelInboundFileStore,
 ) : BaseAetherChannel(ChannelKind.DingTalk) {
     private data class AiCard(val trackId: String)
 
@@ -82,27 +86,10 @@ class DingTalkChannel(
                         ?: frame.optJSONObject("data")
                         ?: return
                     val messageId = payload.optString("msgId").ifBlank { headers.optString("messageId") }
-                    val textValue = payload.optJSONObject("text")?.optString("content").orEmpty().trim()
-                    if (textValue.isNotBlank()) scope.launch {
-                        emitIncoming(
-                            ChannelIncomingMessage(
-                                kind,
-                                messageId.ifBlank { UUID.randomUUID().toString() },
-                                ChannelAddress(
-                                    conversationId = payload.optString("conversationId")
-                                        .ifBlank { payload.optString("senderId") },
-                                    userId = payload.optString("senderStaffId")
-                                        .ifBlank { payload.optString("senderId") },
-                                    replyToken = payload.optString("sessionWebhook"),
-                                    attributes = mapOf(
-                                        "conversationType" to payload.optString("conversationType", "1"),
-                                    ),
-                                ),
-                                textValue,
-                            )
-                        )
-                    }
                     webSocket.send(JSONObject().put("code", 200).put("headers", headers).put("message", "OK").toString())
+                    scope.launch(Dispatchers.IO) {
+                        parseIncomingPayload(payload, messageId)?.let { emitIncoming(it) }
+                    }
                 }
             }
         }
@@ -119,6 +106,154 @@ class DingTalkChannel(
         aiCards.clear()
         updateStatus(ChannelConnectionState.Disabled)
     }
+
+    private suspend fun parseIncomingPayload(
+        payload: JSONObject,
+        rawMessageId: String,
+    ): ChannelIncomingMessage? {
+        val messageId = rawMessageId.ifBlank { UUID.randomUUID().toString() }
+        val senderId = payload.optString("senderStaffId").ifBlank { payload.optString("senderId") }
+        if (senderId.isBlank()) return null
+        val content = payload.optJSONObject("content") ?: JSONObject()
+        val messageType = payload.optString("msgtype")
+            .ifBlank { payload.optString("msgType") }
+            .lowercase()
+        val textParts = mutableListOf<String>()
+        val attachments = mutableListOf<ChannelIncomingAttachment>()
+        payload.optJSONObject("text")?.optString("content")
+            ?.trim()?.takeIf(String::isNotBlank)?.let(textParts::add)
+
+        val richText = content.optJSONArray("richText") ?: content.optJSONArray("rich_text")
+        if (richText != null) {
+            repeat(richText.length()) { index ->
+                val item = richText.optJSONObject(index) ?: return@repeat
+                item.optString("text").ifBlank { item.optString("content") }
+                    .trim().takeIf(String::isNotBlank)?.let(textParts::add)
+                val downloadCode = firstString(
+                    item,
+                    "downloadCode",
+                    "download_code",
+                    "pictureDownloadCode",
+                    "picture_download_code",
+                )
+                if (downloadCode.isNotBlank()) {
+                    runCatching {
+                        downloadMessageFile(
+                            messageId = messageId,
+                            downloadCode = downloadCode,
+                            robotCode = payload.optString("robotCode").ifBlank {
+                                config.robotCode.ifBlank { config.appId }
+                            },
+                            kind = dingTalkFileKind(item.optString("type")),
+                            fileName = fileName(item, item.optString("type")),
+                        )
+                    }.onSuccess { attachments += it }
+                        .onFailure { textParts += "[${item.optString("type", "file")}: download failed]" }
+                }
+            }
+        }
+
+        if (richText == null && messageType in setOf("picture", "file", "video", "voice", "audio")) {
+            val recognition = content.optString("recognition").trim()
+            if ((messageType == "voice" || messageType == "audio") && recognition.isNotBlank()) {
+                textParts += recognition
+            } else {
+                val downloadCode = firstString(content, "downloadCode", "download_code")
+                if (downloadCode.isBlank()) {
+                    textParts += "[$messageType: missing download code]"
+                } else {
+                    runCatching {
+                        downloadMessageFile(
+                            messageId = messageId,
+                            downloadCode = downloadCode,
+                            robotCode = payload.optString("robotCode").ifBlank {
+                                config.robotCode.ifBlank { config.appId }
+                            },
+                            kind = dingTalkFileKind(messageType),
+                            fileName = fileName(content, messageType),
+                        )
+                    }.onSuccess { attachments += it }
+                        .onFailure { textParts += "[$messageType: download failed]" }
+                }
+            }
+        }
+
+        val text = textParts.distinct().joinToString("\n").trim()
+        if (text.isBlank() && attachments.isEmpty()) return null
+        return ChannelIncomingMessage(
+            channel = kind,
+            messageId = messageId,
+            address = ChannelAddress(
+                conversationId = payload.optString("conversationId").ifBlank { senderId },
+                userId = senderId,
+                replyToken = payload.optString("sessionWebhook"),
+                attributes = mapOf(
+                    "conversationType" to payload.optString("conversationType", "1"),
+                ),
+            ),
+            text = text,
+            attachments = attachments,
+        )
+    }
+
+    private suspend fun downloadMessageFile(
+        messageId: String,
+        downloadCode: String,
+        robotCode: String,
+        kind: ChannelFileKind,
+        fileName: String,
+    ): ChannelIncomingAttachment {
+        require(robotCode.isNotBlank()) { "DingTalk robot code is required to download attachments" }
+        val download = withContext(Dispatchers.IO) {
+            postOpenApi(
+                "/v1.0/robot/messageFiles/download",
+                JSONObject().put("downloadCode", downloadCode).put("robotCode", robotCode),
+            )
+        }
+        val downloadUrl = download.optString("downloadUrl").ifBlank {
+            download.optString("download_url")
+        }
+        require(downloadUrl.isNotBlank()) { "DingTalk returned no attachment download URL" }
+        val request = Request.Builder().url(downloadUrl).get().build()
+        return http.newCall(request).awaitResponse().use { response ->
+            if (!response.isSuccessful) error("DingTalk attachment download failed: HTTP ${response.code}")
+            val body = response.body ?: error("DingTalk attachment download returned no body")
+            val responseName = response.header("Content-Disposition")
+                ?.substringAfter("filename=", "")
+                ?.trim(' ', '\"', '\'')
+                ?.takeIf(String::isNotBlank)
+                ?: fileName
+            inboundFileStore.save(
+                channel = this@DingTalkChannel.kind,
+                messageId = messageId,
+                name = responseName,
+                mimeType = body.contentType()?.toString().orEmpty(),
+                kind = kind,
+                declaredSize = body.contentLength().takeIf { it >= 0L },
+                input = body::byteStream,
+            )
+        }
+    }
+
+    private fun dingTalkFileKind(type: String): ChannelFileKind = when (type.lowercase()) {
+        "picture", "image" -> ChannelFileKind.Image
+        "voice", "audio" -> ChannelFileKind.Audio
+        "video" -> ChannelFileKind.Video
+        else -> ChannelFileKind.File
+    }
+
+    private fun fileName(content: JSONObject, type: String): String =
+        firstString(content, "fileName", "file_name", "filename", "name", "title").ifBlank {
+            when (dingTalkFileKind(type)) {
+                ChannelFileKind.Image -> "image.png"
+                ChannelFileKind.Audio -> "audio.amr"
+                ChannelFileKind.Video -> "video.mp4"
+                ChannelFileKind.File -> "file.bin"
+            }
+        }
+
+    private fun firstString(json: JSONObject, vararg keys: String): String =
+        keys.firstNotNullOfOrNull { key -> json.optString(key).trim().takeIf(String::isNotBlank) }.orEmpty()
 
     override suspend fun onProcessing(message: ChannelIncomingMessage) {
         sendEmotion(message, "🤔Thinking")
