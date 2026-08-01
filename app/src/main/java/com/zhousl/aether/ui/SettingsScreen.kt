@@ -1,5 +1,6 @@
 package com.zhousl.aether.ui
 
+import android.graphics.Bitmap
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -56,15 +57,20 @@ import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.FileUpload
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Forum
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.QrCode2
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.WarningAmber
@@ -108,6 +114,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -126,6 +133,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.zhousl.aether.BuildConfig
+import com.zhousl.aether.channel.ChannelAccessMode
+import com.zhousl.aether.channel.ChannelAccessPolicy
+import com.zhousl.aether.channel.ChannelBindingState
+import com.zhousl.aether.channel.ChannelConfig
+import com.zhousl.aether.channel.ChannelConnectionState
+import com.zhousl.aether.channel.ChannelDisplayOptions
+import com.zhousl.aether.channel.ChannelKind
+import com.zhousl.aether.channel.ChannelStatus
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.EncodeHintType
+import com.google.zxing.qrcode.QRCodeWriter
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 
 import com.zhousl.aether.R
 import java.util.Locale
@@ -220,6 +239,8 @@ private enum class SettingsPage {
     AddMcpServer,
     EditMcpServer,
     ScheduledTasks,
+    Channels,
+    ChannelDetail,
     AddScheduledTask,
     EditScheduledTask,
     Termux,
@@ -247,6 +268,7 @@ private fun SettingsPage.depth(): Int = when (this) {
     SettingsPage.Extensions,
     SettingsPage.McpServers,
     SettingsPage.ScheduledTasks,
+    SettingsPage.Channels,
     SettingsPage.Termux,
     SettingsPage.Alpine,
     SettingsPage.RuntimeDefaults,
@@ -264,6 +286,7 @@ private fun SettingsPage.depth(): Int = when (this) {
     SettingsPage.AddScheduledTask,
     SettingsPage.EditScheduledTask,
     SettingsPage.AlpineTerminal,
+    SettingsPage.ChannelDetail,
     SettingsPage.AlpineChrome,
     SettingsPage.RootSetupProgress -> 2
     SettingsPage.DefaultChatModel,
@@ -450,6 +473,12 @@ fun SettingsScreen(
     isFetchingModels: Boolean,
     providerAuthState: PiProviderAuthState,
     appUpdate: AppUpdateUiState,
+    channelConfigs: List<ChannelConfig>,
+    channelStatuses: Map<ChannelKind, ChannelStatus>,
+    channelBindingStates: Map<ChannelKind, ChannelBindingState>,
+    onUpsertChannelConfig: (ChannelConfig) -> Unit,
+    onStartChannelBinding: (ChannelKind) -> Unit,
+    onCancelChannelBinding: (ChannelKind) -> Unit,
     onSave: (
         String,
         String,
@@ -714,6 +743,12 @@ fun SettingsScreen(
     val page = SettingsPage.valueOf(currentPage)
     var rootSetupReturnPage by rememberSaveable { mutableStateOf(SettingsPage.Termux.name) }
     var selectedPiPackageSourceValue by rememberSaveable { mutableStateOf("") }
+    var selectedChannelKindValue by rememberSaveable {
+        mutableStateOf(ChannelKind.Feishu.storageValue)
+    }
+
+    fun selectedChannelKind(): ChannelKind =
+        ChannelKind.fromStorage(selectedChannelKindValue) ?: ChannelKind.Feishu
 
     fun rootSetupReturnPageValue(): SettingsPage =
         runCatching { SettingsPage.valueOf(rootSetupReturnPage) }
@@ -752,6 +787,7 @@ fun SettingsScreen(
         SettingsPage.PackageDetail -> SettingsPage.Extensions
         SettingsPage.AddMcpServer, SettingsPage.EditMcpServer -> SettingsPage.McpServers
         SettingsPage.AddScheduledTask, SettingsPage.EditScheduledTask -> SettingsPage.ScheduledTasks
+        SettingsPage.ChannelDetail -> SettingsPage.Channels
         SettingsPage.AlpineTerminal,
         SettingsPage.AlpineChrome -> SettingsPage.Alpine
         SettingsPage.RootSetupProgress -> rootSetupReturnPageValue()
@@ -762,6 +798,10 @@ fun SettingsScreen(
         when (page) {
             SettingsPage.Hub -> persistAndExit()
             SettingsPage.RootSetupProgress -> closeRootSetupProgress()
+            SettingsPage.ChannelDetail -> {
+                onCancelChannelBinding(selectedChannelKind())
+                currentPage = SettingsPage.Channels.name
+            }
             else -> currentPage = parentPage().name
         }
     }
@@ -825,6 +865,7 @@ fun SettingsScreen(
                 piExtensionCount = installedPiExtensions.size,
                 mcpServerCount = mcpServers.size,
                 scheduledTaskCount = scheduledTasks.size,
+                enabledChannelCount = channelConfigs.count { it.enabled },
                 statisticsSummary = buildSettingsStatisticsSummary(usageStatisticsSnapshots),
                 onReplayOnboarding = ::persistAndReplayOnboarding,
                 onNavigate = { page ->
@@ -854,6 +895,34 @@ fun SettingsScreen(
                 },
                 onBack = { currentPage = SettingsPage.Hub.name },
             )
+
+            SettingsPage.Channels -> ChannelSettingsPage(
+                configs = channelConfigs,
+                statuses = channelStatuses,
+                onOpenChannel = { kind ->
+                    selectedChannelKindValue = kind.storageValue
+                    currentPage = SettingsPage.ChannelDetail.name
+                },
+                onBack = { currentPage = SettingsPage.Hub.name },
+            )
+
+            SettingsPage.ChannelDetail -> {
+                val kind = selectedChannelKind()
+                val config = channelConfigs.firstOrNull { it.kind == kind }
+                    ?: ChannelConfig.default(kind)
+                ChannelDetailPage(
+                    config = config,
+                    status = channelStatuses[kind] ?: ChannelStatus(kind),
+                    bindingState = channelBindingStates[kind] ?: ChannelBindingState.Idle,
+                    onUpsert = onUpsertChannelConfig,
+                    onStartBinding = { onStartChannelBinding(kind) },
+                    onCancelBinding = { onCancelChannelBinding(kind) },
+                    onBack = {
+                        onCancelChannelBinding(kind)
+                        currentPage = SettingsPage.Channels.name
+                    },
+                )
+            }
 
             SettingsPage.Providers -> ProvidersListPage(
                 providerConfigs = providerConfigs,
@@ -1319,6 +1388,7 @@ private fun SettingsHub(
     piExtensionCount: Int,
     mcpServerCount: Int,
     scheduledTaskCount: Int,
+    enabledChannelCount: Int,
     statisticsSummary: String,
     onReplayOnboarding: () -> Unit,
     onNavigate: (SettingsPage) -> Unit,
@@ -1441,6 +1511,13 @@ private fun SettingsHub(
                     title = stringResource(R.string.settings_scheduled_tasks),
                     subtitle = stringResource(R.string.settings_scheduled_tasks_count_configured, scheduledTaskCount),
                     onClick = { onNavigate(SettingsPage.ScheduledTasks) },
+                )
+                CardDivider()
+                SettingsNavRow(
+                    icon = Icons.Rounded.Forum,
+                    title = stringResource(R.string.settings_channels),
+                    subtitle = stringResource(R.string.settings_channels_enabled_count, enabledChannelCount),
+                    onClick = { onNavigate(SettingsPage.Channels) },
                 )
                 CardDivider()
                 SettingsNavRow(
@@ -2864,6 +2941,963 @@ private fun ProviderEditPage(
 // -----------------------------------------------------------------------------
 // Personalization sub-page
 // -----------------------------------------------------------------------------
+
+@Composable
+private fun ChannelSettingsPage(
+    configs: List<ChannelConfig>,
+    statuses: Map<ChannelKind, ChannelStatus>,
+    onOpenChannel: (ChannelKind) -> Unit,
+    onBack: () -> Unit,
+) {
+    val ordered = configs.sortedBy { it.kind.ordinal }
+    val enabled = ordered.filter(ChannelConfig::enabled)
+    val available = ordered.filterNot(ChannelConfig::enabled)
+    SubPageScaffold(
+        title = stringResource(R.string.settings_channels),
+        onBack = onBack,
+    ) {
+        Text(
+            text = stringResource(R.string.settings_channels_description),
+            style = MaterialTheme.typography.bodySmall,
+            color = AetherOnSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp),
+        )
+        Spacer(Modifier.height(20.dp))
+
+        ChannelSectionLabel(
+            text = stringResource(R.string.settings_channels_active_section, enabled.size),
+            active = true,
+        )
+        Spacer(Modifier.height(10.dp))
+        if (enabled.isEmpty()) {
+            SettingsCardGroup {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(22.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(
+                        Icons.Rounded.Forum,
+                        contentDescription = null,
+                        tint = AetherOnSurfaceVariant,
+                        modifier = Modifier.size(34.dp),
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        stringResource(R.string.settings_channels_none_active),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = AetherOnSurface,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        stringResource(R.string.settings_channels_none_active_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AetherOnSurfaceVariant,
+                    )
+                }
+            }
+        } else {
+            enabled.forEach { config ->
+                EnabledChannelCard(
+                    config = config,
+                    status = statuses[config.kind] ?: ChannelStatus(config.kind),
+                    onClick = { onOpenChannel(config.kind) },
+                )
+                Spacer(Modifier.height(12.dp))
+            }
+        }
+
+        if (available.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            ChannelSectionLabel(
+                text = stringResource(R.string.settings_channels_available_section),
+                active = false,
+            )
+            Spacer(Modifier.height(10.dp))
+            SettingsCardGroup {
+                available.forEachIndexed { index, config ->
+                    AvailableChannelRow(
+                        config = config,
+                        onClick = { onOpenChannel(config.kind) },
+                    )
+                    if (index != available.lastIndex) CardDivider()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChannelSectionLabel(text: String, active: Boolean) {
+    Row(
+        modifier = Modifier.padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(
+            Modifier.size(7.dp).clip(CircleShape).background(
+                if (active) Color(0xFF13A082) else AetherOnSurfaceVariant.copy(alpha = 0.38f)
+            )
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (active) Color(0xFF13856F) else AetherOnSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun EnabledChannelCard(
+    config: ChannelConfig,
+    status: ChannelStatus,
+    onClick: () -> Unit,
+) {
+    SettingsCardGroup {
+        Column(
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(16.dp),
+        ) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                ChannelBadge(config.kind, large = true)
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = channelDisplayName(config.kind),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AetherOnSurface,
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = channelDescription(config.kind),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AetherOnSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(6.dp).clip(CircleShape).background(channelStatusColor(status)))
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                        text = channelStatusLabel(status),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = channelStatusColor(status),
+                    )
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(AetherSurface)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(
+                        if (config.isConfigured) R.string.settings_channel_configured
+                        else R.string.settings_channel_needs_setup
+                    ),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = AetherOnSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    Icons.AutoMirrored.Rounded.ArrowForwardIos,
+                    contentDescription = null,
+                    tint = AetherOnSurfaceVariant,
+                    modifier = Modifier.size(15.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AvailableChannelRow(config: ChannelConfig, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ChannelBadge(config.kind, large = false)
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                channelDisplayName(config.kind),
+                style = MaterialTheme.typography.titleSmall,
+                color = AetherOnSurface,
+            )
+            Text(
+                text = if (config.isConfigured) {
+                    stringResource(R.string.settings_channel_ready_to_enable)
+                } else {
+                    stringResource(R.string.settings_channel_needs_setup)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = AetherOnSurfaceVariant,
+            )
+        }
+        Text(
+            stringResource(R.string.settings_channel_configure),
+            style = MaterialTheme.typography.labelMedium,
+            color = AetherPrimary,
+        )
+        Spacer(Modifier.width(8.dp))
+        Icon(
+            Icons.AutoMirrored.Rounded.ArrowForwardIos,
+            contentDescription = null,
+            tint = AetherOnSurfaceVariant,
+            modifier = Modifier.size(14.dp),
+        )
+    }
+}
+
+@Composable
+private fun ChannelDetailPage(
+    config: ChannelConfig,
+    status: ChannelStatus,
+    bindingState: ChannelBindingState,
+    onUpsert: (ChannelConfig) -> Unit,
+    onStartBinding: () -> Unit,
+    onCancelBinding: () -> Unit,
+    onBack: () -> Unit,
+) {
+    var enabled by rememberSaveable(config.kind, config.enabled) { mutableStateOf(config.enabled) }
+    var appId by rememberSaveable(config.kind, config.appId, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(config.appId))
+    }
+    var appSecret by rememberSaveable(config.kind, config.appSecret, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(config.appSecret))
+    }
+    var token by rememberSaveable(config.kind, config.token, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(config.token))
+    }
+    var baseUrl by rememberSaveable(config.kind, config.baseUrl, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(config.baseUrl))
+    }
+    var allowList by rememberSaveable(config.kind, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(config.accessPolicy.allowedUserIds.joinToString("\n")))
+    }
+    var mergeWindow by rememberSaveable(config.kind, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(config.mergeWindowMillis.toString()))
+    }
+    var noTextDebounce by rememberSaveable(config.kind) {
+        mutableStateOf(config.noTextDebounce)
+    }
+    var robotCode by rememberSaveable(config.kind, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(config.robotCode))
+    }
+    var cardTemplateId by rememberSaveable(config.kind, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(config.cardTemplateId))
+    }
+    var cardTemplateKey by rememberSaveable(config.kind, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(config.cardTemplateKey))
+    }
+    var showToolCalls by rememberSaveable(config.kind) {
+        mutableStateOf(config.display.showToolCalls)
+    }
+    var showToolResults by rememberSaveable(config.kind) {
+        mutableStateOf(config.display.showToolResults)
+    }
+    var showThinking by rememberSaveable(config.kind) {
+        mutableStateOf(config.display.showThinking)
+    }
+    var streamingEnabled by rememberSaveable(config.kind) {
+        mutableStateOf(config.display.streamingEnabled)
+    }
+    var accessMode by rememberSaveable(config.kind) { mutableStateOf(config.accessPolicy.mode) }
+    var manualExpanded by rememberSaveable(config.kind) { mutableStateOf(false) }
+    var displayExpanded by rememberSaveable(config.kind) { mutableStateOf(true) }
+    var advancedExpanded by rememberSaveable(config.kind) { mutableStateOf(false) }
+
+    fun snapshot(isEnabled: Boolean = enabled) = config.copy(
+        enabled = isEnabled,
+        appId = appId.text.trim(),
+        appSecret = appSecret.text.trim(),
+        token = token.text.trim(),
+        baseUrl = baseUrl.text.trim(),
+        robotCode = robotCode.text.trim(),
+        cardTemplateId = cardTemplateId.text.trim(),
+        cardTemplateKey = cardTemplateKey.text.trim().ifBlank { "content" },
+        display = ChannelDisplayOptions(
+            showToolCalls = showToolCalls,
+            showToolResults = showToolResults,
+            showThinking = showThinking,
+            streamingEnabled = streamingEnabled,
+            toolCallMaxLength = config.display.toolCallMaxLength,
+            toolResultMaxLength = config.display.toolResultMaxLength,
+        ),
+        accessPolicy = ChannelAccessPolicy(
+            mode = accessMode,
+            allowedUserIds = allowList.text.split(',', '\n')
+                .map(String::trim)
+                .filter(String::isNotBlank)
+                .toSet(),
+        ),
+        mergeWindowMillis = mergeWindow.text.toLongOrNull()?.coerceIn(0, 5_000) ?: 600,
+        noTextDebounce = noTextDebounce,
+    )
+
+    fun save() = onUpsert(snapshot())
+
+    SubPageScaffold(
+        title = channelDisplayName(config.kind),
+        onBack = onBack,
+        trailingIcon = Icons.Rounded.Check,
+        onTrailingAction = ::save,
+    ) {
+        SettingsCardGroup {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ChannelBadge(config.kind, large = true)
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        channelDisplayName(config.kind),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AetherOnSurface,
+                    )
+                    Text(
+                        text = if (enabled) channelStatusLabel(status) else {
+                            stringResource(
+                                if (snapshot().isConfigured) R.string.settings_channel_configured
+                                else R.string.settings_channel_needs_setup
+                            )
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (enabled) channelStatusColor(status) else AetherOnSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = enabled,
+                    enabled = enabled || snapshot().isConfigured,
+                    onCheckedChange = { checked ->
+                        val candidate = snapshot(checked)
+                        if (!checked || candidate.isConfigured) {
+                            enabled = checked
+                            onUpsert(candidate)
+                        }
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = AetherOnPrimary,
+                        checkedTrackColor = AetherPrimary,
+                    ),
+                )
+            }
+        }
+
+        Spacer(Modifier.height(18.dp))
+        ChannelDetailSectionTitle(
+            icon = Icons.Rounded.QrCode2,
+            title = stringResource(R.string.settings_channel_quick_bind),
+            subtitle = stringResource(R.string.settings_channel_quick_bind_subtitle),
+        )
+        Spacer(Modifier.height(10.dp))
+        if (config.kind == ChannelKind.Feishu) {
+            FeishuRegionSelector(
+                larkSelected = baseUrl.text.contains("larksuite", ignoreCase = true),
+                onSelected = { useLark ->
+                    baseUrl = TextFieldValue(
+                        if (useLark) "https://open.larksuite.com" else "https://open.feishu.cn"
+                    )
+                    onUpsert(snapshot())
+                },
+            )
+            Spacer(Modifier.height(10.dp))
+        }
+        ChannelQrBindingCard(
+            kind = config.kind,
+            state = bindingState,
+            onStart = onStartBinding,
+            onCancel = onCancelBinding,
+        )
+
+        if (config.kind == ChannelKind.WeChat) {
+            Spacer(Modifier.height(10.dp))
+            ChannelNotice(
+                text = stringResource(R.string.settings_channel_wechat_context_warning),
+                warning = true,
+            )
+        }
+
+        Spacer(Modifier.height(18.dp))
+        ExpandableChannelSection(
+            icon = Icons.Rounded.Info,
+            title = stringResource(R.string.settings_channel_reply_display),
+            subtitle = stringResource(R.string.settings_channel_reply_display_subtitle),
+            expanded = displayExpanded,
+            onToggle = { displayExpanded = !displayExpanded },
+        ) {
+            ChannelDisplayToggle(
+                title = stringResource(R.string.settings_channel_show_tool_calls),
+                subtitle = stringResource(R.string.settings_channel_show_tool_calls_subtitle),
+                checked = showToolCalls,
+                onCheckedChange = { showToolCalls = it },
+            )
+            CardDivider()
+            ChannelDisplayToggle(
+                title = stringResource(R.string.settings_channel_show_tool_results),
+                subtitle = stringResource(R.string.settings_channel_show_tool_results_subtitle),
+                checked = showToolResults,
+                onCheckedChange = { showToolResults = it },
+            )
+            CardDivider()
+            ChannelDisplayToggle(
+                title = stringResource(R.string.settings_channel_show_thinking),
+                subtitle = stringResource(R.string.settings_channel_show_thinking_subtitle),
+                checked = showThinking,
+                onCheckedChange = { showThinking = it },
+            )
+            if (config.kind != ChannelKind.WeChat) {
+                CardDivider()
+                ChannelDisplayToggle(
+                    title = stringResource(R.string.settings_channel_streaming),
+                    subtitle = stringResource(
+                        if (config.kind == ChannelKind.DingTalk) {
+                            R.string.settings_channel_streaming_dingtalk_subtitle
+                        } else {
+                            R.string.settings_channel_streaming_subtitle
+                        }
+                    ),
+                    checked = streamingEnabled,
+                    onCheckedChange = { streamingEnabled = it },
+                )
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        ExpandableChannelSection(
+            icon = Icons.Rounded.Edit,
+            title = stringResource(R.string.settings_channel_manual_setup),
+            subtitle = stringResource(R.string.settings_channel_manual_setup_subtitle),
+            expanded = manualExpanded,
+            onToggle = { manualExpanded = !manualExpanded },
+        ) {
+            if (config.kind == ChannelKind.WeChat) {
+                ChatGptTextField(
+                    label = stringResource(R.string.settings_channel_bot_token),
+                    value = token,
+                    isSecret = true,
+                    onValueChange = { token = it },
+                )
+            } else {
+                ChatGptTextField(
+                    label = if (config.kind == ChannelKind.WeCom) {
+                        stringResource(R.string.settings_channel_bot_id)
+                    } else {
+                        stringResource(R.string.settings_channel_app_id)
+                    },
+                    value = appId,
+                    onValueChange = { appId = it },
+                )
+                CardDivider()
+                ChatGptTextField(
+                    label = if (config.kind == ChannelKind.WeCom) {
+                        stringResource(R.string.settings_channel_bot_secret)
+                    } else {
+                        stringResource(R.string.settings_channel_app_secret)
+                    },
+                    value = appSecret,
+                    isSecret = true,
+                    onValueChange = { appSecret = it },
+                )
+            }
+            if (config.kind == ChannelKind.DingTalk) {
+                CardDivider()
+                ChatGptTextField(
+                    label = stringResource(R.string.settings_channel_robot_code),
+                    value = robotCode,
+                    onValueChange = { robotCode = it },
+                )
+                CardDivider()
+                ChatGptTextField(
+                    label = stringResource(R.string.settings_channel_card_template_id),
+                    value = cardTemplateId,
+                    onValueChange = { cardTemplateId = it },
+                )
+                CardDivider()
+                ChatGptTextField(
+                    label = stringResource(R.string.settings_channel_card_template_key),
+                    value = cardTemplateKey,
+                    onValueChange = { cardTemplateKey = it },
+                )
+            }
+            CardDivider()
+            ChatGptTextField(
+                label = stringResource(R.string.settings_channel_base_url),
+                value = baseUrl,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                onValueChange = { baseUrl = it },
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+        ExpandableChannelSection(
+            icon = Icons.Rounded.Security,
+            title = stringResource(R.string.settings_channel_access_and_routing),
+            subtitle = stringResource(R.string.settings_channel_access_and_routing_subtitle),
+            expanded = advancedExpanded,
+            onToggle = { advancedExpanded = !advancedExpanded },
+        ) {
+            Text(
+                text = stringResource(R.string.settings_channel_access),
+                style = MaterialTheme.typography.labelLarge,
+                color = AetherOnSurface,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            )
+            ChannelAccessSelector(selected = accessMode, onSelected = { accessMode = it })
+            if (accessMode == ChannelAccessMode.AllowList) {
+                ChatGptTextField(
+                    label = stringResource(R.string.settings_channel_allowed_users),
+                    value = allowList,
+                    minLines = 2,
+                    onValueChange = { allowList = it },
+                )
+            }
+            CardDivider()
+            ChannelDisplayToggle(
+                title = stringResource(R.string.settings_channel_no_text_debounce),
+                subtitle = stringResource(R.string.settings_channel_no_text_debounce_subtitle),
+                checked = noTextDebounce,
+                onCheckedChange = { noTextDebounce = it },
+            )
+            CardDivider()
+            ChatGptTextField(
+                label = stringResource(R.string.settings_channel_merge_window),
+                value = mergeWindow,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                onValueChange = { value ->
+                    val digits = value.text.filter(Char::isDigit)
+                    mergeWindow = value.copy(
+                        text = digits,
+                        selection = androidx.compose.ui.text.TextRange(digits.length),
+                    )
+                },
+            )
+        }
+
+        Spacer(Modifier.height(18.dp))
+        SettingsActionButton(
+            label = stringResource(R.string.settings_channel_save),
+            onClick = ::save,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+private fun ChannelDisplayToggle(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.labelLarge, color = AetherOnSurface)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = AetherOnSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = AetherOnPrimary,
+                checkedTrackColor = AetherPrimary,
+            ),
+        )
+    }
+}
+
+@Composable
+private fun FeishuRegionSelector(larkSelected: Boolean, onSelected: (Boolean) -> Unit) {
+    SettingsCardGroup {
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            Text(
+                stringResource(R.string.settings_channel_feishu_region),
+                style = MaterialTheme.typography.labelLarge,
+                color = AetherOnSurface,
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                listOf(
+                    false to stringResource(R.string.settings_channel_feishu_china),
+                    true to stringResource(R.string.settings_channel_feishu_lark),
+                ).forEach { (lark, label) ->
+                    val selected = larkSelected == lark
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (selected) AetherPrimary else AetherSurface)
+                            .clickable { onSelected(lark) }
+                            .padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (selected) AetherOnPrimary else AetherOnSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChannelQrBindingCard(
+    kind: ChannelKind,
+    state: ChannelBindingState,
+    onStart: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    SettingsCardGroup {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            ChannelNotice(
+                text = stringResource(R.string.settings_channel_scan_guide, channelDisplayName(kind)),
+                warning = false,
+            )
+            Spacer(Modifier.height(14.dp))
+            when (state) {
+                ChannelBindingState.Idle -> {
+                    SettingsActionButton(
+                        label = stringResource(R.string.settings_channel_get_qr),
+                        onClick = onStart,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                ChannelBindingState.Loading -> {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(30.dp),
+                        color = AetherPrimary,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        stringResource(R.string.settings_channel_qr_loading),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AetherOnSurfaceVariant,
+                    )
+                }
+                is ChannelBindingState.AwaitingScan -> {
+                    val bitmap = rememberQrCodeBitmap(state.scanUrl)
+                    if (bitmap != null) {
+                        Box(
+                            modifier = Modifier
+                                .size(224.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color.White)
+                                .padding(10.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Image(
+                                bitmap = bitmap,
+                                contentDescription = stringResource(R.string.settings_channel_qr_image),
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = stringResource(
+                            if (state.scanned) R.string.settings_channel_qr_scanned
+                            else R.string.settings_channel_qr_scan_hint
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (state.scanned) Color(0xFF13856F) else AetherOnSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    SettingsSubtleActionButton(
+                        label = stringResource(R.string.action_cancel),
+                        onClick = onCancel,
+                    )
+                }
+                ChannelBindingState.Saving -> {
+                    CircularProgressIndicator(modifier = Modifier.size(30.dp), color = AetherPrimary)
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        stringResource(R.string.settings_channel_binding_saving),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AetherOnSurfaceVariant,
+                    )
+                }
+                is ChannelBindingState.Bound -> {
+                    Text(
+                        text = "✓",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = Color(0xFF13856F),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        stringResource(R.string.settings_channel_binding_success),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = Color(0xFF13856F),
+                    )
+                    Text(
+                        stringResource(R.string.settings_channel_credentials_saved),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AetherOnSurfaceVariant,
+                    )
+                }
+                is ChannelBindingState.Expired -> {
+                    BindingFailureContent(
+                        title = stringResource(R.string.settings_channel_qr_expired),
+                        detail = state.detail,
+                        onRetry = onStart,
+                    )
+                }
+                is ChannelBindingState.Error -> {
+                    BindingFailureContent(
+                        title = stringResource(R.string.settings_channel_qr_failed),
+                        detail = state.detail,
+                        onRetry = onStart,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BindingFailureContent(title: String, detail: String, onRetry: () -> Unit) {
+    Icon(
+        Icons.Rounded.WarningAmber,
+        contentDescription = null,
+        tint = Color(0xFFD25757),
+        modifier = Modifier.size(30.dp),
+    )
+    Spacer(Modifier.height(8.dp))
+    Text(title, style = MaterialTheme.typography.titleSmall, color = Color(0xFFD25757))
+    if (detail.isNotBlank()) {
+        Spacer(Modifier.height(4.dp))
+        Text(
+            detail,
+            style = MaterialTheme.typography.bodySmall,
+            color = AetherOnSurfaceVariant,
+        )
+    }
+    Spacer(Modifier.height(12.dp))
+    SettingsActionButton(
+        label = stringResource(R.string.settings_channel_qr_retry),
+        onClick = onRetry,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
+private fun ExpandableChannelSection(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    SettingsCardGroup {
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, tint = AetherPrimary, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleSmall, color = AetherOnSurface)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = AetherOnSurfaceVariant)
+            }
+            Icon(
+                if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                contentDescription = null,
+                tint = AetherOnSurfaceVariant,
+            )
+        }
+        AnimatedVisibility(visible = expanded) {
+            Column(modifier = Modifier.fillMaxWidth()) { content() }
+        }
+    }
+}
+
+@Composable
+private fun ChannelDetailSectionTitle(icon: ImageVector, title: String, subtitle: String) {
+    Row(
+        modifier = Modifier.padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = AetherPrimary, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(9.dp))
+        Column {
+            Text(title, style = MaterialTheme.typography.labelLarge, color = AetherOnSurface)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = AetherOnSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun ChannelNotice(text: String, warning: Boolean) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                if (warning) Color(0xFFFFF3D6).copy(alpha = 0.76f)
+                else AetherPrimary.copy(alpha = 0.09f)
+            )
+            .padding(12.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Icon(
+            if (warning) Icons.Rounded.WarningAmber else Icons.Rounded.Info,
+            contentDescription = null,
+            tint = if (warning) Color(0xFFB26A00) else AetherPrimary,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text,
+            style = MaterialTheme.typography.bodySmall,
+            color = if (warning) Color(0xFF795000) else AetherOnSurface,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun ChannelAccessSelector(
+    selected: ChannelAccessMode,
+    onSelected: (ChannelAccessMode) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        ChannelAccessMode.entries.forEach { mode ->
+            val active = selected == mode
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (active) AetherPrimary else AetherSurface)
+                    .clickable { onSelected(mode) }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = when (mode) {
+                        ChannelAccessMode.Open -> stringResource(R.string.settings_channel_access_open)
+                        ChannelAccessMode.AllowList -> stringResource(R.string.settings_channel_access_allow_list)
+                        ChannelAccessMode.Disabled -> stringResource(R.string.settings_channel_access_disabled)
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (active) AetherOnPrimary else AetherOnSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChannelBadge(kind: ChannelKind, large: Boolean) {
+    val size = if (large) 44.dp else 36.dp
+    Box(
+        modifier = Modifier.size(size).clip(RoundedCornerShape(if (large) 13.dp else 11.dp))
+            .background(channelAccent(kind).copy(alpha = 0.14f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = when (kind) {
+                ChannelKind.Feishu -> "飞"
+                ChannelKind.DingTalk -> "钉"
+                ChannelKind.WeChat -> "微"
+                ChannelKind.WeCom -> "企"
+            },
+            style = if (large) MaterialTheme.typography.titleMedium else MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = channelAccent(kind),
+        )
+    }
+}
+
+@Composable
+private fun channelDisplayName(kind: ChannelKind): String = stringResource(
+    when (kind) {
+        ChannelKind.Feishu -> R.string.settings_channel_name_feishu
+        ChannelKind.DingTalk -> R.string.settings_channel_name_dingtalk
+        ChannelKind.WeChat -> R.string.settings_channel_name_wechat
+        ChannelKind.WeCom -> R.string.settings_channel_name_wecom
+    }
+)
+
+@Composable
+private fun channelDescription(kind: ChannelKind): String = stringResource(
+    when (kind) {
+        ChannelKind.Feishu -> R.string.settings_channel_description_feishu
+        ChannelKind.DingTalk -> R.string.settings_channel_description_dingtalk
+        ChannelKind.WeChat -> R.string.settings_channel_description_wechat
+        ChannelKind.WeCom -> R.string.settings_channel_description_wecom
+    }
+)
+
+private fun channelAccent(kind: ChannelKind): Color = when (kind) {
+    ChannelKind.Feishu -> Color(0xFF3370FF)
+    ChannelKind.DingTalk -> Color(0xFF1677FF)
+    ChannelKind.WeChat -> Color(0xFF16A05D)
+    ChannelKind.WeCom -> Color(0xFF2878FF)
+}
+
+private fun channelStatusColor(status: ChannelStatus): Color = when (status.state) {
+    ChannelConnectionState.Connected -> Color(0xFF13856F)
+    ChannelConnectionState.Error -> Color(0xFFD25757)
+    ChannelConnectionState.Starting, ChannelConnectionState.Reconnecting -> Color(0xFFC47A11)
+    ChannelConnectionState.Disabled -> AetherOnSurfaceVariant
+}
+
+@Composable
+private fun rememberQrCodeBitmap(value: String): androidx.compose.ui.graphics.ImageBitmap? = remember(value) {
+    runCatching {
+        val hints = mapOf(
+            EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M,
+            EncodeHintType.MARGIN to 1,
+            EncodeHintType.CHARACTER_SET to "UTF-8",
+        )
+        val matrix = QRCodeWriter().encode(value, BarcodeFormat.QR_CODE, 512, 512, hints)
+        val pixels = IntArray(matrix.width * matrix.height)
+        for (y in 0 until matrix.height) {
+            for (x in 0 until matrix.width) {
+                pixels[y * matrix.width + x] = if (matrix[x, y]) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
+            }
+        }
+        Bitmap.createBitmap(pixels, matrix.width, matrix.height, Bitmap.Config.ARGB_8888).asImageBitmap()
+    }.getOrNull()
+}
+
+@Composable
+private fun channelStatusLabel(status: ChannelStatus): String = when (status.state) {
+    ChannelConnectionState.Disabled -> stringResource(R.string.settings_channel_status_disabled)
+    ChannelConnectionState.Starting -> stringResource(R.string.settings_channel_status_starting)
+    ChannelConnectionState.Connected -> stringResource(R.string.settings_channel_status_connected)
+    ChannelConnectionState.Reconnecting -> stringResource(R.string.settings_channel_status_reconnecting)
+    ChannelConnectionState.Error -> status.detail.ifBlank { stringResource(R.string.settings_channel_status_error) }
+}
 
 @Composable
 private fun PersonalizationPage(

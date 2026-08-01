@@ -1,10 +1,19 @@
 package com.zhousl.aether.data
 
 import android.app.Application
+import android.net.Uri
 import android.os.SystemClock
+import android.util.Base64
 import com.zhousl.aether.AetherForegroundService
 import com.zhousl.aether.AetherNotificationController
 import com.zhousl.aether.AppForegroundTracker
+import com.zhousl.aether.channel.SessionAgentEvent
+import com.zhousl.aether.channel.SessionAgentProcessor
+import com.zhousl.aether.channel.SessionAgentRequest
+import com.zhousl.aether.channel.ChannelFile
+import com.zhousl.aether.channel.ChannelFileKind
+import com.zhousl.aether.channel.ChannelIncomingAttachment
+import com.zhousl.aether.channel.ChannelMessageRenderer
 import com.zhousl.aether.runtime.RuntimeRouter
 import com.zhousl.aether.runtime.RuntimeShellTool
 import com.zhousl.aether.data.pi.PiAgentRunner
@@ -12,6 +21,7 @@ import com.zhousl.aether.data.pi.PiCompletionClient
 import com.zhousl.aether.data.pi.PiKernelBridge
 import com.zhousl.aether.termux.TermuxBashTool
 import com.zhousl.aether.ui.AttachmentKind
+import com.zhousl.aether.ui.AttachmentWorkspaceState
 import com.zhousl.aether.ui.AssistantResponseBlock
 import com.zhousl.aether.ui.ChatAttachment
 import com.zhousl.aether.ui.ChatMessage
@@ -24,16 +34,26 @@ import com.zhousl.aether.ui.ReasoningSummaryChunk
 import com.zhousl.aether.ui.ReasoningTrace
 import com.zhousl.aether.ui.syncActiveBranches
 import java.util.concurrent.ConcurrentHashMap
+import java.io.File
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.json.JSONArray
@@ -44,6 +64,7 @@ private const val ReasoningTimedSummaryIntervalMillis = 5_000L
 private const val ReasoningSummaryMaxInputChars = 8_000
 private const val ReasoningSummaryTitleMaxChars = 120
 private const val ReasoningSummaryDetailMaxChars = 520
+private const val ChannelFileMaxBytes = 30 * 1024 * 1024
 private const val ReasoningSummarySystemPrompt =
     "You write concise user-visible progress summaries for assistant reasoning. Use a consistent first-person planning style, and never quote long private reasoning verbatim."
 
@@ -113,6 +134,11 @@ private data class ReasoningSummary(
     val detail: String,
 )
 
+private data class ScopedSessionAgentEvent(
+    val sessionId: String,
+    val event: SessionAgentEvent,
+)
+
 class SessionExecutionManager(
     private val application: Application,
     private val scope: CoroutineScope,
@@ -123,6 +149,7 @@ class SessionExecutionManager(
     private val bashTool: TermuxBashTool,
     private val runtimeRouter: RuntimeRouter,
     private val workspaceFileBridge: WorkspaceFileBridge,
+    private val runtimeWorkspaceFileBridge: RuntimeWorkspaceFileBridge,
     private val rootSetupController: RootSetupController,
     private val agentModeController: AgentModeController,
     private val skillManager: AgentSkillManager,
@@ -133,12 +160,15 @@ class SessionExecutionManager(
     private val piCompletionClient: PiCompletionClient? = null,
     private val piKernelBridge: PiKernelBridge,
     private val piAgentRunner: PiAgentRunner,
-) {
+) : SessionAgentProcessor {
     private val currentSettings = MutableStateFlow(AppSettings())
     private val currentProviderConfigs = MutableStateFlow<List<LlmProviderConfig>>(emptyList())
     private val currentExtensionsState = MutableStateFlow(AgentExtensionsState())
     private val _executionStates = MutableStateFlow<Map<String, SessionExecutionState>>(emptyMap())
     private val _turnEvents = MutableSharedFlow<SessionTurnEvent>(extraBufferCapacity = 8)
+    private val externalAgentEvents = MutableSharedFlow<ScopedSessionAgentEvent>(
+        extraBufferCapacity = 128,
+    )
     private val executionHandles = ConcurrentHashMap<String, SessionExecutionHandle>()
     private val queuedTurnRequestBuilder = QueuedTurnRequestBuilder(chatStateStore)
 
@@ -167,6 +197,153 @@ class SessionExecutionManager(
 
     fun isSessionRunning(sessionId: String): Boolean =
         _executionStates.value[sessionId]?.isRunning == true
+
+    override fun process(request: SessionAgentRequest): Flow<SessionAgentEvent> = channelFlow {
+        send(SessionAgentEvent.Started)
+        while (isSessionRunning(request.sessionId)) delay(100)
+
+        val completion = async(start = CoroutineStart.UNDISPATCHED) {
+            turnEvents.first { it.sessionId == request.sessionId }
+        }
+        var previousText = ""
+        val streaming = launch(start = CoroutineStart.UNDISPATCHED) {
+            externalAgentEvents
+                .filter { it.sessionId == request.sessionId }
+                .collect { scoped ->
+                    val event = scoped.event
+                    if (event is SessionAgentEvent.TextDelta) {
+                        previousText = event.accumulatedText
+                    }
+                    send(event)
+                }
+        }
+
+        try {
+            startExternalTurn(request)
+            val event = completion.await()
+            val persistedText = chatStateStore.state.value.sessions
+                .firstOrNull { it.id == request.sessionId }
+                ?.messages
+                ?.lastOrNull { it.author == MessageAuthor.Agent && it.text.isNotBlank() }
+                ?.text
+                .orEmpty()
+            send(
+                SessionAgentEvent.Completed(
+                    text = persistedText.ifBlank { previousText },
+                    outcome = event.outcome,
+                )
+            )
+        } catch (cancelled: CancellationException) {
+            completion.cancel()
+            throw cancelled
+        } catch (error: Throwable) {
+            completion.cancel()
+            send(SessionAgentEvent.Failed(error.message ?: "Agent turn failed", error))
+        } finally {
+            streaming.cancelAndJoin()
+        }
+    }
+
+    private suspend fun startExternalTurn(request: SessionAgentRequest) {
+        require(request.text.isNotBlank() || request.attachments.isNotEmpty()) {
+            "Channel message is empty"
+        }
+        val settings = settingsRepository.settings.first()
+        val providerConfigs = settingsRepository.providerConfigs.first()
+        val now = System.currentTimeMillis()
+        val attachments = importChannelAttachments(request, settings)
+        val userMessage = ChatMessage(
+            id = "${request.source}-${request.sessionId.takeLast(8)}-$now",
+            author = MessageAuthor.User,
+            text = request.text,
+            createdAtMillis = now,
+            attachments = attachments,
+        )
+        var selectedModelKey = ""
+        var requestMessages: List<ChatMessage> = emptyList()
+        var selectedSkillIds: List<String> = emptyList()
+        var activeSkills: List<ActiveSkillContext> = emptyList()
+        var activeMcpServerIds: List<String> = emptyList()
+        var agentModeEnabled = false
+        val persistedSession = chatRepository.getSessionWithMessages(request.sessionId)
+        var chromeEnabled = false
+
+        chatStateStore.updateAndFlush { persisted ->
+            val sessions = persisted.sessions.toMutableList()
+            val index = sessions.indexOfFirst { it.id == request.sessionId }
+            val session = if (index >= 0) {
+                val existing = sessions.removeAt(index)
+                val baseMessages = existing.messages.ifEmpty { persistedSession?.messages.orEmpty() }
+                existing.withDerivedMessages(baseMessages + userMessage)
+            } else {
+                ChatSession(
+                    id = request.sessionId,
+                    title = request.sessionTitle,
+                    preview = userMessage.summaryText(),
+                    hasCustomTitle = true,
+                    messages = listOf(userMessage),
+                    selectedModelKey = resolveDefaultChatModelKey(settings, providerConfigs),
+                )
+            }
+            selectedModelKey = session.selectedModelKey
+            requestMessages = session.messages
+            selectedSkillIds = session.selectedSkillIds
+            activeSkills = session.activeSkills
+            activeMcpServerIds = session.activeMcpServerIds
+            agentModeEnabled = session.agentModeEnabled
+            chromeEnabled = session.chromeEnabled
+            sessions.add(0, session)
+            persisted.copy(sessions = sessions)
+        }
+
+        startTurn(
+            SessionTurnRequest(
+                sessionId = request.sessionId,
+                settings = resolveModelSettings(
+                    baseSettings = settings,
+                    providerConfigs = providerConfigs,
+                    preferredModelKey = selectedModelKey,
+                    fallbackModelKey = resolveDefaultChatModelKey(settings, providerConfigs),
+                ),
+                requestMessages = requestMessages,
+                selectedSkillIds = selectedSkillIds,
+                activeSkills = activeSkills,
+                activeMcpServerIds = activeMcpServerIds,
+                agentModeEnabled = agentModeEnabled,
+                chromeEnabled = chromeEnabled
+            )
+        )
+    }
+
+    private suspend fun importChannelAttachments(
+        request: SessionAgentRequest,
+        settings: AppSettings,
+    ): List<ChatAttachment> = request.attachments.map { attachment ->
+        val localFile = File(attachment.localPath)
+        require(localFile.isFile && localFile.canRead()) {
+            "Channel attachment '${attachment.name}' is no longer available"
+        }
+        val sourceUri = Uri.fromFile(localFile)
+        val imported = runtimeWorkspaceFileBridge.importAttachmentToWorkspace(
+            settings = settings,
+            sourceUri = sourceUri,
+            sessionId = request.sessionId,
+            attachmentId = attachment.id,
+            displayName = attachment.name,
+        ).getOrElse { error ->
+            throw IllegalStateException(
+                "Could not import channel attachment '${attachment.name}' into the workspace: " +
+                    error.message.orEmpty(),
+                error,
+            )
+        }
+        attachment.toChatAttachment(
+            sourceUri = sourceUri,
+            workspacePath = imported.absolutePath,
+            bytesCopied = imported.bytesCopied,
+            inlineBytes = imported.inlineBytes,
+        )
+    }
 
     fun startTurn(request: SessionTurnRequest) {
         val handle = SessionExecutionHandle(sessionId = request.sessionId)
@@ -448,6 +625,9 @@ class SessionExecutionManager(
         val turnStartedAtMillis = System.currentTimeMillis()
         val turnId = "turn-$turnStartedAtMillis"
         var firstAssistantTokenAtMillis: Long? = null
+        var externalAssistantText = ""
+        var externalReasoningText = ""
+        val externalToolCalls = mutableSetOf<String>()
         diagnosticLogger.event(
             category = "session",
             event = "turn_start",
@@ -562,6 +742,37 @@ class SessionExecutionManager(
                         event = event,
                         reasoningTraceToolRoutingEnabled = reasoningTraceToolRoutingEnabled,
                     )
+                    if (event.outputJson == null) {
+                        if (externalToolCalls.add(event.id)) {
+                            emitExternalAgentEvent(
+                                handle.sessionId,
+                                SessionAgentEvent.ToolCall(
+                                    id = event.id,
+                                    name = event.name,
+                                    argumentsJson = event.argumentsJson,
+                                ),
+                            )
+                        }
+                    } else if (event.isRunning == false) {
+                        emitExternalAgentEvent(
+                            handle.sessionId,
+                            SessionAgentEvent.ToolResult(
+                                id = event.id,
+                                name = event.name,
+                                output = event.outputJson,
+                                isError = !AetherToolExecutor.inferToolOutputOk(event.outputJson),
+                            ),
+                        )
+                        resolveOutgoingChannelFile(
+                            settings = request.settings,
+                            runtimeWorkspaceDirectory = runtimeWorkspaceDirectory,
+                            termuxWorkspaceDirectory = workspaceDirectory,
+                            toolCallId = event.id,
+                            output = event.outputJson,
+                        )?.let { fileEvent ->
+                            emitExternalAgentEvent(handle.sessionId, fileEvent)
+                        }
+                    }
                 }
             }
 
@@ -592,6 +803,11 @@ class SessionExecutionManager(
                         handle = handle,
                         delta = delta,
                     )
+                    externalReasoningText += delta
+                    emitExternalAgentEvent(
+                        handle.sessionId,
+                        SessionAgentEvent.ReasoningDelta(delta, externalReasoningText),
+                    )
                 },
                 onAssistantReasoningSummaryDelta = { delta ->
                     if (handle.pauseRequested) return@runTurn
@@ -599,6 +815,11 @@ class SessionExecutionManager(
                     appendDirectReasoningSummaryDelta(
                         handle = handle,
                         delta = delta,
+                    )
+                    externalReasoningText += delta
+                    emitExternalAgentEvent(
+                        handle.sessionId,
+                        SessionAgentEvent.ReasoningDelta(delta, externalReasoningText),
                     )
                 },
                 onAssistantTextDelta = { delta ->
@@ -624,6 +845,11 @@ class SessionExecutionManager(
                             pendingResponseBlocks = pendingResponseBlocks,
                         )
                     }
+                    externalAssistantText += delta
+                    emitExternalAgentEvent(
+                        handle.sessionId,
+                        SessionAgentEvent.TextDelta(delta, externalAssistantText),
+                    )
                 },
                 onAssistantTextReset = {
                     if (handle.pauseRequested) return@runTurn
@@ -634,6 +860,7 @@ class SessionExecutionManager(
                             current.copy(pendingAssistantText = "")
                         }
                     }
+                    externalAssistantText = ""
                 },
                 onStreamingStatus = { status ->
                     if (handle.pauseRequested) return@runTurn
@@ -814,6 +1041,53 @@ class SessionExecutionManager(
                 }
             }
         }
+    }
+
+    private suspend fun emitExternalAgentEvent(sessionId: String, event: SessionAgentEvent) {
+        if (!sessionId.startsWith("channel:")) return
+        externalAgentEvents.emit(ScopedSessionAgentEvent(sessionId, event))
+    }
+
+    private suspend fun resolveOutgoingChannelFile(
+        settings: AppSettings,
+        runtimeWorkspaceDirectory: String,
+        termuxWorkspaceDirectory: String,
+        toolCallId: String,
+        output: String,
+    ): SessionAgentEvent.FileReady? {
+        val marker = runCatching { JSONObject(output) }.getOrNull()
+            ?.optJSONObject(ChannelMessageRenderer.AetherChannelFileMarker)
+            ?: return null
+        val path = marker.optString("path").trim()
+        if (path.isBlank()) return null
+        val declaredSize = marker.optLong("size_bytes", -1L)
+        val byteLimit = if (declaredSize in 0..ChannelFileMaxBytes.toLong()) {
+            declaredSize.toInt().coerceAtLeast(1)
+        } else {
+            ChannelFileMaxBytes
+        }
+        val payload = runtimeWorkspaceFileBridge.readWorkspaceFile(
+            settings = settings,
+            workspaceDirectory = runtimeWorkspaceDirectory,
+            termuxWorkspaceDirectory = termuxWorkspaceDirectory,
+            path = path,
+            workingDirectory = runtimeWorkspaceDirectory,
+            byteLimit = byteLimit,
+            enforceWorkspaceRoot = true,
+        ).getOrNull() ?: return null
+        return SessionAgentEvent.FileReady(
+            toolCallId = toolCallId,
+            file = ChannelFile(
+                name = marker.optString("name").ifBlank {
+                    payload.absolutePath.substringAfterLast('/').ifBlank { "file" }
+                },
+                mimeType = marker.optString("mime_type").ifBlank {
+                    runtimeWorkspaceFileBridge.guessMimeType(payload.absolutePath)
+                        .ifBlank { "application/octet-stream" }
+                },
+                bytes = payload.bytes,
+            ),
+        )
     }
 
     private fun buildQueuedTurnRequest(
@@ -2615,6 +2889,28 @@ class SessionExecutionManager(
         }
     }
 }
+
+private fun ChannelIncomingAttachment.toChatAttachment(
+    sourceUri: Uri,
+    workspacePath: String,
+    bytesCopied: Long,
+    inlineBytes: ByteArray,
+): ChatAttachment = ChatAttachment(
+    id = id,
+    uri = sourceUri.toString(),
+    name = name,
+    mimeType = mimeType,
+    sizeBytes = sizeBytes,
+    kind = if (kind == ChannelFileKind.Image) AttachmentKind.Image else AttachmentKind.File,
+    workspacePath = workspacePath,
+    workspaceState = AttachmentWorkspaceState.Ready,
+    workspaceBytesCopied = bytesCopied,
+    inlineBase64 = if (kind == ChannelFileKind.Image && inlineBytes.isNotEmpty()) {
+        Base64.encodeToString(inlineBytes, Base64.NO_WRAP)
+    } else {
+        ""
+    },
+)
 
 internal data class TurnSkillSelection(
     val selectedSkillIds: List<String>,

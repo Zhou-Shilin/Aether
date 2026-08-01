@@ -55,6 +55,15 @@ class AetherToolExecutorTest {
             listOf("url"),
             fetchWebUrl.getJSONObject("parameters").getJSONArray("required").toStringList(),
         )
+
+        val sendFile = (0 until definitions.length())
+            .map { definitions.getJSONObject(it) }
+            .first { it.getString("name") == "send_file_to_user" }
+        assertEquals("sequential", sendFile.getString("execution_mode"))
+        assertEquals(
+            listOf("file_path"),
+            sendFile.getJSONObject("parameters").getJSONArray("required").toStringList(),
+        )
     }
 
     @Test

@@ -13,6 +13,9 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.zhousl.aether.data.SessionExecutionState
+import com.zhousl.aether.channel.ChannelConnectionState
+import com.zhousl.aether.channel.ChannelKind
+import com.zhousl.aether.channel.ChannelStatus
 import com.zhousl.aether.ui.ChatSession
 
 private const val ForegroundChannelId = "aether_background_runs"
@@ -50,17 +53,26 @@ class AetherNotificationController(
     fun buildForegroundNotification(
         sessions: List<ChatSession>,
         executionStates: Map<String, SessionExecutionState>,
+        channelStatuses: Map<ChannelKind, ChannelStatus> = emptyMap(),
     ): Notification {
         val activeSessions = sessions.filter { executionStates[it.id]?.isRunning == true }
-        val title = if (activeSessions.size == 1) {
-            "Aether is running 1 task"
-        } else {
-            "Aether is running ${activeSessions.size} tasks"
+        val activeChannels = channelStatuses.values.filter {
+            it.state == ChannelConnectionState.Connected ||
+                it.state == ChannelConnectionState.Starting ||
+                it.state == ChannelConnectionState.Reconnecting
         }
-        val body = activeSessions
+        val title = when {
+            activeSessions.isEmpty() && activeChannels.isNotEmpty() ->
+                "Aether channels are online"
+            activeSessions.size == 1 -> "Aether is running 1 task"
+            else -> "Aether is running ${activeSessions.size} tasks"
+        }
+        val taskBody = activeSessions
             .take(3)
             .joinToString(separator = ", ") { it.title.ifBlank { "Untitled chat" } }
-            .ifBlank { "Keeping active sessions alive in the background." }
+        val channelBody = activeChannels.joinToString(", ") { it.kind.displayName }
+        val body = listOf(taskBody, channelBody).filter(String::isNotBlank).joinToString(" · ")
+            .ifBlank { "Keeping Aether available in the background." }
 
         val contentIntent = PendingIntent.getActivity(
             context,
@@ -78,9 +90,13 @@ class AetherNotificationController(
             .setStyle(
                 NotificationCompat.BigTextStyle()
                     .bigText(
-                        activeSessions.joinToString(separator = "\n") { session ->
-                            "- ${session.title.ifBlank { "Untitled chat" }}"
-                        }.ifBlank { body }
+                        listOf(
+                            activeSessions.joinToString(separator = "\n") { session ->
+                                "- ${session.title.ifBlank { "Untitled chat" }}"
+                            },
+                            activeChannels.takeIf { it.isNotEmpty() }
+                                ?.joinToString(prefix = "Channels: ") { it.kind.displayName }.orEmpty(),
+                        ).filter(String::isNotBlank).joinToString("\n").ifBlank { body }
                     )
             )
             .setOngoing(true)

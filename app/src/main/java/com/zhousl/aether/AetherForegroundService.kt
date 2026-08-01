@@ -16,6 +16,14 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
+private data class ForegroundServiceSnapshot(
+    val sessions: List<com.zhousl.aether.ui.ChatSession>,
+    val executionStates: Map<String, com.zhousl.aether.data.SessionExecutionState>,
+    val keepTasksRunningInBackground: Boolean,
+    val enabledChannelCount: Int,
+    val channelStatuses: Map<com.zhousl.aether.channel.ChannelKind, com.zhousl.aether.channel.ChannelStatus>,
+)
+
 class AetherForegroundService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var hasEnteredForeground = false
@@ -28,6 +36,7 @@ class AetherForegroundService : Service() {
             runtime.notificationController.buildForegroundNotification(
                 sessions = emptyList(),
                 executionStates = emptyMap(),
+                channelStatuses = emptyMap(),
             ),
         )
         serviceScope.launch {
@@ -35,11 +44,22 @@ class AetherForegroundService : Service() {
                 runtime.chatStateStore.state,
                 runtime.sessionExecutionManager.executionStates,
                 runtime.settingsRepository.settings,
-            ) { chatState, executionStates, settings ->
-                Triple(chatState.sessions, executionStates, settings)
-            }.collectLatest { (sessions, executionStates, settings) ->
+                runtime.channelConfigRepository.configs,
+                runtime.channelManager.statuses,
+            ) { chatState, executionStates, settings, channelConfigs, channelStatuses ->
+                ForegroundServiceSnapshot(
+                    sessions = chatState.sessions,
+                    executionStates = executionStates,
+                    keepTasksRunningInBackground = settings.keepTasksRunningInBackground,
+                    enabledChannelCount = channelConfigs.count { it.enabled && it.isConfigured },
+                    channelStatuses = channelStatuses,
+                )
+            }.collectLatest { snapshot ->
+                val sessions = snapshot.sessions
+                val executionStates = snapshot.executionStates
                 val activeCount = executionStates.values.count { it.isRunning }
-                if (activeCount == 0 || !settings.keepTasksRunningInBackground) {
+                val hasBackgroundTasks = activeCount > 0 && snapshot.keepTasksRunningInBackground
+                if (!hasBackgroundTasks && snapshot.enabledChannelCount == 0) {
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                 } else {
@@ -47,6 +67,7 @@ class AetherForegroundService : Service() {
                         runtime.notificationController.buildForegroundNotification(
                             sessions = sessions,
                             executionStates = executionStates,
+                            channelStatuses = snapshot.channelStatuses,
                         ),
                     )
                 }
@@ -66,6 +87,7 @@ class AetherForegroundService : Service() {
                 runtime.notificationController.buildForegroundNotification(
                     sessions = emptyList(),
                     executionStates = emptyMap(),
+                    channelStatuses = emptyMap(),
                 ),
             )
         }

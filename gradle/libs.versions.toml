@@ -11,6 +11,8 @@ okio = "3.16.4"
 lifecycleCompose = "2.8.6"
 lifecycleProcess = "2.8.6"
 okhttp = "4.12.0"
+zxing = "3.5.3"
+larkOapi = "2.8.4"
 snakeyaml = "2.2"
 junit4 = "4.13.2"
 json = "20240303"
@@ -50,6 +52,8 @@ androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-toolin
 androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 google-material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 squareup-okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
+larksuite-oapi = { group = "com.larksuite.oapi", name = "oapi-sdk", version.ref = "larkOapi" }
 squareup-okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
 snakeyaml = { group = "org.yaml", name = "snakeyaml", version.ref = "snakeyaml" }
 junit4 = { group = "junit", name = "junit", version.ref = "junit4" }

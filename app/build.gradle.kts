@@ -186,6 +186,7 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "META-INF/DEPENDENCIES"
         }
     }
 
@@ -233,6 +234,8 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.google.material)
     implementation(libs.squareup.okhttp)
+    implementation(libs.zxing.core)
+    implementation(libs.larksuite.oapi)
     implementation(libs.jsoup)
     implementation(libs.flexmark.html2md.converter)
     implementation(libs.snakeyaml)

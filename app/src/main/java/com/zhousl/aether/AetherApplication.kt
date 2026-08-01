@@ -29,6 +29,11 @@ import com.zhousl.aether.data.SessionExecutionManager
 import com.zhousl.aether.data.SettingsRepository
 import com.zhousl.aether.data.WebToolsClient
 import com.zhousl.aether.data.WorkspaceFileBridge
+import com.zhousl.aether.channel.ChannelConfigRepository
+import com.zhousl.aether.channel.ChannelInboundFileStore
+import com.zhousl.aether.channel.ChannelManager
+import com.zhousl.aether.channel.ChannelQrAuthManager
+import com.zhousl.aether.channel.ChannelRegistry
 import com.zhousl.aether.data.pi.PiCompletionClient
 import com.zhousl.aether.data.pi.PiAgentRunner
 import com.zhousl.aether.data.pi.PiKernelBridge
@@ -108,6 +113,7 @@ class AetherAppRuntime(
     )
 
     val settingsRepository = SettingsRepository(application)
+    val channelConfigRepository = ChannelConfigRepository(application)
     val piExtensionStateRepository = PiExtensionStateRepository(application)
     val modKernel = AetherModKernel()
     val chatRepository = ChatRepository(application)
@@ -226,6 +232,7 @@ class AetherAppRuntime(
         bashTool = bashTool,
         runtimeRouter = runtimeRouter,
         workspaceFileBridge = workspaceFileBridge,
+        runtimeWorkspaceFileBridge = runtimeWorkspaceFileBridge,
         rootSetupController = rootSetupController,
         agentModeController = agentModeController,
         skillManager = skillManager,
@@ -236,6 +243,24 @@ class AetherAppRuntime(
         piCompletionClient = piCompletionClient,
         piKernelBridge = piKernelBridge,
         piAgentRunner = piAgentRunner,
+    )
+    val channelManager = ChannelManager(
+        scope = appScope,
+        configRepository = channelConfigRepository,
+        processor = sessionExecutionManager,
+        registry = ChannelRegistry(
+            scope = appScope,
+            inboundFileStore = ChannelInboundFileStore(
+                java.io.File(application.filesDir, "channel-inbox"),
+            ),
+        ),
+        onKeepAliveRequired = { required ->
+            if (required) runCatching { AetherForegroundService.ensureRunning(application) }
+        },
+    )
+    val channelQrAuthManager = ChannelQrAuthManager(
+        scope = appScope,
+        configRepository = channelConfigRepository,
     )
 
     fun initialize() {
@@ -250,6 +275,7 @@ class AetherAppRuntime(
             ),
         )
         notificationController.ensureChannels()
+        channelManager.start()
         ProcessLifecycleOwner.get().lifecycle.addObserver(appForegroundTracker)
         appScope.launch {
             nativeModManager.initialize()

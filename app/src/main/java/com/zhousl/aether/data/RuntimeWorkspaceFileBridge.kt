@@ -74,6 +74,7 @@ class RuntimeWorkspaceFileBridge(
         path: String,
         workingDirectory: String = "",
         byteLimit: Int,
+        enforceWorkspaceRoot: Boolean = false,
     ): Result<WorkspaceFilePayload> {
         val normalizedPath = normalizeRuntimeWorkspacePath(path)
         val runtimeId = resolveWorkspaceRuntimeId(
@@ -92,6 +93,14 @@ class RuntimeWorkspaceFileBridge(
             path = normalizedPath,
             workingDirectory = resolvedWorkingDirectory,
             byteLimit = byteLimit,
+            allowedRoot = if (enforceWorkspaceRoot) {
+                when (runtimeId) {
+                    LocalRuntimeId.Alpine -> workspaceDirectory
+                    LocalRuntimeId.Termux -> termuxWorkspaceDirectory
+                }
+            } else {
+                null
+            },
         )
     }
 
@@ -118,6 +127,7 @@ class RuntimeWorkspaceFileBridge(
             path = normalizedPath,
             workingDirectory = resolvedWorkingDirectory,
             byteLimit = byteLimit,
+            allowedRoot = null,
         )
     }
 
@@ -126,6 +136,7 @@ class RuntimeWorkspaceFileBridge(
         path: String,
         workingDirectory: String,
         byteLimit: Int,
+        allowedRoot: String?,
     ): Result<WorkspaceFilePayload> {
         return when (runtimeId) {
             LocalRuntimeId.Alpine -> readAlpineWorkspaceFile(
@@ -138,6 +149,7 @@ class RuntimeWorkspaceFileBridge(
                 path = path,
                 workingDirectory = workingDirectory,
                 byteLimit = byteLimit,
+                allowedRoot = allowedRoot,
             )
         }
     }

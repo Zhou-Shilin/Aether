@@ -239,6 +239,7 @@ class WorkspaceFileBridge(
         path: String,
         workingDirectory: String = TermuxContract.HomeDirectory,
         byteLimit: Int,
+        allowedRoot: String? = null,
     ): Result<WorkspaceFilePayload> = runCatching {
         require(byteLimit > 0) { "byteLimit must be greater than 0." }
 
@@ -264,6 +265,7 @@ class WorkspaceFileBridge(
                     remainingBudget.coerceAtMost(Int.MAX_VALUE.toLong()).toInt().coerceAtLeast(1),
                 ),
                 maxTotalBytes = byteLimit,
+                allowedRoot = allowedRoot,
             ).getOrThrow()
 
             expectedSizeBytes = chunk.sizeBytes
@@ -767,6 +769,7 @@ class WorkspaceFileBridge(
         offsetBytes: Long,
         byteLimit: Int,
         maxTotalBytes: Int,
+        allowedRoot: String? = null,
     ): Result<WorkspaceFilePayload> = runCatching {
         require(offsetBytes >= 0L) { "offsetBytes must not be negative." }
         require(byteLimit > 0) { "byteLimit must be greater than 0." }
@@ -777,6 +780,7 @@ class WorkspaceFileBridge(
             offsetBytes = offsetBytes,
             byteLimit = byteLimit,
             maxTotalBytes = maxTotalBytes,
+            allowedRoot = allowedRoot,
         )
         val rawResult = JSONObject(bashTool.executeCommand(command))
         ensureBashSuccess(
@@ -818,9 +822,23 @@ class WorkspaceFileBridge(
         offsetBytes: Long,
         byteLimit: Int,
         maxTotalBytes: Int,
+        allowedRoot: String? = null,
     ): String = buildString {
         appendCommonShellPreamble(this)
         appendLine("path=\"\$(decode_b64 '${encodeBase64(absolutePath)}')\"")
+        if (!allowedRoot.isNullOrBlank()) {
+            appendLine("allowed_root=\"\$(decode_b64 '${encodeBase64(allowedRoot)}')\"")
+            appendLine("allowed_root_real=\"\$(realpath -e \"\$allowed_root\" 2>/dev/null || true)\"")
+            appendLine("path_real=\"\$(realpath -e \"\$path\" 2>/dev/null || true)\"")
+            appendLine("if [ -z \"\$allowed_root_real\" ] || [ -z \"\$path_real\" ]; then")
+            appendLine("  printf 'File or workspace root could not be resolved.\\n' >&2")
+            appendLine("  exit 19")
+            appendLine("fi")
+            appendLine("case \"\$path_real\" in")
+            appendLine("  \"\$allowed_root_real\"/*) path=\"\$path_real\" ;;")
+            appendLine("  *) printf 'Path is outside the current workspace.\\n' >&2; exit 19 ;;")
+            appendLine("esac")
+        }
         appendLine("offset_bytes=$offsetBytes")
         appendLine("chunk_limit=$byteLimit")
         appendLine("max_total_bytes=$maxTotalBytes")

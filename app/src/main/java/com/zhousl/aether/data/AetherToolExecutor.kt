@@ -15,6 +15,7 @@ import org.json.JSONObject
 private const val MaxToolSleepDurationMillis = 10 * 60 * 1000L
 private const val MaxToolSkillResourceBytes = 1024 * 1024
 private const val MaxToolAnalyzeImageBytes = 5 * 1024 * 1024
+private const val MaxToolSendFileBytes = 30 * 1024 * 1024
 private const val DefaultToolSkillResourceMaxChars = 20_000
 private val TextSkillResourceExtensions = setOf(
     "md",
@@ -138,6 +139,12 @@ class AetherToolExecutor(
             "analyze_image" -> executeAnalyzeImage(
                 settings = settings,
                 providerConfigs = providerConfigs,
+                workspaceDirectory = workspaceDirectory,
+                termuxWorkspaceDirectory = termuxWorkspaceDirectory,
+                argumentsJson = argumentsJson,
+            )
+            "send_file_to_user" -> executeSendFileToUser(
+                settings = settings,
                 workspaceDirectory = workspaceDirectory,
                 termuxWorkspaceDirectory = termuxWorkspaceDirectory,
                 argumentsJson = argumentsJson,
@@ -559,6 +566,55 @@ class AetherToolExecutor(
         }.toString()
     }
 
+    private suspend fun executeSendFileToUser(
+        settings: AppSettings,
+        workspaceDirectory: String,
+        termuxWorkspaceDirectory: String,
+        argumentsJson: String,
+    ): String {
+        val fileBridge = runtimeWorkspaceFileBridge ?: return toolUnavailableOutput("send_file_to_user")
+        val arguments = runCatching { JSONObject(argumentsJson) }.getOrNull()
+            ?: return invalidToolArguments()
+        val path = arguments.optString("file_path").trim()
+            .ifBlank { arguments.optString("path").trim() }
+        if (path.isBlank()) {
+            return JSONObject().apply {
+                put("ok", false)
+                put("errmsg", "Missing required 'file_path' argument.")
+            }.toString()
+        }
+        val workingDirectory = arguments.optString("working_directory").trim()
+            .ifBlank { arguments.optString("workingDirectory").trim() }
+            .ifBlank { workspaceDirectory }
+        val payload = fileBridge.readWorkspaceFile(
+            settings = settings,
+            workspaceDirectory = workspaceDirectory,
+            termuxWorkspaceDirectory = termuxWorkspaceDirectory,
+            path = path,
+            workingDirectory = workingDirectory,
+            byteLimit = MaxToolSendFileBytes,
+            enforceWorkspaceRoot = true,
+        ).getOrElse { throwable ->
+            return toolFailureOutput(throwable, "Couldn't prepare the file for sending.")
+        }
+        val name = payload.absolutePath.substringAfterLast('/').ifBlank { "file" }
+        val mimeType = fileBridge.guessMimeType(payload.absolutePath)
+            .ifBlank { "application/octet-stream" }
+        return JSONObject().apply {
+            put("ok", true)
+            put(
+                com.zhousl.aether.channel.ChannelMessageRenderer.AetherChannelFileMarker,
+                JSONObject().apply {
+                    put("path", payload.absolutePath)
+                    put("name", name)
+                    put("mime_type", mimeType)
+                    put("size_bytes", payload.sizeBytes)
+                },
+            )
+            put("stdout", "File prepared for delivery: $name")
+        }.toString()
+    }
+
     private suspend fun executeMcpListTools(
         manager: McpClientManager?,
         argumentsJson: String,
@@ -702,6 +758,7 @@ class AetherToolExecutor(
             "fetch_web_url",
             "tavily_search",
             "analyze_image",
+            "send_file_to_user",
             "agent_display",
             "chrome",
             "mcp_list_tools",
@@ -893,6 +950,18 @@ class AetherToolExecutor(
                 },
                 required = listOf("path"),
                 executionMode = "parallel",
+            ).also(::put)
+            toolDefinition(
+                name = "send_file_to_user",
+                description = "Send a file from the current workspace to the user through the active chat or external channel. The path must remain inside the current workspace.",
+                properties = JSONObject().apply {
+                    put("file_path", stringProperty("File path to send. Relative paths resolve from the current workspace."))
+                    put("path", stringProperty("Alias of file_path."))
+                    put("working_directory", stringProperty("Optional working directory used to resolve a relative path."))
+                    put("workingDirectory", stringProperty("Alias of working_directory."))
+                },
+                required = listOf("file_path"),
+                executionMode = "sequential",
             ).also(::put)
             toolDefinition(
                 name = "activate_skill",
