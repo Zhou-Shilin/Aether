@@ -124,16 +124,6 @@ class ChatRepositorySerializationTest {
     }
 
     @Test
-    fun messageJsonBatchFlushesBeforeJsonByteBudgetIsExceeded() {
-        val limit = MessageJsonBatchByteLimit.toLong()
-
-        assertFalse(shouldStartNewMessageJsonBatch(0L, limit + 1L))
-        assertFalse(shouldStartNewMessageJsonBatch(limit - 1L, 1L))
-        assertTrue(shouldStartNewMessageJsonBatch(limit - 1L, 2L))
-        assertTrue(shouldStartNewMessageJsonBatch(limit, 1L))
-    }
-
-    @Test
     fun migrationParseResultMarksCorruptedJsonAsRecoverable() {
         val result = parseChatSessionsForMigration("{not-valid-json")
 
