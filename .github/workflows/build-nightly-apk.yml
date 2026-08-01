@@ -8,6 +8,7 @@ on:
       - 'app/**'
       - 'shared/**'
       - 'pi-bridge/**'
+      - 'packages/extension-api/**'
       - 'third_party/termux/terminal-emulator/**'
       - 'third_party/termux/terminal-view/**'
       - 'build.gradle.kts'
@@ -54,9 +55,6 @@ jobs:
           short_sha="${GITHUB_SHA::12}"
           echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
           echo "version_name=Nightly $short_sha" >> "$GITHUB_OUTPUT"
-
-      - name: Test shared and Android code
-        run: ./gradlew :shared:testDebugUnitTest :app:testDebugUnitTest --stacktrace
 
       - name: Restore Nightly Signing Key
         shell: bash

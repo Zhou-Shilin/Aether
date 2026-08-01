@@ -1,0 +1,166 @@
+name: PR Check
+
+on:
+  workflow_dispatch:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: pr-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      android: ${{ steps.manual.outputs.android || steps.filter.outputs.android }}
+      ios: ${{ steps.manual.outputs.ios || steps.filter.outputs.ios }}
+    steps:
+      - name: Run all checks for manual dispatch
+        id: manual
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          echo "android=true" >> "$GITHUB_OUTPUT"
+          echo "ios=true" >> "$GITHUB_OUTPUT"
+
+      - name: Detect changed areas
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            android:
+              - 'app/**'
+              - 'shared/**'
+              - 'pi-bridge/**'
+              - 'packages/extension-api/**'
+              - 'third_party/termux/**'
+              - '.github/workflows/build-nightly-apk.yml'
+              - 'build.gradle.kts'
+              - 'settings.gradle.kts'
+              - 'gradle.properties'
+              - 'gradle/**'
+              - 'gradlew'
+              - 'gradlew.bat'
+              - '.github/workflows/pr-check.yml'
+            ios:
+              - 'shared/**'
+              - 'pi-bridge/**'
+              - 'packages/extension-api/**'
+              - 'build.gradle.kts'
+              - 'settings.gradle.kts'
+              - 'gradle.properties'
+              - 'gradle/**'
+              - 'gradlew'
+              - 'iosApp/**'
+              - 'scripts/bootstrap-ios.sh'
+              - 'scripts/prepare-ios-runtime.sh'
+              - 'scripts/build-ios-ish-runtime.sh'
+              - 'third_party/ish-arm64/**'
+              - '.gitmodules'
+              - 'LICENSE'
+              - 'THIRD_PARTY_NOTICES.md'
+              - 'app/src/main/assets/fonts/JetBrainsMono-Regular.ttf'
+              - '.github/workflows/pr-check.yml'
+
+  android:
+    needs: changes
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.android == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: enhanced
+          cache-read-only: false
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Make Gradle executable
+        run: chmod +x ./gradlew
+
+      - name: Test shared and Android code
+        run: ./gradlew :shared:testDebugUnitTest :app:testDebugUnitTest --stacktrace
+
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug --stacktrace
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: Aether-pr-debug-${{ github.event.pull_request.head.sha || github.sha }}
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 7
+          archive: false
+
+  ios:
+    needs: changes
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.ios == 'true' }}
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.19.0'
+          cache: npm
+          cache-dependency-path: pi-bridge/package-lock.json
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: enhanced
+          cache-read-only: false
+
+      - name: Install iOS build tools
+        run: brew install llvm lld meson ninja xcodegen
+
+      - name: Build Pi Bridge
+        working-directory: pi-bridge
+        run: |
+          npm ci --ignore-scripts --legacy-peer-deps
+          npm run build
+
+      - name: Generate iOS project
+        run: scripts/bootstrap-ios.sh
+
+      - name: Build iPhone simulator app
+        run: |
+          xcodebuild \
+            -project iosApp/Aether.xcodeproj \
+            -scheme Aether \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
