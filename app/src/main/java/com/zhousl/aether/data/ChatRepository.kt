@@ -46,7 +46,12 @@ import org.json.JSONObject
 
 private const val DraftSessionId = "draft"
 private const val MessageJsonChunkSize = 64 * 1024
+internal const val MessageJsonBatchByteLimit = 64 * 1024
+private const val MaxMessagesPerJsonBatch = 8
 private const val WorkspaceFileRefQueryChunkSize = 500
+
+internal fun shouldStartNewMessageJsonBatch(currentBytes: Long, nextBytes: Long): Boolean =
+    currentBytes > 0L && nextBytes > MessageJsonBatchByteLimit - currentBytes
 
 
 private val Context.chatDataStore by preferencesDataStore(name = "aether_chats")
@@ -326,20 +331,58 @@ class ChatRepository(
     ) {
         chatHistoryDao.deleteWorkspaceFileRefsFromPosition(sessionId, fromPosition)
         chatHistoryDao.deleteMessagesFromPosition(sessionId, fromPosition)
-        if (messages.isNotEmpty()) {
-            val messageEntities = messages.mapIndexed { index, message ->
-                ChatMessageEntityMapper.toEntity(
-                    sessionId = sessionId,
-                    position = fromPosition + index,
-                    message = message,
-                )
-            }
-            chatHistoryDao.upsertMessages(messageEntities)
-            replaceWorkspaceFileRefsForMessagesInTransaction(
-                sessionId = sessionId,
-                messages = messages,
-            )
+        messages.forEach { message ->
+            chatHistoryDao.deleteWorkspaceFileRefsForMessage(sessionId, message.id)
         }
+        chatHistoryDao.upsertMessagesChunked(
+            sessionId = sessionId,
+            messages = messages,
+            startPosition = fromPosition,
+        )
+    }
+
+    private suspend fun ChatHistoryDao.upsertMessagesChunked(
+        sessionId: String,
+        messages: List<ChatMessage>,
+        startPosition: Int = 0,
+    ) {
+        if (messages.isEmpty()) return
+
+        val messageEntities = ArrayList<ChatMessageEntity>()
+        val workspaceFileRefs = ArrayList<ChatWorkspaceFileRefEntity>()
+        var estimatedJsonBytes = 0L
+
+        suspend fun flushBatch() {
+            if (messageEntities.isEmpty()) return
+            upsertMessages(messageEntities)
+            if (workspaceFileRefs.isNotEmpty()) {
+                upsertWorkspaceFileRefs(workspaceFileRefs)
+            }
+            messageEntities.clear()
+            workspaceFileRefs.clear()
+            estimatedJsonBytes = 0L
+        }
+
+        messages.forEachIndexed { index, message ->
+            val messageJson = message.toJson().toString()
+            val nextJsonBytes = messageJson.length.toLong() * 2L
+            if (
+                messageEntities.isNotEmpty() &&
+                (messageEntities.size >= MaxMessagesPerJsonBatch ||
+                    shouldStartNewMessageJsonBatch(estimatedJsonBytes, nextJsonBytes))
+            ) {
+                flushBatch()
+            }
+            messageEntities += ChatMessageEntityMapper.toEntity(
+                sessionId = sessionId,
+                position = startPosition + index,
+                message = message,
+                messageJson = messageJson,
+            )
+            workspaceFileRefs.addAll(message.toWorkspaceFileRefs(sessionId))
+            estimatedJsonBytes += nextJsonBytes
+        }
+        flushBatch()
     }
 
     private suspend fun replaceChatStateBatched(
@@ -398,23 +441,10 @@ class ChatRepository(
                 if (!isMetadataOnlySnapshot) {
                     chatHistoryDao.deleteWorkspaceFileRefsForSession(session.id)
                     chatHistoryDao.deleteMessagesForSession(session.id)
-                    if (syncedMessages.isNotEmpty()) {
-                        syncedMessages.chunked(8).forEachIndexed { chunkIndex, chunk ->
-                            val startPos = chunkIndex * 8
-                            val messageEntities = chunk.mapIndexed { i, message ->
-                                ChatMessageEntityMapper.toEntity(
-                                    sessionId = session.id,
-                                    position = startPos + i,
-                                    message = message,
-                                )
-                            }
-                            chatHistoryDao.upsertMessages(messageEntities)
-                            val refs = chunk.toWorkspaceFileRefs(session.id)
-                            if (refs.isNotEmpty()) {
-                                chatHistoryDao.upsertWorkspaceFileRefs(refs)
-                            }
-                        }
-                    }
+                    chatHistoryDao.upsertMessagesChunked(
+                        sessionId = session.id,
+                        messages = syncedMessages,
+                    )
                 }
             }
         }
@@ -764,16 +794,17 @@ private fun ChatSession.toSessionEntity(sortOrder: Long): ChatSessionEntity = Ch
 )
 
 private fun List<ChatMessage>.toWorkspaceFileRefs(sessionId: String): List<ChatWorkspaceFileRefEntity> =
-    flatMap { message ->
-        message.collectWorkspaceFilePathsForIndex()
-            .map { path ->
-                ChatWorkspaceFileRefEntity(
-                    sessionId = sessionId,
-                    messageId = message.id,
-                    path = path,
-                )
-            }
-    }.distinctBy { ref -> Triple(ref.sessionId, ref.messageId, ref.path) }
+    flatMap { message -> message.toWorkspaceFileRefs(sessionId) }
+        .distinctBy { ref -> Triple(ref.sessionId, ref.messageId, ref.path) }
+
+private fun ChatMessage.toWorkspaceFileRefs(sessionId: String): List<ChatWorkspaceFileRefEntity> =
+    collectWorkspaceFilePathsForIndex().map { path ->
+        ChatWorkspaceFileRefEntity(
+            sessionId = sessionId,
+            messageId = id,
+            path = path,
+        )
+    }
 
 private fun ChatMessage.collectWorkspaceFilePathsForIndex(): List<String> =
     (attachments

@@ -14,22 +14,31 @@ internal object ChatMessageEntityMapper {
         sessionId: String,
         position: Int,
         message: ChatMessage,
-    ): ChatMessageEntity {
-        val messageJson = message.toJson().toString()
-        return ChatMessageEntity(
-            sessionId = sessionId,
-            id = message.id,
-            position = position,
-            messageJson = messageJson,
-            author = message.author.name,
-            text = message.text,
-            createdAtMillis = message.createdAtMillis.takeIf { it > 0L },
-            responseGroupId = message.responseGroupId,
-            displayKind = message.displayKind.name,
-            messageSchemaVersion = CurrentMessageSchemaVersion,
-            hasUsageStatistics = message.usageStatistics != null,
-        )
-    }
+    ): ChatMessageEntity = toEntity(
+        sessionId = sessionId,
+        position = position,
+        message = message,
+        messageJson = message.toJson().toString(),
+    )
+
+    fun toEntity(
+        sessionId: String,
+        position: Int,
+        message: ChatMessage,
+        messageJson: String,
+    ): ChatMessageEntity = ChatMessageEntity(
+        sessionId = sessionId,
+        id = message.id,
+        position = position,
+        messageJson = messageJson,
+        author = message.author.name,
+        text = message.text,
+        createdAtMillis = message.createdAtMillis.takeIf { it > 0L },
+        responseGroupId = message.responseGroupId,
+        displayKind = message.displayKind.name,
+        messageSchemaVersion = CurrentMessageSchemaVersion,
+        hasUsageStatistics = message.usageStatistics != null,
+    )
 
     fun toChatMessage(
         entity: ChatMessageEntity,
