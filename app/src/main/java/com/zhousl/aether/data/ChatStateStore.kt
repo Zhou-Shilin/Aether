@@ -13,6 +13,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -23,7 +24,7 @@ private const val ChatStateStoreLogTag = "ChatStateStore"
 
 class ChatStateStore(
     private val scope: CoroutineScope,
-    private val chatRepository: ChatRepository,
+    private val chatRepository: ChatStatePersistence,
 ) {
     private val updateLock = Any()
     private val persistMutex = Mutex()
@@ -32,6 +33,7 @@ class ChatStateStore(
     private var localGeneration = 0L
     private var persistedGeneration = 0L
     private var latestPending: PendingPersistedChatState? = null
+    private var retainedCheckpoints = emptyMap<AssistantResponseCheckpointTarget, AssistantResponseCheckpoint>()
     private var repositoryStateLoaded = false
     private val repositoryStateReady = CompletableDeferred<Unit>()
 
@@ -40,35 +42,29 @@ class ChatStateStore(
     init {
         scope.launch {
             try {
-                chatRepository.chatState.collect { persisted ->
-                    val pendingAfterInitialLoad = synchronized(updateLock) {
-                        if (!repositoryStateLoaded) {
-                            repositoryStateLoaded = true
-                            if (localGeneration == persistedGeneration) {
-                                _state.value = persisted
-                                null
-                            } else {
-                                val merged = mergeRepositoryStateWithLocalUpdates(
-                                    repositoryState = persisted,
-                                    localState = _state.value,
-                                )
-                                _state.value = merged
-                                latestPending = latestPending?.copy(state = merged)
-                                latestPending
-                            }
-                        } else {
-                            if (localGeneration == persistedGeneration) {
-                                _state.value = persisted
-                            }
-                            null
+                val persisted = chatRepository.chatState.first()
+                val pendingAfterInitialLoad = synchronized(updateLock) {
+                    repositoryStateLoaded = true
+                    if (localGeneration == persistedGeneration) {
+                        _state.value = persisted
+                        null
+                    } else {
+                        val merged = mergeRepositoryStateWithLocalUpdates(
+                            repositoryState = persisted,
+                            localState = _state.value,
+                        )
+                        _state.value = merged
+                        latestPending = latestPending?.let { pending ->
+                            if (pending.primaryState == null) pending else pending.copy(primaryState = merged)
                         }
+                        latestPending
                     }
-                    if (!repositoryStateReady.isCompleted) {
-                        repositoryStateReady.complete(Unit)
-                    }
-                    if (pendingAfterInitialLoad != null) {
-                        persistWithoutQueue(pendingAfterInitialLoad)
-                    }
+                }
+                if (!repositoryStateReady.isCompleted) {
+                    repositoryStateReady.complete(Unit)
+                }
+                if (pendingAfterInitialLoad != null) {
+                    persistWithoutQueue(pendingAfterInitialLoad)
                 }
             } catch (throwable: Throwable) {
                 if (throwable is CancellationException) {
@@ -119,32 +115,49 @@ class ChatStateStore(
         propagateFailure: Boolean = false,
     ) {
         persistMutex.withLock {
-            if (synchronized(updateLock) { !repositoryStateLoaded }) {
-                return@withLock
-            }
-
-            if (synchronized(updateLock) { pending.generation <= persistedGeneration }) {
-                return@withLock
-            }
+            val pendingToWrite = synchronized(updateLock) {
+                if (!repositoryStateLoaded) {
+                    return@withLock
+                }
+                val latest = latestPending
+                val candidate = if (latest != null && latest.generation >= pending.generation) {
+                    latest
+                } else {
+                    pending
+                }
+                if (candidate.generation <= persistedGeneration) {
+                    null
+                } else {
+                    candidate
+                }
+            } ?: return@withLock
 
             val persistError = runCatching {
-                chatRepository.updateChatState(
-                    sessions = pending.state.sessions,
-                    currentSessionId = pending.state.currentSessionId,
-                    writeIntent = pending.writeIntent,
-                )
+                pendingToWrite.primaryWriteIntent?.let { writeIntent ->
+                    val primaryState = checkNotNull(pendingToWrite.primaryState)
+                    chatRepository.updateChatState(
+                        sessions = primaryState.sessions,
+                        currentSessionId = primaryState.currentSessionId,
+                        writeIntent = writeIntent,
+                    )
+                }
+                if (pendingToWrite.checkpoints.isNotEmpty()) {
+                    chatRepository.upsertAssistantResponseCheckpoints(
+                        checkpoints = pendingToWrite.checkpoints.values.toList(),
+                    )
+                }
             }.exceptionOrNull()
             if (persistError != null) {
                 if (persistError is CancellationException) {
                     throw persistError
                 }
                 synchronized(updateLock) {
-                    if (latestPending == null || pending.generation >= latestPending!!.generation) {
-                        latestPending = pending
+                    if (latestPending == null || pendingToWrite.generation >= latestPending!!.generation) {
+                        latestPending = pendingToWrite
                     }
                 }
                 Log.e(ChatStateStoreLogTag, "Failed to persist chat state", persistError)
-                scheduleRetry(pending)
+                scheduleRetry(pendingToWrite)
                 if (propagateFailure) {
                     throw persistError
                 }
@@ -152,11 +165,11 @@ class ChatStateStore(
             }
 
             synchronized(updateLock) {
-                if (pending.generation > persistedGeneration) {
-                    persistedGeneration = pending.generation
+                if (pendingToWrite.generation > persistedGeneration) {
+                    persistedGeneration = pendingToWrite.generation
                 }
                 val latest = latestPending
-                if (latest != null && latest.generation <= pending.generation) {
+                if (latest != null && latest.generation <= pendingToWrite.generation) {
                     latestPending = null
                 }
             }
@@ -268,35 +281,76 @@ class ChatStateStore(
     ): PersistedChatState {
         val pending = synchronized(updateLock) {
             val updated = transform(_state.value)
+            val pendingWrite = latestPending
+            retainedCheckpoints = retainedCheckpoints.filterKeys { target ->
+                val session = updated.sessions.firstOrNull { it.id == target.sessionId }
+                session != null && session.messages.none { it.responseGroupId == target.responseGroupId }
+            }
             localGeneration += 1
             _state.value = updated
-            val effectiveWriteIntent = latestPending
-                ?.writeIntent
-                ?.takeIf { pendingIntent ->
-                    writeIntent == PersistedChatWriteIntent.SyncSnapshot &&
-                        updated.sessions.isEmpty() &&
-                        pendingIntent != PersistedChatWriteIntent.SyncSnapshot
-                }
-                ?: writeIntent
             PendingPersistedChatState(
                 generation = localGeneration,
-                state = updated,
-                writeIntent = effectiveWriteIntent,
+                primaryState = updated,
+                primaryWriteIntent = mergePrimaryWriteIntents(
+                    pendingIntent = pendingWrite?.primaryWriteIntent,
+                    writeIntent = writeIntent,
+                    updated = updated,
+                ),
+                checkpoints = retainedCheckpoints,
             ).also {
                 latestPending = it
             }
         }
+        enqueue(pending)
+        return checkNotNull(pending.primaryState)
+    }
+
+    fun updateAssistantCheckpoint(
+        checkpoint: AssistantResponseCheckpoint,
+        shouldPersist: () -> Boolean = { true },
+    ): Boolean {
+        val pending = synchronized(updateLock) {
+            if (!shouldPersist()) return false
+            retainedCheckpoints = retainedCheckpoints + (checkpoint.target to checkpoint)
+            localGeneration += 1
+            PendingPersistedChatState(
+                generation = localGeneration,
+                primaryState = latestPending?.primaryState,
+                primaryWriteIntent = latestPending?.primaryWriteIntent,
+                checkpoints = latestPending?.checkpoints.orEmpty() + (checkpoint.target to checkpoint),
+            ).also {
+                latestPending = it
+            }
+        }
+        enqueue(pending)
+        return true
+    }
+
+    private fun enqueue(pending: PendingPersistedChatState) {
         val sendResult = persistenceQueue.trySend(pending)
         if (sendResult.isFailure) {
             persistWithoutQueue(pending)
         }
-        return pending.state
+    }
+
+    private fun mergePrimaryWriteIntents(
+        pendingIntent: PersistedChatWriteIntent?,
+        writeIntent: PersistedChatWriteIntent,
+        updated: PersistedChatState,
+    ): PersistedChatWriteIntent = when {
+        pendingIntent == null -> writeIntent
+        writeIntent == PersistedChatWriteIntent.SyncSnapshot &&
+            updated.sessions.isEmpty() &&
+            (pendingIntent == PersistedChatWriteIntent.DeleteSession ||
+                pendingIntent == PersistedChatWriteIntent.ReplaceFromImport) -> pendingIntent
+        else -> writeIntent
     }
 
     private data class PendingPersistedChatState(
         val generation: Long,
-        val state: PersistedChatState,
-        val writeIntent: PersistedChatWriteIntent,
+        val primaryState: PersistedChatState?,
+        val primaryWriteIntent: PersistedChatWriteIntent?,
+        val checkpoints: Map<AssistantResponseCheckpointTarget, AssistantResponseCheckpoint>,
     )
 
     private companion object {

@@ -191,6 +191,7 @@ data class ChatMessage(
     val branchGroup: ChatBranchGroup? = null,
     val responseGroupId: String? = null,
     val assistantActionsHidden: Boolean = false,
+    val isIncomplete: Boolean = false,
     val providerPayloadJson: String = "",
     val displayKind: MessageDisplayKind = MessageDisplayKind.Standard,
     val usageStatistics: ChatUsageStatistics? = null,

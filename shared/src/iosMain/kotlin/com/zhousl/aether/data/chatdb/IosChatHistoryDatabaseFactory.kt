@@ -8,4 +8,5 @@ fun createIosChatHistoryDatabase(path: String): ChatHistoryDatabase =
     Room.databaseBuilder<ChatHistoryDatabase>(name = path)
         .setDriver(BundledSQLiteDriver())
         .setQueryCoroutineContext(Dispatchers.Default)
+        .addMigrations(*ChatHistoryMigrations)
         .build()
