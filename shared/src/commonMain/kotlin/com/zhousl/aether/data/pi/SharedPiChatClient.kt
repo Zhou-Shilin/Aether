@@ -343,7 +343,7 @@ fun LlmProviderConfig.toSharedPiModelConfig(timeoutMillis: Int = 360_000): JsonO
         put("context_window", 128_000)
         put("max_tokens", 16_384)
         put("timeout_ms", timeoutMillis.coerceIn(30_000, 3_600_000))
-        put("max_retries", 2)
+        put("max_retries", 5)
         put("max_retry_delay_ms", 60_000)
         put("auth_method", effectiveAuthMethod.storageValue)
         if (oauthCredentialJson.isNotBlank()) {

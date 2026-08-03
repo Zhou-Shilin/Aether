@@ -12,7 +12,7 @@ import java.util.Locale
 
 private const val DefaultContextWindow = 128_000
 private const val DefaultMaxTokens = 16_384
-private const val DefaultMaxRetries = 2
+private const val DefaultMaxRetries = 5
 private const val DefaultMaxRetryDelayMillis = 60_000
 
 data class PiModelConfig(

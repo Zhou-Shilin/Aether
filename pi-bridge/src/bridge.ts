@@ -10,6 +10,7 @@ import {
   fauxAssistantMessage,
   fauxProvider,
   fauxToolCall,
+  retryAssistantCall,
   type AuthContext,
   type AuthInteraction,
   type AssistantMessage,
@@ -36,10 +37,14 @@ import {
 import {
   AgentHarness,
   InMemorySessionRepo,
-  type AgentMessage,
+  runAgentLoopContinue,
+  type AgentContext,
   type AgentHarnessEvent,
+  type AgentLoopConfig,
+  type AgentMessage,
   type AgentTool,
   type AgentToolResult,
+  type StreamFn,
 } from "@earendil-works/pi-agent-core/node";
 import {
   createSyntheticSourceInfo,
@@ -77,6 +82,8 @@ const AETHER_MANUAL_OAUTH_CALLBACK_HOST = "203.0.113.1";
 const OAUTH_FETCH_MAX_ATTEMPTS = 3;
 const DEFAULT_HARNESS_SESSION_LIMIT = 8;
 const DEFAULT_HARNESS_SESSION_TTL_MS = 30 * 60 * 1000;
+const DEFAULT_AGENT_RETRY_MAX_RETRIES = 5;
+const DEFAULT_AGENT_RETRY_BASE_DELAY_MS = 2_000;
 const CUSTOM_BASE_URL_BUILTIN_PROVIDER_IDS = new Set(["openai", "anthropic"]);
 
 type JsonObject = Record<string, unknown>;
@@ -153,6 +160,7 @@ interface HarnessSessionState {
   systemPrompt: string;
   currentRequestId: string;
   toolArgsById: Map<string, unknown>;
+  agentRetryMaxRetries: number;
   lastAccessedAt: number;
 }
 
@@ -551,7 +559,7 @@ function normalizeModelConfig(rawValue: unknown): ModelConfig {
     context_window: asNumber(raw.context_window, 128000),
     max_tokens: asNumber(raw.max_tokens, 16384),
     timeout_ms: asNumber(raw.timeout_ms, 360000),
-    max_retries: asNumber(raw.max_retries, 2),
+    max_retries: Math.max(0, asNumber(raw.max_retries, DEFAULT_AGENT_RETRY_MAX_RETRIES)),
     max_retry_delay_ms: asNumber(raw.max_retry_delay_ms, 60000),
     auth_method:
       authMethod === "oauth" || authMethod === "ambient" ? authMethod : "api_key",
@@ -1016,7 +1024,7 @@ function streamOptionsFor(
     sessionId: asString(payload.session_id),
     headers: normalizeHeaders(payload.headers),
     timeoutMs: asNumber(payload.timeout_ms, config.timeout_ms ?? 360000),
-    maxRetries: asNumber(payload.max_retries, config.max_retries ?? 2),
+    maxRetries: asNumber(payload.max_retries, config.max_retries ?? 5),
     maxRetryDelayMs: asNumber(payload.max_retry_delay_ms, config.max_retry_delay_ms ?? 60000),
   };
   const temperature = payload.temperature;
@@ -1035,7 +1043,8 @@ function harnessStreamOptions(payload: JsonObject, config: ModelConfig) {
   return {
     headers: normalizeHeaders(payload.headers),
     timeoutMs: asNumber(payload.timeout_ms, config.timeout_ms ?? 360000),
-    maxRetries: asNumber(payload.max_retries, config.max_retries ?? 2),
+    // Retry failed harness turns after rewinding their session state.
+    maxRetries: 0,
     maxRetryDelayMs: asNumber(payload.max_retry_delay_ms, config.max_retry_delay_ms ?? 60000),
   };
 }
@@ -1978,6 +1987,7 @@ async function createHarnessSession(
     systemPrompt: asString(payload.system_prompt),
     currentRequestId: "",
     toolArgsById: new Map<string, unknown>(),
+    agentRetryMaxRetries: config.max_retries ?? DEFAULT_AGENT_RETRY_MAX_RETRIES,
     lastAccessedAt: Date.now(),
   };
   state.hostTools = normalizeHostToolDefinitions(payload.host_tools).map((tool) =>
@@ -2040,6 +2050,7 @@ async function prepareHarnessSession(
   const reusable = existing;
   reusable.lastAccessedAt = Date.now();
   reusable.systemPrompt = asString(payload.system_prompt);
+  reusable.agentRetryMaxRetries = config.max_retries ?? DEFAULT_AGENT_RETRY_MAX_RETRIES;
   reusable.configuredExtensionPaths = Array.isArray(payload.extension_paths)
     ? payload.extension_paths.filter((value): value is string => typeof value === "string")
     : [];
@@ -2052,6 +2063,127 @@ async function prepareHarnessSession(
   return { state: reusable, reused: true };
 }
 
+// TODO(pi-agent-core): use public continue API when available; pin private helpers for 0.83.0.
+const HARNESS_RETRY_METHODS = [
+  "createTurnState",
+  "createContext",
+  "createLoopConfig",
+  "createStreamFn",
+  "handleAgentEvent",
+] as const;
+
+type HarnessRetryMethodName = (typeof HARNESS_RETRY_METHODS)[number];
+
+type HarnessRetryInternals = {
+  createTurnState: () => Promise<{ messages: AgentMessage[]; [key: string]: unknown }>;
+  createContext: (turnState: unknown) => AgentContext;
+  createLoopConfig: (
+    getTurnState: () => unknown,
+    setTurnState: (turnState: unknown) => void,
+  ) => AgentLoopConfig;
+  createStreamFn: (getTurnState: () => unknown) => StreamFn;
+  handleAgentEvent: (event: AgentHarnessEvent, signal?: AbortSignal) => Promise<void>;
+};
+
+function assertAgentCoreRetrySurface(): void {
+  if (typeof runAgentLoopContinue !== "function") {
+    throw new Error(
+      `Pi agent retry requires runAgentLoopContinue from @earendil-works/pi-agent-core@${PI_AGENT_CORE_VERSION}.`,
+    );
+  }
+  const proto = AgentHarness.prototype as unknown as Record<string, unknown>;
+  for (const methodName of HARNESS_RETRY_METHODS) {
+    if (typeof proto[methodName] !== "function") {
+      throw new Error(
+        `Pi agent retry requires AgentHarness.${methodName}(); ` +
+          `it is not available on @earendil-works/pi-agent-core@${PI_AGENT_CORE_VERSION}.`,
+      );
+    }
+  }
+}
+
+function harnessRetryMethod<K extends HarnessRetryMethodName>(
+  harness: AgentHarness,
+  methodName: K,
+): HarnessRetryInternals[K] {
+  const proto = AgentHarness.prototype as unknown as Record<string, unknown>;
+  const method = proto[methodName];
+  if (typeof method !== "function") {
+    throw new Error(
+      `Pi agent retry requires AgentHarness.${methodName}(); ` +
+        `it is not available on @earendil-works/pi-agent-core@${PI_AGENT_CORE_VERSION}.`,
+    );
+  }
+  return (method as (...args: unknown[]) => unknown).bind(harness) as HarnessRetryInternals[K];
+}
+
+function harnessRetryInternals(harness: AgentHarness): HarnessRetryInternals {
+  assertAgentCoreRetrySurface();
+  return {
+    createTurnState: harnessRetryMethod(harness, "createTurnState"),
+    createContext: harnessRetryMethod(harness, "createContext"),
+    createLoopConfig: harnessRetryMethod(harness, "createLoopConfig"),
+    createStreamFn: harnessRetryMethod(harness, "createStreamFn"),
+    handleAgentEvent: harnessRetryMethod(harness, "handleAgentEvent"),
+  };
+}
+
+async function continueHarnessTurn(
+  state: HarnessSessionState,
+  signal: AbortSignal,
+): Promise<AssistantMessage> {
+  const harness = harnessRetryInternals(state.harness);
+  const branch = await state.session.getBranch();
+  const failedEntry = [...branch]
+    .reverse()
+    .find(
+      (entry) =>
+        entry.type === "message" &&
+        entry.message.role === "assistant" &&
+        entry.message.stopReason === "error",
+    );
+  if (!failedEntry || failedEntry.type !== "message") {
+    throw new Error("Pi retry requires a failed assistant message in the active session branch.");
+  }
+
+  await state.session.moveTo(failedEntry.parentId);
+  const extensionBranch = state.extensionRuntime.sessionManager.getBranch();
+  const extensionFailure = [...extensionBranch]
+    .reverse()
+    .find(
+      (entry) =>
+        entry.type === "message" &&
+        entry.message.role === "assistant" &&
+        entry.message.stopReason === "error",
+    );
+  if (extensionFailure?.type === "message") {
+    if (extensionFailure.parentId) {
+      state.extensionRuntime.sessionManager.branch(extensionFailure.parentId);
+    } else {
+      state.extensionRuntime.sessionManager.resetLeaf();
+    }
+  }
+
+  const turnState = await harness.createTurnState();
+  let activeTurnState: unknown = turnState;
+  const getTurnState = () => activeTurnState;
+  const setTurnState = (nextTurnState: unknown) => {
+    activeTurnState = nextTurnState;
+  };
+  const messages = await runAgentLoopContinue(
+    harness.createContext(turnState),
+    harness.createLoopConfig(getTurnState, setTurnState),
+    (event) => harness.handleAgentEvent(event, signal),
+    signal,
+    harness.createStreamFn(getTurnState),
+  );
+  const message = [...messages]
+    .reverse()
+    .find((entry): entry is AssistantMessage => entry.role === "assistant");
+  if (!message) throw new Error("Pi retry completed without an assistant message.");
+  return message;
+}
+
 async function runHarnessPrompt(
   id: string,
   state: HarnessSessionState,
@@ -2060,11 +2192,33 @@ async function runHarnessPrompt(
 ): Promise<AssistantMessage> {
   state.lastAccessedAt = Date.now();
   state.currentRequestId = id;
-  activeAborters.set(id, () => state.harness.abort());
+  const retryAbortController = new AbortController();
+  activeAborters.set(id, () => {
+    retryAbortController.abort();
+    return state.harness.abort();
+  });
   try {
-    const message = await state.harness.prompt(text, images.length > 0 ? { images } : undefined);
-    await state.harness.waitForIdle();
-    return message;
+    let firstAttempt = true;
+    return await retryAssistantCall(
+      async () => {
+        if (firstAttempt) {
+          firstAttempt = false;
+          const firstMessage = await state.harness.prompt(
+            text,
+            images.length > 0 ? { images } : undefined,
+          );
+          await state.harness.waitForIdle();
+          return firstMessage;
+        }
+        return continueHarnessTurn(state, retryAbortController.signal);
+      },
+      {
+        enabled: state.agentRetryMaxRetries > 0,
+        maxRetries: state.agentRetryMaxRetries,
+        baseDelayMs: DEFAULT_AGENT_RETRY_BASE_DELAY_MS,
+      },
+      retryAbortController.signal,
+    );
   } finally {
     activeAborters.delete(id);
     if (state.currentRequestId === id) state.currentRequestId = "";
