@@ -51,7 +51,6 @@ data class ChatMessageEntity(
     val displayKind: String? = null,
     val messageSchemaVersion: Int = 1,
     val hasUsageStatistics: Boolean = false,
-    val isIncomplete: Boolean = false,
 )
 
 data class ChatMessageSummaryEntity(
@@ -65,7 +64,6 @@ data class ChatMessageSummaryEntity(
     val displayKind: String? = null,
     val messageSchemaVersion: Int = 1,
     val messageJsonLength: Int? = null,
-    val isIncomplete: Boolean = false,
 )
 
 data class ChatSessionMessageStatsEntity(
@@ -120,3 +118,4 @@ data class ChatSessionSnapshot(
     val messages: List<ChatMessageEntity>,
     val workspaceFileRefs: List<ChatWorkspaceFileRefEntity> = emptyList(),
 )
+

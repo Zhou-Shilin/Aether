@@ -383,7 +383,6 @@ class SharedChatHistoryStore(
                     responseGroupId = message.responseGroupId.ifBlank { null },
                     displayKind = message.displayKind.name,
                     hasUsageStatistics = message.usage != null,
-                    isIncomplete = false,
                 )
             }
         }
@@ -450,7 +449,6 @@ class SharedChatHistoryStore(
                     responseGroupId = message.responseGroupId.ifBlank { null },
                     displayKind = message.displayKind.name,
                     hasUsageStatistics = message.usage != null,
-                    isIncomplete = false,
                 )
             }
         )

@@ -23,13 +23,11 @@ import com.zhousl.aether.ui.MessageAuthor
 import com.zhousl.aether.ui.ReasoningSummaryChunk
 import com.zhousl.aether.ui.ReasoningTrace
 import com.zhousl.aether.ui.syncActiveBranches
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -43,7 +41,6 @@ import org.json.JSONObject
 
 private const val ReasoningInitialSummaryTokenThreshold = 100
 private const val ReasoningTimedSummaryIntervalMillis = 5_000L
-private const val AssistantCheckpointIntervalMillis = 1_000L
 private const val ReasoningSummaryMaxInputChars = 8_000
 private const val ReasoningSummaryTitleMaxChars = 120
 private const val ReasoningSummaryDetailMaxChars = 520
@@ -78,7 +75,6 @@ data class SessionExecutionState(
     val pendingStatusText: String = "",
     val pendingStatusDetail: String = "",
     val pendingInputs: List<PendingSessionInput> = emptyList(),
-    val activeResponseGroupId: String? = null,
     val activeTurnStartedAtMillis: Long? = null,
 )
 
@@ -116,15 +112,6 @@ private data class ReasoningSummary(
     val title: String,
     val detail: String,
 )
-
-private data class AssistantResponseIdentity(
-    val responseGroupId: String,
-    val messageIdPrefix: String,
-    val createdAtMillis: Long,
-    val checkpointFromPosition: Int,
-) {
-    fun messageIdFor(blockId: String): String = "$messageIdPrefix-$blockId"
-}
 
 class SessionExecutionManager(
     private val application: Application,
@@ -221,7 +208,6 @@ class SessionExecutionManager(
                 pendingAssistantText = "",
                 pendingStatusText = "",
                 pendingStatusDetail = "",
-                activeResponseGroupId = null,
                 activeTurnStartedAtMillis = System.currentTimeMillis(),
             )
         }
@@ -283,7 +269,6 @@ class SessionExecutionManager(
             handle = handle,
             snapshot = snapshot ?: SessionExecutionState(sessionId = sessionId),
         )
-        deactivateAssistantCheckpoint(handle, handle.activeResponseIdentity)
         scope.launch(Dispatchers.IO) {
             runCatching { chatStateStore.flush() }
         }
@@ -299,7 +284,6 @@ class SessionExecutionManager(
                 pendingStatusText = "",
                 pendingStatusDetail = "",
                 pendingInputs = emptyList(),
-                activeResponseGroupId = null,
                 activeTurnStartedAtMillis = null,
             )
         }
@@ -424,7 +408,6 @@ class SessionExecutionManager(
                 )
             }
         } finally {
-            deactivateAssistantCheckpoint(handle, handle.activeResponseIdentity)
             clearPendingInputs(handle)
             if (executionHandles.remove(handle.sessionId, handle)) {
                 updateExecutionState(handle.sessionId) {
@@ -437,7 +420,6 @@ class SessionExecutionManager(
                         pendingStatusText = "",
                         pendingStatusDetail = "",
                         pendingInputs = emptyList(),
-                        activeResponseGroupId = null,
                         activeTurnStartedAtMillis = null,
                     )
                 }
@@ -465,17 +447,6 @@ class SessionExecutionManager(
     ): CompletionSummary {
         val turnStartedAtMillis = System.currentTimeMillis()
         val turnId = "turn-$turnStartedAtMillis"
-        val responseIdentity = activateAssistantResponse(handle)
-        updateExecutionState(handle.sessionId) { current ->
-            current.copy(
-                activeResponseGroupId = responseIdentity.responseGroupId,
-                pendingToolInvocations = emptyList(),
-                pendingResponseBlocks = emptyList(),
-                pendingAssistantText = "",
-                pendingStatusText = "",
-                pendingStatusDetail = "",
-            )
-        }
         var firstAssistantTokenAtMillis: Long? = null
         diagnosticLogger.event(
             category = "session",
@@ -838,7 +809,6 @@ class SessionExecutionManager(
                         pendingToolInvocations = emptyList(),
                         pendingResponseBlocks = emptyList(),
                         pendingAssistantText = "",
-                        activeResponseGroupId = null,
                         activeTurnStartedAtMillis = null,
                     )
                 }
@@ -952,14 +922,10 @@ class SessionExecutionManager(
             .orEmpty()
 
         val normalizedBlocks = normalizeAssistantResponseBlocks(blocks)
-        val responseIdentity = handle?.activeResponseIdentity
         val appendedMessages = assistantMessagesForBlocks(
             normalizedBlocks = normalizedBlocks,
             thoughtDurationMillis = thoughtDurationMillis,
             assistantActionsHidden = false,
-            isIncomplete = false,
-            responseIdentity = responseIdentity,
-            messageCreatedAtMillis = turnCompletedAtMillis,
             usageStatistics = buildChatUsageStatistics(
                 tokenUsage = tokenUsage,
                 tokenUsageSource = tokenUsageSource,
@@ -970,7 +936,6 @@ class SessionExecutionManager(
             providerPayloadJson = providerPayloadJson,
         )
 
-        deactivateAssistantCheckpoint(handle, responseIdentity)
         chatStateStore.update { persisted ->
             val sessionIndex = persisted.sessions.indexOfFirst { it.id == sessionId }
             if (sessionIndex < 0) return@update persisted
@@ -978,11 +943,8 @@ class SessionExecutionManager(
             val updatedSessions = persisted.sessions.toMutableList()
             val session = updatedSessions.removeAt(sessionIndex)
             val currentMessages = session.messages.ifEmpty { baseMessages }
-            val messagesWithoutCheckpoint = responseIdentity?.let { identity ->
-                currentMessages.filterNot { it.responseGroupId == identity.responseGroupId }
-            } ?: currentMessages
             val updatedSession = session.withDerivedMessages(
-                messagesWithoutCheckpoint + appendedMessages
+                currentMessages + appendedMessages
             )
             handle?.replaceRetainedMessages(updatedSession.messages)
             sessionTitle = updatedSession.title
@@ -1090,53 +1052,15 @@ class SessionExecutionManager(
         }
     }
 
-    private fun activateAssistantResponse(handle: SessionExecutionHandle): AssistantResponseIdentity {
-        val startedAtMillis = System.currentTimeMillis()
-        val turnId = "turn-$startedAtMillis-${UUID.randomUUID().toString().take(8)}"
-        return AssistantResponseIdentity(
-            responseGroupId = "agent-group-$turnId",
-            messageIdPrefix = "agent-$turnId",
-            createdAtMillis = startedAtMillis,
-            checkpointFromPosition = syncActiveBranches(handle.retainedMessagesSnapshot()).size,
-        ).also { identity ->
-            synchronized(handle.lock) {
-                handle.assistantCheckpointJob?.cancel()
-                handle.assistantCheckpointJob = null
-                handle.lastAssistantCheckpointUptimeMillis = null
-                handle.activeResponseIdentity = identity
-            }
-        }
-    }
-
-    private fun deactivateAssistantCheckpoint(
-        handle: SessionExecutionHandle?,
-        identity: AssistantResponseIdentity?,
-    ) {
-        if (handle == null || identity == null) return
-        synchronized(handle.lock) {
-            if (handle.activeResponseIdentity != identity) return
-            handle.activeResponseIdentity = null
-            handle.assistantCheckpointJob?.cancel()
-            handle.assistantCheckpointJob = null
-        }
-    }
-
     private fun assistantMessagesForBlocks(
         normalizedBlocks: List<AssistantResponseBlock>,
         thoughtDurationMillis: Long?,
         assistantActionsHidden: Boolean,
-        isIncomplete: Boolean = false,
-        responseIdentity: AssistantResponseIdentity? = null,
-        messageCreatedAtMillis: Long? = null,
         usageStatistics: ChatUsageStatistics? = null,
         providerPayloadJson: String = "",
     ): List<ChatMessage> {
-        val messageTimestamp = if (isIncomplete) {
-            responseIdentity?.createdAtMillis ?: messageCreatedAtMillis ?: System.currentTimeMillis()
-        } else {
-            messageCreatedAtMillis ?: System.currentTimeMillis()
-        }
-        val responseGroupId = responseIdentity?.responseGroupId ?: "agent-group-$messageTimestamp"
+        val messageTimestamp = System.currentTimeMillis()
+        val responseGroupId = "agent-group-$messageTimestamp"
         return normalizedBlocks.mapIndexedNotNull { index, block ->
             when (block) {
                 is AssistantResponseBlock.Text -> {
@@ -1144,13 +1068,12 @@ class SessionExecutionManager(
                         null
                     } else {
                         ChatMessage(
-                            id = responseIdentity?.messageIdFor(block.id) ?: "agent-${messageTimestamp + index}",
+                            id = "agent-${messageTimestamp + index}",
                             author = MessageAuthor.Agent,
                             text = block.text,
                             createdAtMillis = messageTimestamp + index,
                             responseGroupId = responseGroupId,
                             assistantActionsHidden = assistantActionsHidden,
-                            isIncomplete = isIncomplete,
                         )
                     }
                 }
@@ -1160,21 +1083,20 @@ class SessionExecutionManager(
                         null
                     } else {
                         ChatMessage(
-                            id = responseIdentity?.messageIdFor(block.id) ?: "agent-${messageTimestamp + index}",
+                            id = "agent-${messageTimestamp + index}",
                             author = MessageAuthor.Agent,
                             text = "",
                             createdAtMillis = messageTimestamp + index,
                             toolInvocations = block.toolInvocations,
                             responseGroupId = responseGroupId,
                             assistantActionsHidden = assistantActionsHidden,
-                            isIncomplete = isIncomplete,
                         )
                     }
                 }
 
                 is AssistantResponseBlock.Reasoning -> {
                     ChatMessage(
-                        id = responseIdentity?.messageIdFor(block.id) ?: "agent-${messageTimestamp + index}",
+                        id = "agent-${messageTimestamp + index}",
                         author = MessageAuthor.Agent,
                         text = "",
                         createdAtMillis = messageTimestamp + index,
@@ -1182,7 +1104,6 @@ class SessionExecutionManager(
                         reasoningTrace = block.trace,
                         responseGroupId = responseGroupId,
                         assistantActionsHidden = assistantActionsHidden,
-                        isIncomplete = isIncomplete,
                     )
                 }
             }
@@ -1324,15 +1245,12 @@ class SessionExecutionManager(
                 }
             }
         }
-        val responseIdentity = handle.activeResponseIdentity
         val interruptedAssistantMessages = assistantMessagesForBlocks(
             normalizedBlocks = normalizeAssistantResponseBlocks(pendingBlocks),
             thoughtDurationMillis = null,
             assistantActionsHidden = true,
-            responseIdentity = responseIdentity,
         )
         val userMessages = drained.map { it.message }
-        deactivateAssistantCheckpoint(handle, responseIdentity)
         chatStateStore.update { persisted ->
             val sessionIndex = persisted.sessions.indexOfFirst { it.id == handle.sessionId }
             if (sessionIndex < 0) return@update persisted
@@ -1340,11 +1258,8 @@ class SessionExecutionManager(
             val updatedSessions = persisted.sessions.toMutableList()
             val session = updatedSessions.removeAt(sessionIndex)
             val currentMessages = session.messages.ifEmpty { handle.retainedMessagesSnapshot() }
-            val messagesWithoutCheckpoint = responseIdentity?.let { identity ->
-                currentMessages.filterNot { it.responseGroupId == identity.responseGroupId }
-            } ?: currentMessages
             val updatedSession = session.withDerivedMessages(
-                syncActiveBranches(messagesWithoutCheckpoint + interruptedAssistantMessages + userMessages)
+                syncActiveBranches(currentMessages + interruptedAssistantMessages + userMessages)
             )
             handle.replaceRetainedMessages(updatedSession.messages)
             updatedSessions.add(
@@ -1361,10 +1276,6 @@ class SessionExecutionManager(
                 pendingStatusText = "",
                 pendingStatusDetail = "",
             )
-        }
-        val continuedResponseIdentity = activateAssistantResponse(handle)
-        updateExecutionState(handle.sessionId) { current ->
-            current.copy(activeResponseGroupId = continuedResponseIdentity.responseGroupId)
         }
     }
 
@@ -1462,77 +1373,12 @@ class SessionExecutionManager(
                 put(sessionId, transform(current))
             }
         }
-        requestAssistantCheckpoint(sessionId)
         if (
             currentSettings.value.keepTasksRunningInBackground &&
             _executionStates.value.values.any { it.isRunning }
         ) {
             ensureForegroundServiceRunning()
         }
-    }
-
-    private fun requestAssistantCheckpoint(sessionId: String) {
-        val handle = executionHandles[sessionId] ?: return
-        val identity = handle.activeResponseIdentity ?: return
-        val blocks = _executionStates.value[sessionId]?.pendingResponseBlocks.orEmpty()
-        if (blocks.isEmpty()) return
-
-        val nowUptimeMillis = SystemClock.uptimeMillis()
-        var persistNow = false
-        synchronized(handle.lock) {
-            if (handle.activeResponseIdentity != identity) return
-            val remainingMillis = handle.lastAssistantCheckpointUptimeMillis?.let { lastCheckpointUptimeMillis ->
-                AssistantCheckpointIntervalMillis - (nowUptimeMillis - lastCheckpointUptimeMillis)
-            } ?: 0L
-            if (remainingMillis <= 0L) {
-                handle.lastAssistantCheckpointUptimeMillis = nowUptimeMillis
-                handle.assistantCheckpointJob?.cancel()
-                handle.assistantCheckpointJob = null
-                persistNow = true
-            } else if (handle.assistantCheckpointJob?.isActive != true) {
-                handle.assistantCheckpointJob = scope.launch {
-                    delay(remainingMillis)
-                    persistAssistantCheckpoint(handle, identity)
-                }
-            }
-        }
-        if (persistNow) {
-            persistAssistantCheckpoint(handle, identity)
-        }
-    }
-
-    private fun persistAssistantCheckpoint(
-        handle: SessionExecutionHandle,
-        identity: AssistantResponseIdentity,
-    ) {
-        val blocks = _executionStates.value[handle.sessionId]?.pendingResponseBlocks.orEmpty()
-        if (blocks.isEmpty() || handle.activeResponseIdentity != identity) return
-        synchronized(handle.lock) {
-            if (handle.activeResponseIdentity != identity) return
-            handle.lastAssistantCheckpointUptimeMillis = SystemClock.uptimeMillis()
-            handle.assistantCheckpointJob = null
-        }
-        val checkpointMessages = assistantMessagesForBlocks(
-            normalizedBlocks = normalizeAssistantResponseBlocks(blocks),
-            thoughtDurationMillis = null,
-            assistantActionsHidden = false,
-            isIncomplete = true,
-            responseIdentity = identity,
-        )
-        if (checkpointMessages.isEmpty()) return
-
-        chatStateStore.updateAssistantCheckpoint(
-            checkpoint = AssistantResponseCheckpoint(
-                target = AssistantResponseCheckpointTarget(
-                    sessionId = handle.sessionId,
-                    responseGroupId = identity.responseGroupId,
-                ),
-                fromPosition = identity.checkpointFromPosition,
-                messages = checkpointMessages,
-            ),
-            // Ignore checkpoints that race with response completion.
-            shouldPersist = { handle.activeResponseIdentity == identity },
-        )
     }
 
     private fun ensureForegroundServiceRunning() {
@@ -2711,10 +2557,6 @@ class SessionExecutionManager(
         var reasoningFirstSummarySubmitted: Boolean = false
         var reasoningLastSubmittedCharIndex: Int = 0
         var reasoningLastTimedSummaryAtMillis: Long = 0L
-        @Volatile
-        var activeResponseIdentity: AssistantResponseIdentity? = null
-        var lastAssistantCheckpointUptimeMillis: Long? = null
-        var assistantCheckpointJob: Job? = null
 
         @Volatile
         var pauseRequested: Boolean = false

@@ -1,6 +1,5 @@
 package com.zhousl.aether.data
 
-import com.zhousl.aether.data.chatdb.ChatMessageEntity
 import com.zhousl.aether.data.chatdb.ChatMessageSummaryEntity
 import com.zhousl.aether.ui.AttachmentKind
 import com.zhousl.aether.ui.ChatAttachment
@@ -113,7 +112,6 @@ class ChatRepositorySerializationTest {
                 author = MessageAuthor.Agent.name,
                 text = "Recovered from typed columns",
                 createdAtMillis = 123L,
-                isIncomplete = true,
             )
         )
 
@@ -121,47 +119,8 @@ class ChatRepositorySerializationTest {
         assertEquals(MessageAuthor.Agent, message.author)
         assertEquals("Recovered from typed columns", message.text)
         assertEquals(123L, message.createdAtMillis)
-        assertTrue(message.isIncomplete)
         assertTrue(message.toolInvocations.isEmpty())
         assertTrue(message.providerPayloadJson.isNullOrBlank())
-    }
-
-    @Test
-    fun entityFallbackPreservesStoredIncompleteFlag() {
-        val message = ChatMessageEntityMapper.toChatMessage(
-            ChatMessageEntity(
-                sessionId = "session-1",
-                id = "agent-1",
-                position = 0,
-                messageJson = "{not-valid-json",
-                author = MessageAuthor.Agent.name,
-                text = "Partial response",
-                isIncomplete = true,
-            ),
-            messageIndex = 0,
-        )
-
-        assertEquals("agent-1", message.id)
-        assertEquals("Partial response", message.text)
-        assertTrue(message.isIncomplete)
-    }
-
-    @Test
-    fun entityMappingUsesStoredIncompleteColumnAsAuthority() {
-        val message = ChatMessageEntityMapper.toChatMessage(
-            ChatMessageEntity(
-                sessionId = "session-1",
-                id = "agent-1",
-                position = 0,
-                messageJson = "{\"id\":\"agent-1\",\"isIncomplete\":true}",
-                author = MessageAuthor.Agent.name,
-                text = "Complete response",
-                isIncomplete = false,
-            ),
-            messageIndex = 0,
-        )
-
-        assertFalse(message.isIncomplete)
     }
 
     @Test
@@ -193,34 +152,6 @@ class ChatRepositorySerializationTest {
 
         assertFalse(result.recoveredFromCorruption)
         assertEquals("session-1", result.sessions.single().id)
-    }
-
-    @Test
-    fun sessionRoundTripPreservesIncompleteStreamingCheckpoint() {
-        val serialized = serializeChatSessions(
-            listOf(
-                ChatSession(
-                    id = "session-checkpoint",
-                    title = "Checkpoint",
-                    preview = "partial",
-                    messages = listOf(
-                        ChatMessage(
-                            id = "agent-checkpoint",
-                            author = MessageAuthor.Agent,
-                            text = "partial output",
-                            isIncomplete = true,
-                            responseGroupId = "agent-group-turn-1",
-                        )
-                    ),
-                )
-            )
-        )
-
-        val restored = parseChatSessions(serialized).single().messages.single()
-
-        assertTrue(restored.isIncomplete)
-        assertEquals("partial output", restored.text)
-        assertEquals("agent-group-turn-1", restored.responseGroupId)
     }
 
     @Test

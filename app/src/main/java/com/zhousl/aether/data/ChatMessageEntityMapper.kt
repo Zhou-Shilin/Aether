@@ -38,15 +38,14 @@ internal object ChatMessageEntityMapper {
         displayKind = message.displayKind.name,
         messageSchemaVersion = CurrentMessageSchemaVersion,
         hasUsageStatistics = message.usageStatistics != null,
-        isIncomplete = message.isIncomplete,
     )
 
     fun toChatMessage(
         entity: ChatMessageEntity,
         messageIndex: Int,
     ): ChatMessage = runCatching {
-        // The typed column is authoritative while messageJson remains a compatibility payload.
-        parseMessage(JSONObject(entity.messageJson), messageIndex).withStoredIncompleteFlag(entity.isIncomplete)
+        // Keep messageJson as the compatibility source of truth during the typed-column transition.
+        parseMessage(JSONObject(entity.messageJson), messageIndex)
     }.getOrElse { throwable ->
         ChatMessage(
             id = entity.id,
@@ -57,7 +56,6 @@ internal object ChatMessageEntityMapper {
             },
             createdAtMillis = entity.createdAtMillis ?: timestampFromMessageId(entity.id),
             responseGroupId = entity.responseGroupId,
-            isIncomplete = entity.isIncomplete,
             providerPayloadJson = entity.messageJson,
             displayKind = entity.displayKind.toMessageDisplayKind(),
         )
@@ -69,12 +67,8 @@ internal object ChatMessageEntityMapper {
         text = entity.text,
         createdAtMillis = entity.createdAtMillis ?: timestampFromMessageId(entity.id),
         responseGroupId = entity.responseGroupId,
-        isIncomplete = entity.isIncomplete,
         displayKind = entity.displayKind.toMessageDisplayKind(),
     )
-
-    private fun ChatMessage.withStoredIncompleteFlag(isIncomplete: Boolean): ChatMessage =
-        if (isIncomplete != this.isIncomplete) copy(isIncomplete = isIncomplete) else this
 
     private fun String?.toMessageDisplayKind(): MessageDisplayKind =
         MessageDisplayKind.entries.firstOrNull { it.name == this } ?: MessageDisplayKind.Standard

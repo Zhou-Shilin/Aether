@@ -45,13 +45,6 @@ interface ChatHistoryDao {
     @Query("SELECT COUNT(*) FROM chat_messages WHERE sessionId = :sessionId")
     suspend fun getMessageCountForSession(sessionId: String): Int
 
-    @Query("SELECT COUNT(*) FROM chat_messages WHERE sessionId = :sessionId AND responseGroupId = :responseGroupId AND position >= :fromPosition")
-    suspend fun getMessageCountForResponseGroup(
-        sessionId: String,
-        responseGroupId: String,
-        fromPosition: Int,
-    ): Int
-
     @Query("SELECT * FROM chat_messages WHERE sessionId = :sessionId ORDER BY position ASC")
     suspend fun getMessagesForSession(sessionId: String): List<ChatMessageEntity>
 
@@ -72,7 +65,7 @@ interface ChatHistoryDao {
     fun observeMessageStatsForSessions(sessionIds: List<String>): Flow<List<ChatSessionMessageStatsEntity>>
 
     @Query("""
-        SELECT sessionId, id, position, author, text, createdAtMillis, responseGroupId, displayKind, messageSchemaVersion, length(messageJson) AS messageJsonLength, isIncomplete
+        SELECT sessionId, id, position, author, text, createdAtMillis, responseGroupId, displayKind, messageSchemaVersion, length(messageJson) AS messageJsonLength
         FROM chat_messages
         WHERE hasUsageStatistics = 1
         ORDER BY sessionId ASC, position ASC
@@ -80,7 +73,7 @@ interface ChatHistoryDao {
     suspend fun getUsageStatisticsMessageSummaries(): List<ChatMessageSummaryEntity>
 
     @Query("""
-        SELECT sessionId, id, position, author, text, createdAtMillis, responseGroupId, displayKind, messageSchemaVersion, length(messageJson) AS messageJsonLength, isIncomplete
+        SELECT sessionId, id, position, author, text, createdAtMillis, responseGroupId, displayKind, messageSchemaVersion, length(messageJson) AS messageJsonLength
         FROM chat_messages
         WHERE sessionId = :sessionId
         ORDER BY position ASC
@@ -88,7 +81,7 @@ interface ChatHistoryDao {
     fun observeMessageSummariesForSession(sessionId: String): Flow<List<ChatMessageSummaryEntity>>
 
     @Query("""
-        SELECT sessionId, id, position, author, text, createdAtMillis, responseGroupId, displayKind, messageSchemaVersion, length(messageJson) AS messageJsonLength, isIncomplete
+        SELECT sessionId, id, position, author, text, createdAtMillis, responseGroupId, displayKind, messageSchemaVersion, length(messageJson) AS messageJsonLength
         FROM chat_messages
         WHERE sessionId IN (:sessionIds)
         ORDER BY sessionId ASC, position ASC
@@ -171,13 +164,6 @@ interface ChatHistoryDao {
     @Query("DELETE FROM chat_workspace_file_refs WHERE sessionId = :sessionId AND messageId = :messageId")
     suspend fun deleteWorkspaceFileRefsForMessage(sessionId: String, messageId: String)
 
-    @Query("DELETE FROM chat_workspace_file_refs WHERE sessionId = :sessionId AND messageId IN (SELECT id FROM chat_messages WHERE sessionId = :sessionId AND responseGroupId = :responseGroupId AND position >= :fromPosition)")
-    suspend fun deleteWorkspaceFileRefsForResponseGroup(
-        sessionId: String,
-        responseGroupId: String,
-        fromPosition: Int,
-    )
-
     @Query("DELETE FROM chat_workspace_file_refs WHERE sessionId = :sessionId AND messageId IN (SELECT id FROM chat_messages WHERE sessionId = :sessionId AND position >= :fromPosition)")
     suspend fun deleteWorkspaceFileRefsFromPosition(sessionId: String, fromPosition: Int)
 
@@ -192,63 +178,6 @@ interface ChatHistoryDao {
 
     @Query("DELETE FROM chat_messages WHERE sessionId = :sessionId AND position >= :fromPosition")
     suspend fun deleteMessagesFromPosition(sessionId: String, fromPosition: Int)
-
-    @Query("DELETE FROM chat_messages WHERE sessionId = :sessionId AND responseGroupId = :responseGroupId AND position >= :fromPosition")
-    suspend fun deleteMessagesForResponseGroup(
-        sessionId: String,
-        responseGroupId: String,
-        fromPosition: Int,
-    )
-
-    @Query("""
-        SELECT id
-        FROM chat_messages
-        WHERE sessionId = :sessionId
-            AND position >= :fromPosition
-            AND position < :toPosition
-            AND (responseGroupId IS NULL OR responseGroupId != :responseGroupId)
-    """)
-    suspend fun getMessageIdsToParkOutsideResponseGroup(
-        sessionId: String,
-        responseGroupId: String,
-        fromPosition: Int,
-        toPosition: Int,
-    ): List<String>
-
-    @Query("""
-        UPDATE chat_messages
-        SET position = -position - 1
-        WHERE sessionId = :sessionId
-            AND position >= :fromPosition
-            AND position < :toPosition
-            AND (responseGroupId IS NULL OR responseGroupId != :responseGroupId)
-    """)
-    suspend fun parkMessagesFromPositionOutsideResponseGroup(
-        sessionId: String,
-        responseGroupId: String,
-        fromPosition: Int,
-        toPosition: Int,
-    )
-
-    @Query("""
-        UPDATE chat_messages
-        SET position = (-position - 1) + :positionDelta
-        WHERE sessionId = :sessionId
-            AND id IN (:parkedMessageIds)
-            AND position >= (0 - :toPosition)
-            AND position <= (0 - :fromPosition) - 1
-            AND (-position - 1) + :positionDelta >= :checkpointEndPosition
-            AND (responseGroupId IS NULL OR responseGroupId != :responseGroupId)
-    """)
-    suspend fun restoreParkedMessagesOutsideResponseGroup(
-        sessionId: String,
-        responseGroupId: String,
-        fromPosition: Int,
-        toPosition: Int,
-        checkpointEndPosition: Int,
-        parkedMessageIds: List<String>,
-        positionDelta: Int,
-    )
 
     @Query("DELETE FROM chat_sessions WHERE id = :sessionId")
     suspend fun deleteSession(sessionId: String)
