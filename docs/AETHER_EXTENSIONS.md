@@ -180,7 +180,10 @@ Surfaces add content without replacing the built-in UI.
 | `chat.list.end` | After messages and pending work |
 | `chat.composer.top` | Directly above the composer |
 | `settings.hub` | Top of the settings hub |
-| `drawer` | Conversation drawer |
+| `drawer.header` | Fixed below the drawer title and search controls |
+| `drawer.footer` | Fixed full-width content above the floating new-chat action |
+| `drawer.list.end` | After the conversation list |
+| `drawer` | Legacy conversation-drawer list content |
 
 ```ts
 aether.registerSurface("chat.composer.top", {
@@ -192,6 +195,21 @@ aether.registerSurface("chat.composer.top", {
       ui.text(`${String(draft_input).length} chars`),
       ui.text(`Count: ${storage.count ?? 0}`),
     ]),
+});
+```
+
+The drawer header and footer remain fixed while the conversation list scrolls.
+The legacy `drawer` slot remains supported and is rendered at the list tail in
+this order: `drawer`, `drawer.list.end`, then built-in extension page launchers.
+
+The `drawer.opened` event carries an empty event payload and the current
+extension context. On mobile it fires once for each closed-to-open transition,
+including swipe gestures. On tablet it fires once when the permanent drawer
+enters composition; stable-open recomposition does not repeat it.
+
+```ts
+aether.on("drawer.opened", (_data, context) => {
+  aether.notify(`Drawer opened on ${context.screen}`);
 });
 ```
 

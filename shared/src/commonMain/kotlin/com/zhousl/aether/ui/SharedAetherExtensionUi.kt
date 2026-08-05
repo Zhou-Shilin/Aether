@@ -105,6 +105,9 @@ const val SharedExtensionSlotChatListEnd = "chat.list.end"
 const val SharedExtensionSlotChatComposerTop = "chat.composer.top"
 const val SharedExtensionSlotSettingsHub = "settings.hub"
 const val SharedExtensionSlotDrawer = "drawer"
+const val SharedExtensionSlotDrawerHeader = "drawer.header"
+const val SharedExtensionSlotDrawerFooter = "drawer.footer"
+const val SharedExtensionSlotDrawerListEnd = "drawer.list.end"
 
 @Immutable
 data class SharedAetherExtensionUiController(

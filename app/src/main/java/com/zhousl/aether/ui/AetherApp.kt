@@ -67,6 +67,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -85,8 +86,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -139,7 +142,9 @@ import com.zhousl.aether.ui.theme.AetherSurfaceHigh
 import com.zhousl.aether.ui.theme.AetherSurfaceHigher
 import com.zhousl.aether.ui.theme.AetherTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -324,6 +329,12 @@ fun AetherApp(
                             language = effectiveLanguage,
                             nativeModState = nativeModState,
                             onNotificationPermissionRequested = onNotificationPermissionRequested,
+                            onDrawerOpened = {
+                                extensionManager.emitEvent(
+                                    event = "drawer.opened",
+                                    context = extensionContext,
+                                )
+                            },
                         )
                     }
                     selectedExtensionPage?.let { page ->
@@ -346,11 +357,25 @@ private fun AetherAppContent(
     language: AppLanguage,
     nativeModState: AetherNativeModState,
     onNotificationPermissionRequested: () -> Unit,
+    onDrawerOpened: () -> Unit,
 ) {
     val reduceMotion = LocalReduceMotion.current
     val drawerState = rememberDrawerState(initialValue = androidx.compose.material3.DrawerValue.Closed)
+    val latestOnDrawerOpened by rememberUpdatedState(onDrawerOpened)
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    LaunchedEffect(drawerState) {
+        var previousDrawerValue: DrawerValue? = null
+        snapshotFlow { drawerState.currentValue }
+            .distinctUntilChanged()
+            .collect { value ->
+                val openedAfterClosed =
+                    previousDrawerValue == DrawerValue.Closed && value == DrawerValue.Open
+                previousDrawerValue = value
+                if (openedAfterClosed) latestOnDrawerOpened()
+            }
+    }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     val clipboardManager = LocalClipboardManager.current

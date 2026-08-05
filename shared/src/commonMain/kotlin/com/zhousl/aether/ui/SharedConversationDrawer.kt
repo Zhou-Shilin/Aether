@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -110,14 +111,18 @@ fun AetherConversationDrawer(
     onSettingsSelected: () -> Unit,
     permanent: Boolean = false,
     extraContent: @Composable ((dismissSearch: () -> Unit) -> Unit) = {},
+    headerContent: @Composable () -> Unit = {},
+    footerContent: @Composable () -> Unit = {},
 ) {
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var overlayHeightPx by remember { mutableIntStateOf(0) }
+    var footerHeightPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
     val overlayHeight = with(density) {
         if (overlayHeightPx > 0) overlayHeightPx.toDp() else 132.dp
     }
+    val listBottomPadding = 96.dp + with(density) { footerHeightPx.toDp() }
     val filteredSessions = remember(sessions, searchQuery) {
         val query = searchQuery.trim().lowercase()
         if (query.isBlank()) sessions else sessions.filter { it.title.lowercase().contains(query) }
@@ -144,7 +149,7 @@ fun AetherConversationDrawer(
                             start = 16.dp,
                             end = 16.dp,
                             top = overlayHeight - SharedDrawerOverlayFadeHeight,
-                            bottom = 96.dp,
+                            bottom = listBottomPadding,
                         ),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -169,7 +174,7 @@ fun AetherConversationDrawer(
                         start = 16.dp,
                         end = 16.dp,
                         top = overlayHeight - SharedDrawerOverlayFadeHeight,
-                        bottom = 96.dp,
+                        bottom = listBottomPadding,
                     ),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
@@ -249,12 +254,31 @@ fun AetherConversationDrawer(
                     }
                     Spacer(modifier = Modifier.height(if (searchExpanded || searchQuery.isNotBlank()) 10.dp else 12.dp))
                 }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                ) {
+                    headerContent()
+                }
                 Spacer(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(SharedDrawerOverlayFadeHeight)
                         .background(sharedDrawerOverlayTailGradient(drawerBackground)),
                 )
+            }
+
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp)
+                    .offset(y = (-86).dp)
+                    .onSizeChanged { footerHeightPx = it.height },
+            ) {
+                footerContent()
             }
 
             Row(

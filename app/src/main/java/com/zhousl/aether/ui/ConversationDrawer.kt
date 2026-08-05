@@ -213,8 +213,15 @@ fun ConversationDrawer(
         },
         onDeleteSession = onDeleteSession,
         onSettingsSelected = onSettingsSelected,
+        headerContent = {
+            AetherExtensionSlot(AetherExtensionSlotDrawerHeader)
+        },
+        footerContent = {
+            AetherExtensionSlot(AetherExtensionSlotDrawerFooter)
+        },
         extraContent = { dismissSearch ->
             AetherExtensionSlot(AetherExtensionSlotDrawer)
+            AetherExtensionSlot(AetherExtensionSlotDrawerListEnd)
             extensionPages.forEach { page ->
                 AetherExtensionPageLauncher(
                     page = page,

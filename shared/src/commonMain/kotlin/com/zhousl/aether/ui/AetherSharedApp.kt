@@ -116,6 +116,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.snapshotFlow
@@ -2990,6 +2991,16 @@ fun AetherSharedApp(
                         if (useTabletLayout) tabletSettingsVisible = true
                         else route = SharedRoute.Settings
                     },
+                    onDrawerOpened = {
+                        appScope.launch {
+                            runSharedAppCatching {
+                                extensionManager.dispatchEvent(
+                                    event = "drawer.opened",
+                                    context = extensionContext(),
+                                )
+                            }
+                        }
+                    },
                     useTabletLayout = useTabletLayout,
                 )
                     if (useTabletLayout) {
@@ -4519,13 +4530,31 @@ private fun SharedChatScreen(
     extensionPages: List<SharedAetherExtensionPage>,
     onExtensionPageSelected: (String) -> Unit,
     onOpenSettings: () -> Unit,
+    onDrawerOpened: () -> Unit,
     useTabletLayout: Boolean,
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val latestOnDrawerOpened by rememberUpdatedState(onDrawerOpened)
     val scope = rememberCoroutineScope()
     val reduceMotion = LocalReduceMotion.current
     val visibleMessages = messages.filter {
         it.displayKind != SharedMessageDisplayKind.HiddenContext
+    }
+    if (!useTabletLayout) {
+        LaunchedEffect(drawerState) {
+            var previousDrawerValue: DrawerValue? = null
+            snapshotFlow { drawerState.currentValue }
+                .distinctUntilChanged()
+                .collect { value ->
+                    val openedAfterClosed =
+                        previousDrawerValue == DrawerValue.Closed && value == DrawerValue.Open
+                    previousDrawerValue = value
+                    if (openedAfterClosed) latestOnDrawerOpened()
+                }
+        }
+    }
+    LaunchedEffect(useTabletLayout) {
+        if (useTabletLayout) latestOnDrawerOpened()
     }
     val listState = rememberSaveable(selectedSessionId, saver = LazyListState.Saver) { LazyListState() }
     var shouldAutoFollow by rememberSaveable(selectedSessionId) { mutableStateOf(true) }
@@ -4730,9 +4759,16 @@ private fun SharedChatScreen(
                         onOpenSettings()
                     }
                 },
+                headerContent = {
+                    SharedAetherExtensionSlot(SharedExtensionSlotDrawerHeader)
+                },
+                footerContent = {
+                    SharedAetherExtensionSlot(SharedExtensionSlotDrawerFooter)
+                },
                 permanent = useTabletLayout,
                 extraContent = { dismissSearch ->
                     SharedAetherExtensionSlot(SharedExtensionSlotDrawer)
+                    SharedAetherExtensionSlot(SharedExtensionSlotDrawerListEnd)
                     extensionPages.forEach { page ->
                         SharedAetherExtensionPageLauncher(
                             page = page,
