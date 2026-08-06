@@ -329,6 +329,8 @@ fun AetherApp(
                             language = effectiveLanguage,
                             nativeModState = nativeModState,
                             onNotificationPermissionRequested = onNotificationPermissionRequested,
+                            drawerOpenedEventRegistered =
+                                "drawer.opened" in extensionState.snapshot.eventNames,
                             onDrawerOpened = {
                                 extensionManager.emitEvent(
                                     event = "drawer.opened",
@@ -357,23 +359,27 @@ private fun AetherAppContent(
     language: AppLanguage,
     nativeModState: AetherNativeModState,
     onNotificationPermissionRequested: () -> Unit,
+    drawerOpenedEventRegistered: Boolean,
     onDrawerOpened: () -> Unit,
 ) {
     val reduceMotion = LocalReduceMotion.current
     val drawerState = rememberDrawerState(initialValue = androidx.compose.material3.DrawerValue.Closed)
     val latestOnDrawerOpened by rememberUpdatedState(onDrawerOpened)
+    val drawerOpenedEventGate = remember { AetherDrawerOpenedEventGate() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    LaunchedEffect(drawerState) {
-        var previousDrawerValue: DrawerValue? = null
+    LaunchedEffect(drawerState, drawerOpenedEventRegistered) {
         snapshotFlow { drawerState.currentValue }
             .distinctUntilChanged()
             .collect { value ->
-                val openedAfterClosed =
-                    previousDrawerValue == DrawerValue.Closed && value == DrawerValue.Open
-                previousDrawerValue = value
-                if (openedAfterClosed) latestOnDrawerOpened()
+                val shouldDispatchDrawerOpened = drawerOpenedEventGate.onDrawerStateChanged(
+                    drawerOpen = value == DrawerValue.Open,
+                    eventRegistered = drawerOpenedEventRegistered,
+                )
+                if (shouldDispatchDrawerOpened) {
+                    latestOnDrawerOpened()
+                }
             }
     }
 
