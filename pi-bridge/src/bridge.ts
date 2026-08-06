@@ -10,7 +10,6 @@ import {
   fauxAssistantMessage,
   fauxProvider,
   fauxToolCall,
-  retryAssistantCall,
   type AuthContext,
   type AuthInteraction,
   type AssistantMessage,
@@ -161,6 +160,7 @@ interface HarnessSessionState {
   currentRequestId: string;
   toolArgsById: Map<string, unknown>;
   agentRetryMaxRetries: number;
+  agentRetryMaxDelayMs: number;
   lastAccessedAt: number;
 }
 
@@ -1024,7 +1024,8 @@ function streamOptionsFor(
     sessionId: asString(payload.session_id),
     headers: normalizeHeaders(payload.headers),
     timeoutMs: asNumber(payload.timeout_ms, config.timeout_ms ?? 360000),
-    maxRetries: asNumber(payload.max_retries, config.max_retries ?? 5),
+    // Retry provider errors at the bridge level.
+    maxRetries: 0,
     maxRetryDelayMs: asNumber(payload.max_retry_delay_ms, config.max_retry_delay_ms ?? 60000),
   };
   const temperature = payload.temperature;
@@ -1988,6 +1989,10 @@ async function createHarnessSession(
     currentRequestId: "",
     toolArgsById: new Map<string, unknown>(),
     agentRetryMaxRetries: config.max_retries ?? DEFAULT_AGENT_RETRY_MAX_RETRIES,
+    agentRetryMaxDelayMs: asNumber(
+      payload.max_retry_delay_ms,
+      config.max_retry_delay_ms ?? 60_000,
+    ),
     lastAccessedAt: Date.now(),
   };
   state.hostTools = normalizeHostToolDefinitions(payload.host_tools).map((tool) =>
@@ -2051,6 +2056,10 @@ async function prepareHarnessSession(
   reusable.lastAccessedAt = Date.now();
   reusable.systemPrompt = asString(payload.system_prompt);
   reusable.agentRetryMaxRetries = config.max_retries ?? DEFAULT_AGENT_RETRY_MAX_RETRIES;
+  reusable.agentRetryMaxDelayMs = asNumber(
+    payload.max_retry_delay_ms,
+    config.max_retry_delay_ms ?? 60_000,
+  );
   reusable.configuredExtensionPaths = Array.isArray(payload.extension_paths)
     ? payload.extension_paths.filter((value): value is string => typeof value === "string")
     : [];
@@ -2184,6 +2193,61 @@ async function continueHarnessTurn(
   return message;
 }
 
+function waitForRetryDelay(delayMs: number, signal: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new Error("Pi request was aborted."));
+      return;
+    }
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const abort = () => {
+      if (timeout) clearTimeout(timeout);
+      signal.removeEventListener("abort", abort);
+      reject(new Error("Pi request was aborted."));
+    };
+    timeout = setTimeout(() => {
+      signal.removeEventListener("abort", abort);
+      resolve();
+    }, delayMs);
+    signal.addEventListener("abort", abort, { once: true });
+  });
+}
+
+function retryBackoffDelayMs(retryNumber: number, maxRetryDelayMs: number): number {
+  const delayMs = DEFAULT_AGENT_RETRY_BASE_DELAY_MS * 2 ** Math.max(0, retryNumber - 1);
+  return maxRetryDelayMs > 0 ? Math.min(delayMs, maxRetryDelayMs) : delayMs;
+}
+
+async function retryAssistantResponse(
+  produce: () => Promise<AssistantMessage>,
+  maxRetries: number,
+  maxRetryDelayMs: number,
+  signal: AbortSignal,
+  shouldRetry: () => boolean = () => true,
+): Promise<AssistantMessage> {
+  const retryLimit = Math.max(0, Math.floor(maxRetries));
+  let retries = 0;
+  for (;;) {
+    let response: AssistantMessage;
+    try {
+      response = await produce();
+    } catch (error) {
+      if (signal.aborted || retries >= retryLimit || !shouldRetry()) throw error;
+      retries += 1;
+      await waitForRetryDelay(retryBackoffDelayMs(retries, maxRetryDelayMs), signal);
+      continue;
+    }
+
+    if (response.stopReason !== "error" || retries >= retryLimit || !shouldRetry()) return response;
+    retries += 1;
+    try {
+      await waitForRetryDelay(retryBackoffDelayMs(retries, maxRetryDelayMs), signal);
+    } catch {
+      return { ...response, stopReason: "aborted", errorMessage: undefined };
+    }
+  }
+}
+
 async function runHarnessPrompt(
   id: string,
   state: HarnessSessionState,
@@ -2199,7 +2263,10 @@ async function runHarnessPrompt(
   });
   try {
     let firstAttempt = true;
-    return await retryAssistantCall(
+    const initialLeafId = await state.session.getLeafId();
+    const initialEntryIds = new Set((await state.session.getBranch()).map((entry) => entry.id));
+    const initialExtensionLeafId = state.extensionRuntime.sessionManager.getLeafId();
+    return await retryAssistantResponse(
       async () => {
         if (firstAttempt) {
           firstAttempt = false;
@@ -2210,13 +2277,32 @@ async function runHarnessPrompt(
           await state.harness.waitForIdle();
           return firstMessage;
         }
-        return continueHarnessTurn(state, retryAbortController.signal);
+        const branch = await state.session.getBranch();
+        const hasFailedAssistant = branch.some(
+          (entry) =>
+            !initialEntryIds.has(entry.id) &&
+            entry.type === "message" &&
+            entry.message.role === "assistant" &&
+            entry.message.stopReason === "error",
+        );
+        if (hasFailedAssistant) {
+          return continueHarnessTurn(state, retryAbortController.signal);
+        }
+        await state.session.moveTo(initialLeafId);
+        if (initialExtensionLeafId) {
+          state.extensionRuntime.sessionManager.branch(initialExtensionLeafId);
+        } else {
+          state.extensionRuntime.sessionManager.resetLeaf();
+        }
+        const firstMessage = await state.harness.prompt(
+          text,
+          images.length > 0 ? { images } : undefined,
+        );
+        await state.harness.waitForIdle();
+        return firstMessage;
       },
-      {
-        enabled: state.agentRetryMaxRetries > 0,
-        maxRetries: state.agentRetryMaxRetries,
-        baseDelayMs: DEFAULT_AGENT_RETRY_BASE_DELAY_MS,
-      },
+      state.agentRetryMaxRetries,
+      state.agentRetryMaxDelayMs,
       retryAbortController.signal,
     );
   } finally {
@@ -2308,18 +2394,51 @@ async function runSimpleCompletion(id: string, payload: JsonObject, stream: bool
   try {
     const context = buildContext(payload);
     const options = streamOptionsFor(payload, controller.signal, config, model);
-    if (stream) {
-      const eventStream = models.streamSimple(model, context, options);
-      for await (const event of eventStream) {
-        emitStreamEvent(id, event);
+    const maxRetries = asNumber(
+      payload.max_retries,
+      config.max_retries ?? DEFAULT_AGENT_RETRY_MAX_RETRIES,
+    );
+    let streamAttemptHadOutput = false;
+    let message: AssistantMessage;
+    try {
+      message = await retryAssistantResponse(
+        async () => {
+          streamAttemptHadOutput = false;
+          if (stream) {
+            const eventStream = models.streamSimple(model, context, options);
+            for await (const event of eventStream) {
+              if (
+                event.type === "text_delta" ||
+                event.type === "thinking_delta" ||
+                event.type === "toolcall_start" ||
+                event.type === "toolcall_delta" ||
+                event.type === "toolcall_end"
+              ) {
+                streamAttemptHadOutput = true;
+              }
+              if (event.type !== "error") emitStreamEvent(id, event);
+            }
+            return eventStream.result();
+          }
+          return models.completeSimple(model, context, options);
+        },
+        maxRetries,
+        options.maxRetryDelayMs ?? 60_000,
+        controller.signal,
+        stream ? () => !streamAttemptHadOutput : undefined,
+      );
+    } catch (error) {
+      if (stream && !controller.signal.aborted) {
+        writeEvent(id, "assistant_error", {
+          error_message: errorMessageWithCause(error),
+          stop_reason: "error",
+        });
       }
-      const message = await eventStream.result();
-      return {
-        ...assistantPayload(message),
-        ...(await credentialPayload(credentialStore)),
-      };
+      throw error;
     }
-    const message = await models.completeSimple(model, context, options);
+    if (stream && message.stopReason === "error") {
+      writeEvent(id, "assistant_error", assistantPayload(message));
+    }
     return {
       ...assistantPayload(message),
       ...(await credentialPayload(credentialStore)),
