@@ -2281,6 +2281,15 @@ class AetherViewModel(
     fun upsertProviderConfig(config: LlmProviderConfig) {
         viewModelScope.launch {
             val normalizedConfig = normalizeProviderConfig(config)
+            val cachePrefix = "${normalizedConfig.id.trim()}:"
+            _uiState.update { current ->
+                current.copy(
+                    thinkingLevelsByProviderModel = current.thinkingLevelsByProviderModel
+                        .filterKeys { key -> !key.startsWith(cachePrefix) },
+                    thinkingLevelClampsByProviderModel = current.thinkingLevelClampsByProviderModel
+                        .filterKeys { key -> !key.startsWith(cachePrefix) },
+                )
+            }
             settingsRepository.upsertProviderConfig(normalizedConfig)
             if (
                 normalizedConfig.authMethod != ProviderAuthMethod.OAuth ||
@@ -2301,6 +2310,15 @@ class AetherViewModel(
 
     fun removeProviderConfig(id: String) {
         viewModelScope.launch {
+            val cachePrefix = "${id.trim()}:"
+            _uiState.update { current ->
+                current.copy(
+                    thinkingLevelsByProviderModel = current.thinkingLevelsByProviderModel
+                        .filterKeys { key -> !key.startsWith(cachePrefix) },
+                    thinkingLevelClampsByProviderModel = current.thinkingLevelClampsByProviderModel
+                        .filterKeys { key -> !key.startsWith(cachePrefix) },
+                )
+            }
             settingsRepository.removeProviderConfig(id)
             runCatching { runtime.piKernelBridge.clearProviderCredential(id) }
             captureAnalyticsEvent(event = "provider removed")
@@ -2367,7 +2385,11 @@ class AetherViewModel(
         val option = current.providerConfigs.availableModelOptions()
             .firstOrNull { it.key == modelKey }
             ?: return onResolved(false)
-        val cacheKey = thinkingCatalogKey(option.piProviderId, option.modelId)
+        val cacheKey = thinkingCatalogKey(
+            option.providerConfigId,
+            option.piProviderId,
+            option.modelId,
+        )
         current.thinkingLevelsByProviderModel[cacheKey]?.let { levels ->
             onResolved(levels.isNotEmpty())
             return
@@ -2388,28 +2410,29 @@ class AetherViewModel(
                 onResolved(false)
                 return@launch
             }
+            val selectedModelId = option.modelId.substringAfterLast('/').trim()
+            val selectedModelLevels = result.thinkingLevelsByModel.entries
+                .firstOrNull { (modelId, _) ->
+                    modelId.substringAfterLast('/').trim() == selectedModelId
+                }
+                ?.value
             _uiState.update { state ->
+                val levels = state.thinkingLevelsByProviderModel +
+                    result.thinkingLevelsByModel.mapKeys { (modelId, _) ->
+                        thinkingCatalogKey(config.id, config.piProviderId, modelId)
+                    } +
+                    if (selectedModelLevels == null) mapOf(cacheKey to emptyList()) else emptyMap()
+                val clamps = state.thinkingLevelClampsByProviderModel +
+                    result.thinkingLevelClampsByModel.mapKeys { (modelId, _) ->
+                        thinkingCatalogKey(config.id, config.piProviderId, modelId)
+                    }
                 state.copy(
-                    thinkingLevelsByProviderModel = state.thinkingLevelsByProviderModel +
-                        result.thinkingLevelsByModel.mapKeys { (modelId, _) ->
-                            thinkingCatalogKey(config.piProviderId, modelId)
-                        },
-                    thinkingLevelClampsByProviderModel = state.thinkingLevelClampsByProviderModel +
-                        result.thinkingLevelClampsByModel.mapKeys { (modelId, _) ->
-                            thinkingCatalogKey(config.piProviderId, modelId)
-                        },
+                    thinkingLevelsByProviderModel = levels,
+                    thinkingLevelClampsByProviderModel =
+                        if (selectedModelLevels == null) clamps - cacheKey else clamps,
                 )
             }
-            val selectedModelId = option.modelId.substringAfterLast('/').trim()
-            onResolved(
-                result.thinkingLevelsByModel.entries
-                    .firstOrNull { (modelId, _) ->
-                        modelId.substringAfterLast('/').trim() == selectedModelId
-                    }
-                    ?.value
-                    .orEmpty()
-                    .isNotEmpty(),
-            )
+            onResolved(selectedModelLevels.orEmpty().isNotEmpty())
         }
     }
 
@@ -2426,6 +2449,11 @@ class AetherViewModel(
             ?: return
         val config = current.providerConfigs.firstOrNull { it.id == option.providerConfigId }
             ?: return
+        val cacheKey = thinkingCatalogKey(
+            option.providerConfigId,
+            option.piProviderId,
+            option.modelId,
+        )
         val startPiBridgeIfNeeded = !com.zhousl.aether.data.PiProviderCatalog
             .resolve(config.piProviderId)
             .isBuiltIn
@@ -2437,16 +2465,26 @@ class AetherViewModel(
                 startPiBridgeIfNeeded = startPiBridgeIfNeeded,
             )
             if (result.error != null) return@launch
+            val selectedModelId = option.modelId.substringAfterLast('/').trim()
+            val selectedModelLevels = result.thinkingLevelsByModel.entries
+                .firstOrNull { (modelId, _) ->
+                    modelId.substringAfterLast('/').trim() == selectedModelId
+                }
+                ?.value
             _uiState.update { state ->
+                val levels = state.thinkingLevelsByProviderModel +
+                    result.thinkingLevelsByModel.mapKeys { (modelId, _) ->
+                        thinkingCatalogKey(config.id, config.piProviderId, modelId)
+                    } +
+                    if (selectedModelLevels == null) mapOf(cacheKey to emptyList()) else emptyMap()
+                val clamps = state.thinkingLevelClampsByProviderModel +
+                    result.thinkingLevelClampsByModel.mapKeys { (modelId, _) ->
+                        thinkingCatalogKey(config.id, config.piProviderId, modelId)
+                    }
                 state.copy(
-                    thinkingLevelsByProviderModel = state.thinkingLevelsByProviderModel +
-                        result.thinkingLevelsByModel.mapKeys { (modelId, _) ->
-                            thinkingCatalogKey(config.piProviderId, modelId)
-                        },
-                    thinkingLevelClampsByProviderModel = state.thinkingLevelClampsByProviderModel +
-                        result.thinkingLevelClampsByModel.mapKeys { (modelId, _) ->
-                            thinkingCatalogKey(config.piProviderId, modelId)
-                        },
+                    thinkingLevelsByProviderModel = levels,
+                    thinkingLevelClampsByProviderModel =
+                        if (selectedModelLevels == null) clamps - cacheKey else clamps,
                 )
             }
         }
@@ -2467,11 +2505,11 @@ class AetherViewModel(
                     isFetchingModels = false,
                     thinkingLevelsByProviderModel = current.thinkingLevelsByProviderModel +
                         result.thinkingLevelsByModel.mapKeys { (modelId, _) ->
-                            thinkingCatalogKey(config.piProviderId, modelId)
+                            thinkingCatalogKey(config.id, config.piProviderId, modelId)
                         },
                     thinkingLevelClampsByProviderModel = current.thinkingLevelClampsByProviderModel +
                         result.thinkingLevelClampsByModel.mapKeys { (modelId, _) ->
-                            thinkingCatalogKey(config.piProviderId, modelId)
+                            thinkingCatalogKey(config.id, config.piProviderId, modelId)
                         },
                 )
             }

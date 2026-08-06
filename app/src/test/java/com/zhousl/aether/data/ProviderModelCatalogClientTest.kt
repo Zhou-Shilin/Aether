@@ -10,10 +10,14 @@ import org.junit.Test
 
 class ProviderModelCatalogClientTest {
     @Test
-    fun thinkingCatalogKeyUsesOnlyLastModelIdSegment() {
+    fun thinkingCatalogKeyIncludesProviderConfigAndUsesLastModelIdSegment() {
         assertEquals(
-            "openrouter/gpt-5.6-sol",
-            thinkingCatalogKey("openrouter", "openai/gpt-5.6-sol"),
+            "config-a:openrouter/gpt-5.6-sol",
+            thinkingCatalogKey("config-a", "openrouter", "openai/gpt-5.6-sol"),
+        )
+        assertEquals(
+            "config-b:openrouter/gpt-5.6-sol",
+            thinkingCatalogKey("config-b", "openrouter", "openai/gpt-5.6-sol"),
         )
     }
 

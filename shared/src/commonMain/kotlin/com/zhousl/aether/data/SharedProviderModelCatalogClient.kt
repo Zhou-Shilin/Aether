@@ -47,8 +47,12 @@ data class SharedModelCatalogInfo(
 
 private val SharedPiThinkingLevels = listOf("off", "minimal", "low", "medium", "high", "xhigh", "max")
 
-internal fun sharedThinkingCatalogKey(providerId: String, modelId: String): String =
-    "${providerId.trim()}/${modelId.substringAfterLast('/').trim()}"
+internal fun sharedThinkingCatalogKey(
+    providerConfigId: String,
+    providerId: String,
+    modelId: String,
+): String =
+    "${providerConfigId.trim()}:${providerId.trim()}/${modelId.substringAfterLast('/').trim()}"
 
 class SharedProviderModelCatalogClient(engine: HttpClientEngine? = null) {
     private val client = if (engine == null) createClient() else createClient(engine)
@@ -134,7 +138,14 @@ class SharedProviderModelCatalogClient(engine: HttpClientEngine? = null) {
                     } else {
                         emptyList()
                     }
-                    put(sharedThinkingCatalogKey(option.piProviderId, option.modelId), levels)
+                    put(
+                        sharedThinkingCatalogKey(
+                            option.providerConfigId,
+                            option.piProviderId,
+                            option.modelId,
+                        ),
+                        levels,
+                    )
                 }
             }
         }

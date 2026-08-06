@@ -139,8 +139,50 @@ class SharedProviderModelCatalogClientTest {
 
         assertEquals(
             listOf("off", "low", "medium", "high"),
-            levels[sharedThinkingCatalogKey("openai", "gpt-5")],
+            levels[sharedThinkingCatalogKey(config.id, "openai", "gpt-5")],
         )
+    }
+
+    @Test
+    fun thinkingLevelsAreScopedByProviderConfiguration() = runTest {
+        val engine = MockEngine {
+            respond(
+                """{"providers":{"openai":{"models":{"gpt-5":{"id":"gpt-5","reasoning":true,"reasoning_options":[{"type":"effort","values":["low","high"]}]}}}}}""",
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val configA = customConfig(piProviderId = "openai").copy(
+            id = "config-a",
+            modelId = "gpt-5",
+            cachedModels = listOf("gpt-5"),
+            enabledModelIds = listOf("gpt-5"),
+        )
+        val configB = configA.copy(id = "config-b")
+        val options = listOf(configA, configB).availableModelOptions()
+
+        val levels = SharedProviderModelCatalogClient(engine).fetchThinkingLevels(options)
+
+        assertEquals(
+            listOf("low", "high"),
+            levels[
+                sharedThinkingCatalogKey(
+                    "config-a",
+                    "openai",
+                    "gpt-5",
+                )
+            ],
+        )
+        assertEquals(
+            listOf("low", "high"),
+            levels[
+                sharedThinkingCatalogKey(
+                    "config-b",
+                    "openai",
+                    "gpt-5",
+                )
+            ],
+        )
+        assertEquals(2, levels.size)
     }
 
     @Test
@@ -166,7 +208,7 @@ class SharedProviderModelCatalogClientTest {
 
         assertEquals(
             listOf("off", "low", "medium", "high", "xhigh"),
-            levels[sharedThinkingCatalogKey("openai-codex", "gpt-5.3-codex-spark")],
+            levels[sharedThinkingCatalogKey(config.id, "openai-codex", "gpt-5.3-codex-spark")],
         )
     }
 
@@ -189,7 +231,7 @@ class SharedProviderModelCatalogClientTest {
 
         assertEquals(
             listOf("off", "low", "medium", "high", "xhigh", "max"),
-            levels[sharedThinkingCatalogKey(config.piProviderId, "gpt-5.6-sol")],
+            levels[sharedThinkingCatalogKey(config.id, config.piProviderId, "gpt-5.6-sol")],
         )
     }
 
@@ -207,7 +249,7 @@ class SharedProviderModelCatalogClientTest {
             enabledModelIds = listOf("claude-haiku"),
         )
         val option = listOf(config).availableModelOptions().single()
-        val cacheKey = sharedThinkingCatalogKey(config.piProviderId, option.modelId)
+        val cacheKey = sharedThinkingCatalogKey(config.id, config.piProviderId, option.modelId)
 
         val levels = SharedProviderModelCatalogClient(engine).fetchThinkingLevels(listOf(option))
 

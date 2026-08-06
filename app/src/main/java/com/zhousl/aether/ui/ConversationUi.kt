@@ -928,10 +928,14 @@ private fun ConversationModelSelector(
     val menuWidth = 242.dp
     val selectedOption = options.firstOrNull { it.key == menuSelectedModelKey } ?: options.firstOrNull()
     val supportedThinkingLevels = selectedOption?.let { option ->
-        thinkingLevelsByProviderModel[thinkingCatalogKey(option.piProviderId, option.modelId)]
+        thinkingLevelsByProviderModel[
+            thinkingCatalogKey(option.providerConfigId, option.piProviderId, option.modelId)
+        ]
     }.orEmpty()
     val effectiveReasoningEffort = selectedOption?.let { option ->
-        thinkingLevelClampsByProviderModel[thinkingCatalogKey(option.piProviderId, option.modelId)]
+        thinkingLevelClampsByProviderModel[
+            thinkingCatalogKey(option.providerConfigId, option.piProviderId, option.modelId)
+        ]
             ?.get(reasoningEffort)
     } ?: reasoningEffort
     val fallbackLabel = stringResource(R.string.chat_select_model)

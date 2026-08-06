@@ -24,8 +24,12 @@ internal fun piThinkingLevelClamps(clamps: JSONObject): Map<String, String> =
         clamps.optString(level).takeIf { it in PiThinkingLevels }?.let { level to it }
     }.toMap()
 
-internal fun thinkingCatalogKey(providerId: String, modelId: String): String =
-    "${providerId.trim()}/${modelId.substringAfterLast('/').trim()}"
+internal fun thinkingCatalogKey(
+    providerConfigId: String,
+    providerId: String,
+    modelId: String,
+): String =
+    "${providerConfigId.trim()}:${providerId.trim()}/${modelId.substringAfterLast('/').trim()}"
 
 internal data class PiModelCapabilities(
     val reasoning: Boolean,
@@ -111,7 +115,7 @@ object ProviderModelCatalogClient {
 
         val capabilities = piModelCapabilities(
             piKernelBridge.getModelCapabilities(
-                modelConfig = config.toPiModelConfig().toJson(),
+                modelConfig = config.toPiModelConfig(reasoningEnabled = true).toJson(),
                 startIfNeeded = startPiBridgeIfNeeded,
             ),
         )

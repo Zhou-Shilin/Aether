@@ -5,6 +5,7 @@ import com.zhousl.aether.data.AetherLlmUserAgent
 import com.zhousl.aether.data.LlmCustomHeader
 import com.zhousl.aether.data.LlmImagePart
 import com.zhousl.aether.data.LlmMessage
+import com.zhousl.aether.data.LlmProviderConfig
 import com.zhousl.aether.data.LlmTextPart
 import com.zhousl.aether.data.LlmTokenUsage
 import com.zhousl.aether.data.ProviderAuthMethod
@@ -76,6 +77,22 @@ class PiProviderMapperTest {
             modelId = "custom-model",
             reasoningEffort = "high",
         ).toPiThinkingLevel())
+    }
+
+    @Test
+    fun customCapabilityProbeAdvertisesReasoningSupport() {
+        val probe = LlmProviderConfig(
+            id = "custom-provider-id",
+            providerId = "custom",
+            name = "Custom",
+            piProviderId = "openai-compatible",
+            apiKey = "custom-key",
+            baseUrl = "https://example.test/v1",
+            modelId = "custom-model",
+        ).toPiModelConfig(reasoningEnabled = true)
+
+        assertTrue(probe.reasoning)
+        assertTrue(probe.toJson().getBoolean("reasoning"))
     }
 
     @Test
