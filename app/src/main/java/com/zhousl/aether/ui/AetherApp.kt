@@ -370,11 +370,12 @@ private fun AetherAppContent(
     val context = LocalContext.current
 
     LaunchedEffect(drawerState, drawerOpenedEventRegistered) {
-        snapshotFlow { drawerState.currentValue }
+        snapshotFlow { drawerState.currentValue to drawerState.targetValue }
             .distinctUntilChanged()
-            .collect { value ->
-                val shouldDispatchDrawerOpened = drawerOpenedEventGate.onDrawerStateChanged(
-                    drawerOpen = value == DrawerValue.Open,
+            .collect { (currentValue, targetValue) ->
+                val shouldDispatchDrawerOpened = drawerOpenedEventGate.onDrawerSnapshotChanged(
+                    currentOpen = currentValue == DrawerValue.Open,
+                    targetOpen = targetValue == DrawerValue.Open,
                     eventRegistered = drawerOpenedEventRegistered,
                 )
                 if (shouldDispatchDrawerOpened) {

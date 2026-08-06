@@ -3108,6 +3108,11 @@ internal fun shouldUseSharedTabletLayout(
     availableWidthDp: Float,
 ): Boolean = supportsTabletLayout && availableWidthDp >= SharedTabletLayoutMinWidthDp
 
+internal fun isSharedDrawerClosing(
+    currentOpen: Boolean,
+    targetOpen: Boolean,
+): Boolean = currentOpen && !targetOpen
+
 /** Defers opens until registration and emits the tablet event once per layout epoch. */
 internal class SharedDrawerOpenedEventGate {
     private var tabletLayoutActive = false
@@ -3125,6 +3130,23 @@ internal class SharedDrawerOpenedEventGate {
 
     fun onMobileDrawerClosed() {
         pendingMobileOpenEvent = false
+    }
+
+    fun onLayoutRegistrationOrDrawerSnapshotChanged(
+        useTabletLayout: Boolean,
+        currentOpen: Boolean,
+        targetOpen: Boolean,
+        eventRegistered: Boolean,
+    ): Boolean {
+        if (!useTabletLayout) {
+            if (!currentOpen) onMobileDrawerClosed()
+            // Keep a pending event through the animation so a canceled close can still deliver it.
+            if (isSharedDrawerClosing(currentOpen, targetOpen)) return false
+        }
+        return onLayoutOrRegistrationChanged(
+            useTabletLayout = useTabletLayout,
+            eventRegistered = eventRegistered,
+        )
     }
 
     fun onLayoutOrRegistrationChanged(
@@ -4589,16 +4611,21 @@ private fun SharedChatScreen(
     if (!useTabletLayout) {
         LaunchedEffect(drawerState) {
             var previousDrawerValue: DrawerValue? = null
-            snapshotFlow { drawerState.currentValue }
+            snapshotFlow { drawerState.currentValue to drawerState.targetValue }
                 .distinctUntilChanged()
-                .collect { value ->
+                .collect { (currentValue, targetValue) ->
+                    val currentOpen = currentValue == DrawerValue.Open
+                    val targetOpen = targetValue == DrawerValue.Open
                     val openedAfterClosed =
-                        previousDrawerValue == DrawerValue.Closed && value == DrawerValue.Open
-                    previousDrawerValue = value
-                    if (value == DrawerValue.Closed) {
+                        previousDrawerValue == DrawerValue.Closed && currentOpen && targetOpen
+                    previousDrawerValue = currentValue
+                    if (!currentOpen) {
                         drawerOpenedEventGate.onMobileDrawerClosed()
                     }
-                    if (openedAfterClosed) {
+                    if (
+                        !isSharedDrawerClosing(currentOpen, targetOpen) &&
+                        openedAfterClosed
+                    ) {
                         val shouldDispatchDrawerOpened = drawerOpenedEventGate.onMobileDrawerOpened(
                             latestDrawerOpenedEventRegistered
                         )
@@ -4609,11 +4636,19 @@ private fun SharedChatScreen(
                 }
         }
     }
-    LaunchedEffect(useTabletLayout, drawerOpenedEventRegistered) {
-        val shouldDispatchDrawerOpened = drawerOpenedEventGate.onLayoutOrRegistrationChanged(
-            useTabletLayout = useTabletLayout,
-            eventRegistered = drawerOpenedEventRegistered,
-        )
+    LaunchedEffect(
+        useTabletLayout,
+        drawerOpenedEventRegistered,
+        drawerState.currentValue,
+        drawerState.targetValue,
+    ) {
+        val shouldDispatchDrawerOpened =
+            drawerOpenedEventGate.onLayoutRegistrationOrDrawerSnapshotChanged(
+                useTabletLayout = useTabletLayout,
+                currentOpen = drawerState.currentValue == DrawerValue.Open,
+                targetOpen = drawerState.targetValue == DrawerValue.Open,
+                eventRegistered = drawerOpenedEventRegistered,
+            )
         if (shouldDispatchDrawerOpened) {
             latestOnDrawerOpened()
         }

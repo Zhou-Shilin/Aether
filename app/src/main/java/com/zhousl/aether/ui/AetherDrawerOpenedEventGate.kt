@@ -5,6 +5,19 @@ internal class AetherDrawerOpenedEventGate {
     private var drawerOpen = false
     private var dispatchedForCurrentOpen = false
 
+    fun onDrawerSnapshotChanged(
+        currentOpen: Boolean,
+        targetOpen: Boolean,
+        eventRegistered: Boolean,
+    ): Boolean {
+        // Preserve the current epoch while a close targets Closed; a canceled close must not re-emit.
+        if (currentOpen && !targetOpen) return false
+        return onDrawerStateChanged(
+            drawerOpen = currentOpen,
+            eventRegistered = eventRegistered,
+        )
+    }
+
     fun onDrawerStateChanged(
         drawerOpen: Boolean,
         eventRegistered: Boolean,

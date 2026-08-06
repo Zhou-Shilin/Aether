@@ -7,6 +7,37 @@ import kotlin.test.assertTrue
 
 class SharedTabletLayoutTest {
     @Test
+    fun suppressesRegistrationDuringCloseAndRecoversIfCloseIsCanceled() {
+        val gate = SharedDrawerOpenedEventGate()
+
+        assertFalse(gate.onMobileDrawerOpened(eventRegistered = false))
+        assertFalse(
+            gate.onLayoutRegistrationOrDrawerSnapshotChanged(
+                useTabletLayout = false,
+                currentOpen = true,
+                targetOpen = false,
+                eventRegistered = true,
+            )
+        )
+        assertTrue(
+            gate.onLayoutRegistrationOrDrawerSnapshotChanged(
+                useTabletLayout = false,
+                currentOpen = true,
+                targetOpen = true,
+                eventRegistered = true,
+            )
+        )
+        assertFalse(
+            gate.onLayoutRegistrationOrDrawerSnapshotChanged(
+                useTabletLayout = false,
+                currentOpen = true,
+                targetOpen = true,
+                eventRegistered = true,
+            )
+        )
+    }
+
+    @Test
     fun usesTabletLayoutOnlyForSupportedWideScreens() {
         assertTrue(shouldUseSharedTabletLayout(supportsTabletLayout = true, availableWidthDp = 700f))
         assertTrue(shouldUseSharedTabletLayout(supportsTabletLayout = true, availableWidthDp = 1_024f))
@@ -50,10 +81,19 @@ class SharedTabletLayoutTest {
         val gate = SharedDrawerOpenedEventGate()
 
         assertFalse(gate.onMobileDrawerOpened(eventRegistered = false))
-        gate.onMobileDrawerClosed()
         assertFalse(
-            gate.onLayoutOrRegistrationChanged(
+            gate.onLayoutRegistrationOrDrawerSnapshotChanged(
                 useTabletLayout = false,
+                currentOpen = true,
+                targetOpen = false,
+                eventRegistered = true,
+            )
+        )
+        assertFalse(
+            gate.onLayoutRegistrationOrDrawerSnapshotChanged(
+                useTabletLayout = false,
+                currentOpen = false,
+                targetOpen = false,
                 eventRegistered = true,
             )
         )
