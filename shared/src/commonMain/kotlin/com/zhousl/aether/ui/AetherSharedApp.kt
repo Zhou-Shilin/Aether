@@ -3001,6 +3001,7 @@ fun AetherSharedApp(
                             }
                         }
                     },
+                    drawerOpenedEventRegistered = "drawer.opened" in extensionSnapshot.eventNames,
                     useTabletLayout = useTabletLayout,
                 )
                     if (useTabletLayout) {
@@ -3106,6 +3107,48 @@ internal fun shouldUseSharedTabletLayout(
     supportsTabletLayout: Boolean,
     availableWidthDp: Float,
 ): Boolean = supportsTabletLayout && availableWidthDp >= SharedTabletLayoutMinWidthDp
+
+/** Defers opens until registration and emits the tablet event once per layout epoch. */
+internal class SharedDrawerOpenedEventGate {
+    private var tabletLayoutActive = false
+    private var tabletEventDispatched = false
+    private var pendingMobileOpenEvent = false
+
+    fun onMobileDrawerOpened(eventRegistered: Boolean): Boolean {
+        if (eventRegistered) {
+            pendingMobileOpenEvent = false
+            return true
+        }
+        pendingMobileOpenEvent = true
+        return false
+    }
+
+    fun onMobileDrawerClosed() {
+        pendingMobileOpenEvent = false
+    }
+
+    fun onLayoutOrRegistrationChanged(
+        useTabletLayout: Boolean,
+        eventRegistered: Boolean,
+    ): Boolean {
+        if (useTabletLayout != tabletLayoutActive) {
+            tabletLayoutActive = useTabletLayout
+            tabletEventDispatched = false
+            pendingMobileOpenEvent = false
+        }
+        if (!eventRegistered) return false
+
+        if (useTabletLayout && !tabletEventDispatched) {
+            tabletEventDispatched = true
+            return true
+        }
+        if (!useTabletLayout && pendingMobileOpenEvent) {
+            pendingMobileOpenEvent = false
+            return true
+        }
+        return false
+    }
+}
 
 @Composable
 private fun SharedTabletSettingsOverlay(
@@ -4531,10 +4574,13 @@ private fun SharedChatScreen(
     onExtensionPageSelected: (String) -> Unit,
     onOpenSettings: () -> Unit,
     onDrawerOpened: () -> Unit,
+    drawerOpenedEventRegistered: Boolean,
     useTabletLayout: Boolean,
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val latestOnDrawerOpened by rememberUpdatedState(onDrawerOpened)
+    val latestDrawerOpenedEventRegistered by rememberUpdatedState(drawerOpenedEventRegistered)
+    val drawerOpenedEventGate = remember { SharedDrawerOpenedEventGate() }
     val scope = rememberCoroutineScope()
     val reduceMotion = LocalReduceMotion.current
     val visibleMessages = messages.filter {
@@ -4549,12 +4595,28 @@ private fun SharedChatScreen(
                     val openedAfterClosed =
                         previousDrawerValue == DrawerValue.Closed && value == DrawerValue.Open
                     previousDrawerValue = value
-                    if (openedAfterClosed) latestOnDrawerOpened()
+                    if (value == DrawerValue.Closed) {
+                        drawerOpenedEventGate.onMobileDrawerClosed()
+                    }
+                    if (openedAfterClosed) {
+                        val shouldDispatchDrawerOpened = drawerOpenedEventGate.onMobileDrawerOpened(
+                            latestDrawerOpenedEventRegistered
+                        )
+                        if (shouldDispatchDrawerOpened) {
+                            latestOnDrawerOpened()
+                        }
+                    }
                 }
         }
     }
-    LaunchedEffect(useTabletLayout) {
-        if (useTabletLayout) latestOnDrawerOpened()
+    LaunchedEffect(useTabletLayout, drawerOpenedEventRegistered) {
+        val shouldDispatchDrawerOpened = drawerOpenedEventGate.onLayoutOrRegistrationChanged(
+            useTabletLayout = useTabletLayout,
+            eventRegistered = drawerOpenedEventRegistered,
+        )
+        if (shouldDispatchDrawerOpened) {
+            latestOnDrawerOpened()
+        }
     }
     val listState = rememberSaveable(selectedSessionId, saver = LazyListState.Saver) { LazyListState() }
     var shouldAutoFollow by rememberSaveable(selectedSessionId) { mutableStateOf(true) }
