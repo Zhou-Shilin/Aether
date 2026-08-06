@@ -84,6 +84,16 @@ class SharedPiBridgeClient(
             startIfNeeded = startIfNeeded,
         )
 
+    suspend fun getModelCapabilities(
+        modelConfig: JsonObject,
+        startIfNeeded: Boolean = true,
+    ): JsonObject = request(
+        type = "get_model_capabilities",
+        payload = buildJsonObject { put("model_config", modelConfig) },
+        timeoutMillis = 15_000,
+        startIfNeeded = startIfNeeded,
+    )
+
     suspend fun loginProvider(
         providerConfigId: String,
         providerId: String,

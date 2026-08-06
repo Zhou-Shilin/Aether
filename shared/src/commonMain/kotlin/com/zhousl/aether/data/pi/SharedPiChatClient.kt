@@ -95,7 +95,13 @@ class SharedPiChatClient(
         val response = bridge.request(
             type = "complete_once",
             payload = buildJsonObject {
-                put("model_config", config.toSharedPiModelConfig(timeoutMillis))
+                put(
+                    "model_config",
+                    config.toSharedPiModelConfig(
+                        timeoutMillis = timeoutMillis,
+                        reasoningEnabled = reasoning != "off",
+                    ),
+                )
                 put("system_prompt", systemPrompt.ifBlank { platformDefaultSystemPrompt() })
                 put("messages", messages.toPiMessages())
                 put("stream", false)
@@ -143,7 +149,13 @@ class SharedPiChatClient(
             else -> executor?.definitions ?: JsonArray(emptyList())
         }
         val payload = buildJsonObject {
-            put("model_config", config.toSharedPiModelConfig(timeoutMillis))
+            put(
+                "model_config",
+                config.toSharedPiModelConfig(
+                    timeoutMillis = timeoutMillis,
+                    reasoningEnabled = reasoning != "off",
+                ),
+            )
             put("session_id", resolvedSessionId)
             put("system_prompt", systemPrompt.ifBlank { platformDefaultSystemPrompt() })
             put("messages", messages.toPiMessages())
@@ -309,7 +321,10 @@ data class SharedPiHostToolCall(
     val arguments: JsonObject,
 )
 
-fun LlmProviderConfig.toSharedPiModelConfig(timeoutMillis: Int = 360_000): JsonObject {
+fun LlmProviderConfig.toSharedPiModelConfig(
+    timeoutMillis: Int = 360_000,
+    reasoningEnabled: Boolean = false,
+): JsonObject {
     val definition = PiProviderCatalog.resolve(piProviderId)
     val effectiveAuthMethod = if (
         authMethod == ProviderAuthMethod.ApiKey &&
@@ -339,7 +354,7 @@ fun LlmProviderConfig.toSharedPiModelConfig(timeoutMillis: Int = 360_000): JsonO
             }
             put("User-Agent", normalizeLlmUserAgent(userAgent))
         })
-        put("reasoning", false)
+        put("reasoning", reasoningEnabled && !definition.isBuiltIn)
         put("context_window", 128_000)
         put("max_tokens", 16_384)
         put("timeout_ms", timeoutMillis.coerceIn(30_000, 3_600_000))

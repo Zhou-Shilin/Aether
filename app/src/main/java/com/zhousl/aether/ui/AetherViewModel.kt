@@ -2374,17 +2374,15 @@ class AetherViewModel(
         }
         val config = current.providerConfigs.firstOrNull { it.id == option.providerConfigId }
             ?: return onResolved(false)
-        val definition = com.zhousl.aether.data.PiProviderCatalog.resolve(config.piProviderId)
-        if (!definition.isBuiltIn) {
-            onResolved(false)
-            return
-        }
+        val startPiBridgeIfNeeded = !com.zhousl.aether.data.PiProviderCatalog
+            .resolve(config.piProviderId)
+            .isBuiltIn
 
         viewModelScope.launch {
             val result = ProviderModelCatalogClient.fetchPiThinkingLevels(
-                config = config,
+                config = config.copy(modelId = option.modelId),
                 piKernelBridge = runtime.piKernelBridge,
-                startPiBridgeIfNeeded = false,
+                startPiBridgeIfNeeded = startPiBridgeIfNeeded,
             )
             if (result.error != null) {
                 onResolved(false)
@@ -2428,14 +2426,15 @@ class AetherViewModel(
             ?: return
         val config = current.providerConfigs.firstOrNull { it.id == option.providerConfigId }
             ?: return
-        val definition = com.zhousl.aether.data.PiProviderCatalog.resolve(config.piProviderId)
-        if (!definition.isBuiltIn) return
+        val startPiBridgeIfNeeded = !com.zhousl.aether.data.PiProviderCatalog
+            .resolve(config.piProviderId)
+            .isBuiltIn
 
         viewModelScope.launch {
             val result = ProviderModelCatalogClient.fetchPiThinkingLevels(
-                config = config,
+                config = config.copy(modelId = option.modelId),
                 piKernelBridge = runtime.piKernelBridge,
-                startPiBridgeIfNeeded = false,
+                startPiBridgeIfNeeded = startPiBridgeIfNeeded,
             )
             if (result.error != null) return@launch
             _uiState.update { state ->

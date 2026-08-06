@@ -1327,6 +1327,25 @@ test("lists every built-in Pi provider and its model catalog", async () => {
   assert.deepEqual(oauthProviders, ["anthropic", "github-copilot", "openai-codex"]);
 });
 
+test("returns Pi thinking capabilities for a known model on a custom endpoint", async () => {
+  const client = new BridgeClient();
+  const capabilities = await client.request("custom-capabilities", "get_model_capabilities", {
+    model_config: {
+      provider_type: "custom",
+      provider_config_id: "custom-kimi",
+      pi_provider_id: "aether-modal",
+      pi_api: "openai-completions",
+      model_id: "kimi-k3",
+      base_url: "https://example.modal.run/v1",
+      reasoning: false,
+    },
+  });
+
+  assert.equal(capabilities.reasoning, true);
+  assert.deepEqual(capabilities.thinking_levels, ["low", "high", "max"]);
+  assert.equal(capabilities.thinking_level_clamps.medium, "high");
+});
+
 test("validates Pi OAuth protocol requests without legacy provider fallbacks", async () => {
   const client = new BridgeClient();
   const promptResult = await client.request("prompt-missing", "auth_prompt_result", {

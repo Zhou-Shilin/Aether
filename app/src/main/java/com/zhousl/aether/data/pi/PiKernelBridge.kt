@@ -83,6 +83,16 @@ class PiKernelBridge(
             startIfNeeded = startIfNeeded,
         )
 
+    suspend fun getModelCapabilities(
+        modelConfig: JSONObject,
+        startIfNeeded: Boolean = true,
+    ): JSONObject = request(
+        type = "get_model_capabilities",
+        payload = JSONObject().put("model_config", modelConfig),
+        timeoutMillis = PiBridgePingTimeoutMillis,
+        startIfNeeded = startIfNeeded,
+    )
+
     suspend fun loginProvider(
         providerConfigId: String,
         providerId: String,

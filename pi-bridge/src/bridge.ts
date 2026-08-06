@@ -85,6 +85,7 @@ const DEFAULT_HARNESS_SESSION_TTL_MS = 30 * 60 * 1000;
 const DEFAULT_AGENT_RETRY_MAX_RETRIES = 5;
 const DEFAULT_AGENT_RETRY_BASE_DELAY_MS = 2_000;
 const CUSTOM_BASE_URL_BUILTIN_PROVIDER_IDS = new Set(["openai", "anthropic"]);
+const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 
 type JsonObject = Record<string, unknown>;
 
@@ -634,24 +635,41 @@ function apiStreamsFor(piApi: string): ProviderStreams {
   }
 }
 
+function customModelTemplate(config: ModelConfig): Model<string> | undefined {
+  const matchingApiModels = getBuiltinProviders()
+    .flatMap((providerId) => getBuiltinModels(providerId))
+    .filter((model) => model.api === config.pi_api);
+  const exact = matchingApiModels.find((model) => model.id === config.model_id);
+  if (exact) return exact as Model<string>;
+  const normalizedModelId = config.model_id.toLowerCase();
+  return matchingApiModels.find((model) => model.id.toLowerCase() === normalizedModelId) as
+    | Model<string>
+    | undefined;
+}
+
 function createAetherModel(config: ModelConfig): Model<string> {
+  const template = customModelTemplate(config);
   return {
+    ...template,
     id: config.model_id,
-    name: config.model_id,
+    name: template?.name ?? config.model_id,
     api: config.pi_api,
     provider: config.pi_provider_id,
     baseUrl: config.base_url,
-    reasoning: config.reasoning ?? false,
-    input: ["text", "image"],
-    cost: {
+    reasoning: template?.reasoning ?? config.reasoning ?? false,
+    input: template?.input ?? ["text", "image"],
+    cost: template?.cost ?? {
       input: 0,
       output: 0,
       cacheRead: 0,
       cacheWrite: 0,
     },
-    contextWindow: config.context_window ?? 128000,
-    maxTokens: config.max_tokens ?? 16384,
-    headers: config.custom_headers,
+    contextWindow: config.context_window ?? template?.contextWindow ?? 128000,
+    maxTokens: config.max_tokens ?? template?.maxTokens ?? 16384,
+    headers: {
+      ...template?.headers,
+      ...config.custom_headers,
+    },
   };
 }
 
@@ -789,6 +807,16 @@ async function credentialPayload(
   };
 }
 
+function modelCapabilitiesPayload(model: Model<string>): JsonObject {
+  return {
+    reasoning: model.reasoning,
+    thinking_levels: getSupportedThinkingLevels(model),
+    thinking_level_clamps: Object.fromEntries(
+      THINKING_LEVELS.map((level) => [level, clampThinkingLevel(model, level)]),
+    ),
+  };
+}
+
 function providerCatalogPayload(): JsonObject {
   return {
     providers: getBuiltinProviders().map((providerId) => {
@@ -808,14 +836,7 @@ function providerCatalogPayload(): JsonObject {
           id: model.id,
           name: model.name,
           api: model.api,
-          reasoning: model.reasoning,
-          thinking_levels: getSupportedThinkingLevels(model),
-          thinking_level_clamps: Object.fromEntries(
-            ["off", "minimal", "low", "medium", "high", "xhigh", "max"].map((level) => [
-              level,
-              clampThinkingLevel(model, level as "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"),
-            ]),
-          ),
+          ...modelCapabilitiesPayload(model),
           input: model.input,
           context_window: model.contextWindow,
           max_tokens: model.maxTokens,
@@ -2737,6 +2758,12 @@ async function handleRequest(request: BridgeRequest): Promise<void> {
     case "list_providers":
       writeResponse(id, providerCatalogPayload());
       return;
+    case "get_model_capabilities": {
+      const config = normalizeModelConfig(payload.model_config);
+      const { model } = buildModels(config);
+      writeResponse(id, modelCapabilitiesPayload(model));
+      return;
+    }
     case "login_provider":
       writeResponse(id, await loginProvider(id, payload));
       return;

@@ -2,6 +2,7 @@ package com.zhousl.aether.data.pi
 
 import com.zhousl.aether.data.AppSettings
 import com.zhousl.aether.data.LlmCustomHeader
+import com.zhousl.aether.data.LlmProviderConfig
 import com.zhousl.aether.data.LlmTokenUsage
 import com.zhousl.aether.data.PiProviderCatalog
 import com.zhousl.aether.data.normalizeLlmUserAgent
@@ -79,40 +80,58 @@ data class PiCompletionResult(
     val updatedOauthCredentialJson: String = "",
 )
 
-fun AppSettings.toPiModelConfig(): PiModelConfig {
+fun AppSettings.toPiModelConfig(): PiModelConfig =
+    LlmProviderConfig(
+        id = providerConfigId,
+        providerId = piProviderId,
+        name = "",
+        piProviderId = piProviderId,
+        apiKey = apiKey,
+        baseUrl = baseUrl,
+        authMethod = providerAuthMethod,
+        oauthCredentialJson = oauthCredentialJson,
+        providerEnvironmentVariables = providerEnvironmentVariables,
+        modelId = modelId,
+        userAgent = userAgent,
+        customHeaders = customHeaders,
+    ).toPiModelConfig(
+        reasoningEnabled = toPiThinkingLevel() != "off",
+        timeoutMillis = llmInactivityReconnectTimeoutSeconds
+            .coerceIn(30, 3_600) * 1_000,
+    )
+
+internal fun LlmProviderConfig.toPiModelConfig(
+    reasoningEnabled: Boolean = false,
+    timeoutMillis: Int = 360_000,
+): PiModelConfig {
     val definition = PiProviderCatalog.resolve(piProviderId)
     val effectiveAuthMethod = if (
-        providerAuthMethod == ProviderAuthMethod.ApiKey &&
+        authMethod == ProviderAuthMethod.ApiKey &&
         !definition.supportsApiKey &&
         definition.supportsAmbientAuth
     ) {
         ProviderAuthMethod.Ambient
     } else {
-        providerAuthMethod
+        authMethod
     }
     return PiModelConfig(
         providerType = if (definition.isBuiltIn) "builtin" else "custom",
-        providerConfigId = providerConfigId.ifBlank {
+        providerConfigId = id.ifBlank {
             if (definition.isBuiltIn) definition.id else "aether-${stableProviderSuffix(baseUrl)}"
         },
         piProviderId = if (definition.isBuiltIn) {
             definition.id
         } else {
-            "aether-${stableProviderSuffix(providerConfigId.ifBlank { baseUrl })}"
+            "aether-${stableProviderSuffix(id.ifBlank { baseUrl })}"
         },
         piApi = if (definition.isBuiltIn) "builtin" else "openai-completions",
         modelId = modelId.trim(),
         baseUrl = baseUrl.trim(),
-        apiKey = if (effectiveAuthMethod == ProviderAuthMethod.ApiKey) {
-            apiKey.trim()
-        } else {
-            ""
-        },
+        apiKey = if (effectiveAuthMethod == ProviderAuthMethod.ApiKey) apiKey.trim() else "",
         customHeaders = customHeaders.toPiHeaderMap() +
             ("User-Agent" to normalizeLlmUserAgent(userAgent)),
-        reasoning = false,
-        timeoutMillis = llmInactivityReconnectTimeoutSeconds
-            .coerceIn(30, 3_600) * 1_000,
+        reasoning = reasoningEnabled && !definition.isBuiltIn,
+        timeoutMillis = timeoutMillis.coerceIn(30_000, 3_600_000),
         authMethod = effectiveAuthMethod,
         oauthCredentialJson = oauthCredentialJson,
         providerEnvironment = providerEnvironmentVariables

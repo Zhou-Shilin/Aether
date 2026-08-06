@@ -29,6 +29,12 @@ data class SharedProviderModelsResult(
     val thinkingLevelClampsByModel: Map<String, Map<String, String>> = emptyMap(),
 )
 
+data class SharedPiModelCapabilities(
+    val reasoning: Boolean,
+    val thinkingLevels: List<String>,
+    val thinkingLevelClamps: Map<String, String>,
+)
+
 data class SharedModelCatalogInfo(
     val displayName: String,
     val labId: String,
@@ -495,3 +501,12 @@ internal fun sharedThinkingLevelClamps(clamps: JsonObject): Map<String, String> 
             ?.takeIf { it in SharedPiThinkingLevels }
             ?.let { effort to it }
     }.toMap()
+
+internal fun sharedPiModelCapabilities(payload: JsonObject): SharedPiModelCapabilities =
+    SharedPiModelCapabilities(
+        reasoning = payload["reasoning"]?.jsonPrimitive?.booleanOrNull == true,
+        thinkingLevels = supportedSharedThinkingLevels(payload["thinking_levels"] as? JsonArray),
+        thinkingLevelClamps = (payload["thinking_level_clamps"] as? JsonObject)
+            ?.let(::sharedThinkingLevelClamps)
+            .orEmpty(),
+    )

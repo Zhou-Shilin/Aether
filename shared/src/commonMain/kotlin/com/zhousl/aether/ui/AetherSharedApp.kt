@@ -207,6 +207,7 @@ import com.zhousl.aether.data.shouldRevealFollowUpTourCard
 import com.zhousl.aether.data.withModelOption
 import com.zhousl.aether.data.toJsonObject
 import com.zhousl.aether.data.providerModelsFromCatalog
+import com.zhousl.aether.data.sharedPiModelCapabilities
 import com.zhousl.aether.data.sharedThinkingCatalogKey
 import com.zhousl.aether.data.platformRandomUuid
 import com.zhousl.aether.data.platformCurrentTimeMillis
@@ -220,6 +221,7 @@ import com.zhousl.aether.data.pi.SharedPiChatClient
 import com.zhousl.aether.data.pi.SharedPiChatMessage
 import com.zhousl.aether.data.pi.SharedPiContentPart
 import com.zhousl.aether.data.pi.SharedPiUsage
+import com.zhousl.aether.data.pi.toSharedPiModelConfig
 import com.zhousl.aether.data.pi.RuntimeHostToolExecutor
 import com.zhousl.aether.data.pi.SharedAgentManagementTools
 import com.zhousl.aether.data.pi.SharedMcpManager
@@ -1372,14 +1374,43 @@ fun AetherSharedApp(
                         }
                         levels to clamps
                     }
-                    val refreshedKeys = options.mapTo(mutableSetOf()) { option ->
-                        sharedThinkingCatalogKey(option.piProviderId, option.modelId)
-                    }
-                    thinkingLevelsByProviderModel = thinkingLevelsByProviderModel + runtimeResult.first
+                    val refreshedKeys = options
+                        .filter { option -> PiProviderCatalog.resolve(option.piProviderId).isBuiltIn }
+                        .mapTo(mutableSetOf()) { option ->
+                            sharedThinkingCatalogKey(option.piProviderId, option.modelId)
+                        }
+                    thinkingLevelsByProviderModel =
+                        thinkingLevelsByProviderModel.filterKeys { it !in refreshedKeys } + runtimeResult.first
                     thinkingLevelClampsByProviderModel =
                         thinkingLevelClampsByProviderModel.filterKeys { it !in refreshedKeys } + runtimeResult.second
                     persistThinkingCatalogCache()
                 }
+
+                options
+                    .filter { option -> !PiProviderCatalog.resolve(option.piProviderId).isBuiltIn }
+                    .forEach { option ->
+                        val key = sharedThinkingCatalogKey(option.piProviderId, option.modelId)
+                        val config = configs.firstOrNull { it.id == option.providerConfigId } ?: return@forEach
+                        val capabilities = runSharedAppCatching {
+                            bridgeClient.getModelCapabilities(
+                                modelConfig = config.copy(modelId = option.modelId)
+                                    .toSharedPiModelConfig(),
+                                startIfNeeded = true,
+                            )
+                        }.getOrNull() ?: return@forEach
+                        val parsed = sharedPiModelCapabilities(capabilities)
+                        if (parsed.reasoning) {
+                            thinkingLevelsByProviderModel = thinkingLevelsByProviderModel +
+                                (key to parsed.thinkingLevels)
+                            thinkingLevelClampsByProviderModel = thinkingLevelClampsByProviderModel +
+                                (key to parsed.thinkingLevelClamps)
+                        } else if (key !in publicLevels) {
+                            thinkingLevelsByProviderModel = thinkingLevelsByProviderModel +
+                                (key to emptyList())
+                            thinkingLevelClampsByProviderModel = thinkingLevelClampsByProviderModel - key
+                        }
+                    }
+                persistThinkingCatalogCache()
                 true
             }.getOrDefault(false)
         }

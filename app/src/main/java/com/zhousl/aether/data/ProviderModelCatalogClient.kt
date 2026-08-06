@@ -1,6 +1,7 @@
 package com.zhousl.aether.data
 
 import com.zhousl.aether.data.pi.PiKernelBridge
+import com.zhousl.aether.data.pi.toPiModelConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -25,6 +26,23 @@ internal fun piThinkingLevelClamps(clamps: JSONObject): Map<String, String> =
 
 internal fun thinkingCatalogKey(providerId: String, modelId: String): String =
     "${providerId.trim()}/${modelId.substringAfterLast('/').trim()}"
+
+internal data class PiModelCapabilities(
+    val reasoning: Boolean,
+    val thinkingLevels: List<String>,
+    val thinkingLevelClamps: Map<String, String>,
+)
+
+internal fun piModelCapabilities(payload: JSONObject): PiModelCapabilities =
+    PiModelCapabilities(
+        reasoning = payload.optBoolean("reasoning"),
+        thinkingLevels = supportedThinkingLevels(
+            payload.optJSONArray("thinking_levels") ?: JSONArray(),
+        ),
+        thinkingLevelClamps = payload.optJSONObject("thinking_level_clamps")
+            ?.let(::piThinkingLevelClamps)
+            .orEmpty(),
+    )
 
 object ProviderModelCatalogClient {
 
@@ -64,15 +82,52 @@ object ProviderModelCatalogClient {
     ): FetchModelsResult = withContext(Dispatchers.IO) {
         try {
             val definition = PiProviderCatalog.resolve(config.piProviderId)
-            if (!definition.isBuiltIn) return@withContext FetchModelsResult(emptyList())
-            fetchPiBuiltinModels(
-                definition = definition,
-                piKernelBridge = piKernelBridge,
-                startPiBridgeIfNeeded = startPiBridgeIfNeeded,
-            )
+            if (definition.isBuiltIn) {
+                fetchPiBuiltinModels(
+                    definition = definition,
+                    piKernelBridge = piKernelBridge,
+                    startPiBridgeIfNeeded = startPiBridgeIfNeeded,
+                )
+            } else {
+                fetchPiConfiguredModel(
+                    config = config,
+                    piKernelBridge = piKernelBridge,
+                    startPiBridgeIfNeeded = startPiBridgeIfNeeded,
+                )
+            }
         } catch (e: Exception) {
             FetchModelsResult(emptyList(), e.message ?: "Unknown error")
         }
+    }
+
+    private suspend fun fetchPiConfiguredModel(
+        config: LlmProviderConfig,
+        piKernelBridge: PiKernelBridge?,
+        startPiBridgeIfNeeded: Boolean,
+    ): FetchModelsResult {
+        val modelId = config.modelId.trim()
+        if (modelId.isBlank()) return FetchModelsResult(emptyList())
+        if (piKernelBridge == null) return FetchModelsResult(listOf(modelId))
+
+        val capabilities = piModelCapabilities(
+            piKernelBridge.getModelCapabilities(
+                modelConfig = config.toPiModelConfig().toJson(),
+                startIfNeeded = startPiBridgeIfNeeded,
+            ),
+        )
+        return FetchModelsResult(
+            models = listOf(modelId),
+            thinkingLevelsByModel = if (capabilities.reasoning) {
+                mapOf(modelId to capabilities.thinkingLevels)
+            } else {
+                emptyMap()
+            },
+            thinkingLevelClampsByModel = if (capabilities.reasoning) {
+                mapOf(modelId to capabilities.thinkingLevelClamps)
+            } else {
+                emptyMap()
+            },
+        )
     }
 
     private suspend fun fetchPiBuiltinModels(

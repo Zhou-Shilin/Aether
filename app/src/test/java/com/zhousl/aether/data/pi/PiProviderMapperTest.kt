@@ -33,11 +33,13 @@ class PiProviderMapperTest {
         assertEquals("gpt-5.4", config.modelId)
         assertEquals("sk-test", config.apiKey)
         assertFalse(config.reasoning)
-        assertEquals("high", AppSettings(
+        val activeReasoningSettings = AppSettings(
             piProviderId = "openai",
             modelId = "gpt-5.4",
             reasoningEffort = "high",
-        ).toPiThinkingLevel())
+        )
+        assertEquals("high", activeReasoningSettings.toPiThinkingLevel())
+        assertFalse(activeReasoningSettings.toPiModelConfig().reasoning)
     }
 
     @Test
@@ -59,7 +61,7 @@ class PiProviderMapperTest {
     }
 
     @Test
-    fun customModelDoesNotInventReasoningCapability() {
+    fun activeThinkingLevelEnablesCustomModelReasoningCapability() {
         val config = AppSettings(
             piProviderId = "openai-compatible",
             providerConfigId = "custom-provider-id",
@@ -68,7 +70,7 @@ class PiProviderMapperTest {
             reasoningEffort = "high",
         ).toPiModelConfig()
 
-        assertFalse(config.reasoning)
+        assertTrue(config.reasoning)
         assertEquals("high", AppSettings(
             piProviderId = "openai-compatible",
             modelId = "custom-model",

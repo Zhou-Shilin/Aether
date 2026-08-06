@@ -17,6 +17,19 @@ import kotlinx.serialization.json.JsonObject
 
 class SharedProviderModelCatalogClientTest {
     @Test
+    fun parsesPiModelCapabilitiesIncludingClamps() {
+        val capabilities = sharedPiModelCapabilities(
+            Json.parseToJsonElement(
+                """{"reasoning":true,"thinking_levels":["off","low","high","unknown"],"thinking_level_clamps":{"max":"high","invalid":"low"}}""",
+            ) as JsonObject,
+        )
+
+        assertTrue(capabilities.reasoning)
+        assertEquals(listOf("off", "low", "high"), capabilities.thinkingLevels)
+        assertEquals(mapOf("max" to "high"), capabilities.thinkingLevelClamps)
+    }
+
+    @Test
     fun customProviderFetchesConfiguredModelsEndpointWithHeaders() = runTest {
         val engine = MockEngine { request ->
             assertEquals("https://models.example/v1/models", request.url.toString())

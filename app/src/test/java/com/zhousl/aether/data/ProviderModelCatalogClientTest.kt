@@ -62,6 +62,26 @@ class ProviderModelCatalogClientTest {
     }
 
     @Test
+    fun modelCapabilitiesUsePiReasoningLevelsAndClamps() {
+        val capabilities = piModelCapabilities(
+            JSONObject()
+                .put("reasoning", true)
+                .put("thinking_levels", JSONArray().put("low").put("high").put("max"))
+                .put(
+                    "thinking_level_clamps",
+                    JSONObject().put("off", "low").put("medium", "high").put("xhigh", "max"),
+                ),
+        )
+
+        assertEquals(true, capabilities.reasoning)
+        assertEquals(listOf("low", "high", "max"), capabilities.thinkingLevels)
+        assertEquals(
+            mapOf("off" to "low", "medium" to "high", "xhigh" to "max"),
+            capabilities.thinkingLevelClamps,
+        )
+    }
+
+    @Test
     fun fetchModelsIncludesConfiguredUserAgentAndCustomHeaders() = runBlocking {
         val server = MockWebServer()
         server.enqueue(

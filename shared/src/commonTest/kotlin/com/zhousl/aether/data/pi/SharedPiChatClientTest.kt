@@ -42,6 +42,23 @@ class SharedPiChatClientTest {
     }
 
     @Test
+    fun modelConfigEnablesPiReasoningForAnActiveThinkingTurn() {
+        assertEquals(
+            "true",
+            testProvider().toSharedPiModelConfig(reasoningEnabled = true)["reasoning"].toString(),
+        )
+        assertEquals(
+            "false",
+            testProvider().toSharedPiModelConfig(reasoningEnabled = false)["reasoning"].toString(),
+        )
+        assertEquals(
+            "false",
+            testProvider().copy(piProviderId = "openai")
+                .toSharedPiModelConfig(reasoningEnabled = true)["reasoning"].toString(),
+        )
+    }
+
+    @Test
     fun sendsMultimodalContentAndParsesUsage() = runTest {
         val process = ChatProtocolProcess()
         val bridge = SharedPiBridgeClient(
