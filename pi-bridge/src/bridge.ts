@@ -9,6 +9,7 @@ import {
   clampThinkingLevel,
   createModels,
   createProvider,
+  hasApi,
   defaultProviderAuthContext,
   fauxAssistantMessage,
   fauxProvider,
@@ -580,6 +581,31 @@ function asBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
 
+function normalizeBaseUrlForComparison(value: string | undefined): string {
+  const trimmed = (value ?? "").trim();
+  if (!trimmed) return "";
+  try {
+    const url = new URL(trimmed);
+    url.pathname = url.pathname.replace(/\/+$/, "");
+    return url.toString();
+  } catch {
+    return trimmed.replace(/\/+$/, "");
+  }
+}
+
+function isCustomResponsesEndpoint(
+  model: Model<string>,
+  configuredBaseUrl: string | undefined,
+  defaultBaseUrl: string | undefined,
+): model is Model<"openai-responses"> {
+  const configured = normalizeBaseUrlForComparison(configuredBaseUrl);
+  return (
+    hasApi(model, "openai-responses") &&
+    configured.length > 0 &&
+    configured !== normalizeBaseUrlForComparison(defaultBaseUrl)
+  );
+}
+
 function normalizeHeaders(value: unknown): Record<string, string> {
   const inputHeaders = asObject(value);
   const headers: Record<string, string> = {};
@@ -766,6 +792,20 @@ function buildModels(config: ModelConfig): {
     if (!modelTemplate) {
       throw new Error(`Built-in Pi provider ${config.pi_provider_id} has no protocol template.`);
     }
+    const defaultBaseUrl = provider.baseUrl ?? modelTemplate.baseUrl;
+    const customBaseUrlModelOverrides = isCustomResponsesEndpoint(
+      modelTemplate,
+      config.base_url,
+      defaultBaseUrl,
+    )
+      ? {
+          // Custom Responses endpoints must not inherit official prompt-cache capabilities.
+          compat: {
+            ...(modelTemplate.compat ?? {}),
+            supportsExplicitPromptCacheMode: false,
+          },
+        }
+      : {};
     const credentialStore = new BridgeCredentialStore(
       provider.id,
       config.provider_config_id,
@@ -793,6 +833,7 @@ function buildModels(config: ModelConfig): {
               cacheWrite: 0,
             },
           }),
+      ...customBaseUrlModelOverrides,
       ...(config.base_url ? { baseUrl: config.base_url } : {}),
       headers: {
         ...modelTemplate.headers,

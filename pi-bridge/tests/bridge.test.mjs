@@ -746,6 +746,134 @@ async function respondToHostTool(client, frame, id) {
   });
 }
 
+const RESPONSES_TEST_TURN_COUNT = 3;
+const RESPONSES_TEST_PROMPT = "x".repeat(60_000);
+
+function openAIResponseEvents(responseNumber) {
+  const text = `answer-${responseNumber}`;
+  const messageId = `msg_${responseNumber}`;
+  return [
+    {
+      type: "response.output_item.added",
+      item: {
+        type: "message",
+        id: messageId,
+        role: "assistant",
+        status: "in_progress",
+        content: [],
+      },
+    },
+    { type: "response.content_part.added", part: { type: "output_text", text: "" } },
+    { type: "response.output_text.delta", delta: text },
+    {
+      type: "response.output_item.done",
+      item: {
+        type: "message",
+        id: messageId,
+        role: "assistant",
+        status: "completed",
+        content: [{ type: "output_text", text }],
+      },
+    },
+    {
+      type: "response.completed",
+      response: {
+        id: `resp_${responseNumber}`,
+        status: "completed",
+        usage: {
+          input_tokens: 5,
+          output_tokens: 3,
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
+        },
+      },
+    },
+  ];
+}
+
+async function createOpenAIResponsesServer() {
+  const requests = [];
+  let responseCount = 0;
+  const server = createServer((request, response) => {
+    const chunks = [];
+    request.on("data", (chunk) => chunks.push(chunk));
+    request.on("end", () => {
+      const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      requests.push({ url: request.url, body });
+      responseCount += 1;
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      for (const event of openAIResponseEvents(responseCount)) {
+        response.write(`data: ${JSON.stringify(event)}\n\n`);
+      }
+      response.end("data: [DONE]\n\n");
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  return {
+    requests,
+    baseUrl: `http://127.0.0.1:${address.port}/v1`,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+}
+
+function openAIFetchRedirectEnvironment(targetBaseUrl) {
+  const preloadSource = `
+const targetOrigin = process.env.AETHER_TEST_OPENAI_REDIRECT_ORIGIN;
+if (!targetOrigin) throw new Error("AETHER_TEST_OPENAI_REDIRECT_ORIGIN is required.");
+const originalFetch = globalThis.fetch;
+globalThis.fetch = (input, init) => {
+  const rawUrl = typeof input === "string" || input instanceof URL ? String(input) : input.url;
+  const url = new URL(rawUrl);
+  if (url.hostname !== "api.openai.com") return originalFetch(input, init);
+  return originalFetch(new URL(url.pathname + url.search, targetOrigin), init);
+};
+`;
+  const preloadSpecifier = `data:text/javascript,${encodeURIComponent(preloadSource)}`;
+  return {
+    AETHER_TEST_OPENAI_REDIRECT_ORIGIN: new URL(targetBaseUrl).origin,
+    NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --import=${preloadSpecifier}`.trim(),
+  };
+}
+
+function openAIResponsesModelConfig(baseUrl, overrides = {}) {
+  return {
+    provider_type: "builtin",
+    provider_config_id: "responses-test",
+    pi_provider_id: "openai",
+    pi_api: "builtin",
+    model_id: "gpt-5.6-sol",
+    base_url: baseUrl,
+    api_key: "secret-key",
+    reasoning: true,
+    context_window: 128_000,
+    max_tokens: 16_384,
+    max_retries: 0,
+    ...overrides,
+  };
+}
+
+async function runResponsesTurns(client, sessionId, modelConfig, sessionDirectory) {
+  for (let turn = 1; turn <= RESPONSES_TEST_TURN_COUNT; turn += 1) {
+    await client.request(
+      `${sessionId}-turn-${turn}`,
+      "run_turn",
+      {
+        ...turnPayload(
+          sessionId,
+          [userMessage(`turn ${turn}: ${RESPONSES_TEST_PROMPT}`)],
+          modelConfig,
+        ),
+        workspace_directory: sessionDirectory,
+        session_directory: sessionDirectory,
+        max_retries: 0,
+      },
+      20_000,
+    );
+  }
+}
+
 test("reports pinned bridge and Pi versions", async () => {
   const client = new BridgeClient();
   const ping = await client.request("ping-1", "ping");
@@ -1370,6 +1498,85 @@ test("accepts arbitrary manual model IDs for a built-in provider", async (t) => 
   assert.equal(receivedRequest.customHeader, "present");
   assert.equal(receivedRequest.body.model, "sfsefehfjksdnf");
   assert.equal(receivedRequest.body.reasoning.effort, "high");
+});
+
+test("omits explicit cache mode for custom OpenAI Responses endpoints", async (t) => {
+  const home = await mkdtemp(join(tmpdir(), "aether-custom-responses-"));
+  const api = await createOpenAIResponsesServer();
+  const client = new BridgeClient({ HOME: home, USERPROFILE: home });
+  t.after(async () => {
+    await client.close();
+    await api.close();
+    await rm(home, { recursive: true, force: true });
+  });
+
+  const sessionId = "custom-responses-compaction";
+  await runResponsesTurns(
+    client,
+    sessionId,
+    openAIResponsesModelConfig(api.baseUrl),
+    home,
+  );
+  const compacted = await client.request(
+    "custom-responses-compact",
+    "compact_session",
+    { session_id: sessionId },
+    20_000,
+  );
+
+  assert.ok(compacted.compaction);
+  assert.equal(api.requests.length, RESPONSES_TEST_TURN_COUNT + 1);
+  for (const request of api.requests) {
+    assert.equal(request.url, "/v1/responses");
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(request.body, "prompt_cache_options"),
+      false,
+    );
+  }
+});
+
+test("preserves explicit cache mode for the official OpenAI Responses endpoint", async (t) => {
+  const home = await mkdtemp(join(tmpdir(), "aether-official-responses-"));
+  const api = await createOpenAIResponsesServer();
+  const client = new BridgeClient({
+    HOME: home,
+    USERPROFILE: home,
+    ...openAIFetchRedirectEnvironment(api.baseUrl),
+  });
+  t.after(async () => {
+    await client.close();
+    await api.close();
+    await rm(home, { recursive: true, force: true });
+  });
+
+  const sessionId = "official-responses-compaction";
+  await runResponsesTurns(
+    client,
+    sessionId,
+    openAIResponsesModelConfig("https://API.OPENAI.COM:443/v1/", {
+      provider_config_id: sessionId,
+    }),
+    home,
+  );
+  const compacted = await client.request(
+    "official-responses-compact",
+    "compact_session",
+    { session_id: sessionId },
+    20_000,
+  );
+
+  assert.ok(compacted.compaction);
+  assert.equal(api.requests.length, RESPONSES_TEST_TURN_COUNT + 1);
+  for (const request of api.requests) {
+    assert.equal(request.url, "/v1/responses");
+  }
+  for (const request of api.requests.slice(0, -1)) {
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(request.body, "prompt_cache_options"),
+      false,
+    );
+  }
+  assert.deepEqual(api.requests.at(-1).body.prompt_cache_options, { mode: "explicit" });
 });
 
 test("lists every built-in Pi provider and its model catalog", async () => {
