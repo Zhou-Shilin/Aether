@@ -829,6 +829,53 @@ function openAIResponseEvents(responseNumber) {
   ];
 }
 
+function openAIEncryptedReasoningToolEvents() {
+  const reasoningItem = {
+    type: "reasoning",
+    id: "rs_gateway_1",
+    status: "completed",
+    summary: [{ type: "summary_text", text: "route-specific reasoning" }],
+    encrypted_content: "gAAAA-route-specific-encrypted-content",
+  };
+  const functionCall = {
+    type: "function_call",
+    id: "fc_gateway_1",
+    call_id: "call_gateway_1",
+    name: "aether_config_get",
+    arguments: JSON.stringify({ value: "general" }),
+    status: "completed",
+  };
+  return [
+    {
+      type: "response.output_item.added",
+      output_index: 0,
+      item: { ...reasoningItem, status: "in_progress", summary: [], encrypted_content: null },
+    },
+    { type: "response.output_item.done", output_index: 0, item: reasoningItem },
+    {
+      type: "response.output_item.added",
+      output_index: 1,
+      item: { ...functionCall, status: "in_progress", arguments: "" },
+    },
+    { type: "response.output_item.done", output_index: 1, item: functionCall },
+    {
+      type: "response.completed",
+      response: {
+        id: "resp_gateway_1",
+        status: "completed",
+        output: [reasoningItem, functionCall],
+        usage: {
+          input_tokens: 5,
+          output_tokens: 3,
+          total_tokens: 8,
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 2 },
+        },
+      },
+    },
+  ];
+}
+
 async function createOpenAIResponsesServer() {
   const requests = [];
   let responseCount = 0;
@@ -1678,6 +1725,86 @@ test("omits explicit cache mode for custom OpenAI Responses endpoints", async (t
       false,
     );
   }
+});
+
+test("does not replay encrypted reasoning through custom OpenAI Responses gateways", async (t) => {
+  const home = await mkdtemp(join(tmpdir(), "aether-responses-replay-"));
+  const requests = [];
+  const server = createServer((request, response) => {
+    const chunks = [];
+    request.on("data", (chunk) => chunks.push(chunk));
+    request.on("end", () => {
+      const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      requests.push(body);
+      const replayedEncryptedReasoning = body.input?.some(
+        (item) => item.type === "reasoning" && item.encrypted_content,
+      );
+      if (requests.length > 1 && replayedEncryptedReasoning) {
+        response.writeHead(400, { "content-type": "application/json" });
+        response.end(JSON.stringify({
+          error: {
+            message: "The encrypted content could not be verified.",
+            type: "invalid_request_error",
+            code: "invalid_encrypted_content",
+          },
+        }));
+        return;
+      }
+
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      const events = requests.length === 1
+        ? openAIEncryptedReasoningToolEvents()
+        : openAIResponseEvents(requests.length);
+      for (const event of events) response.write(`data: ${JSON.stringify(event)}\n\n`);
+      response.end("data: [DONE]\n\n");
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const client = new BridgeClient({ HOME: home, USERPROFILE: home });
+  t.after(async () => {
+    await client.close();
+    await new Promise((resolve) => server.close(resolve));
+    await rm(home, { recursive: true, force: true });
+  });
+
+  const sessionId = "custom-responses-reasoning-replay";
+  const run = client.request(
+    "custom-responses-reasoning-turn",
+    "run_turn",
+    {
+      ...turnPayload(
+        sessionId,
+        [userMessage("Use the settings tool, then answer.")],
+        openAIResponsesModelConfig(`http://127.0.0.1:${address.port}/v1`, {
+          provider_config_id: sessionId,
+        }),
+        [hostTool("aether_config_get")],
+      ),
+      workspace_directory: home,
+      session_directory: home,
+      reasoning: "high",
+      max_retries: 0,
+    },
+    20_000,
+  );
+  const hostCall = await client.waitForEvent(
+    (frame) => frame.id === "custom-responses-reasoning-turn" && frame.event === "host_tool_request",
+  );
+  await respondToHostTool(client, hostCall, "custom-responses-reasoning-tool-result");
+  const result = await run;
+
+  assert.equal(result.assistant_text, "answer-2", JSON.stringify(result));
+  assert.equal(requests.length, 2);
+  assert.ok(requests[0].include.includes("reasoning.encrypted_content"));
+  assert.equal(
+    requests[1].input.some((item) => item.type === "reasoning" && item.encrypted_content),
+    false,
+  );
+  const replayedFunctionCall = requests[1].input.find((item) => item.type === "function_call");
+  assert.ok(replayedFunctionCall);
+  assert.equal(Object.hasOwn(replayedFunctionCall, "id"), false);
 });
 
 test("preserves explicit cache mode for the official OpenAI Responses endpoint", async (t) => {

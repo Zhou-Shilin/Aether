@@ -666,6 +666,27 @@ function isCustomResponsesEndpoint(
   );
 }
 
+const ISOLATED_REASONING_REPLAY_MODEL_SUFFIX = "#aether-isolated-reasoning-replay";
+
+function isolateResponsesReasoningReplay<T extends { role: string }>(messages: T[]): T[] {
+  return messages.map((message) => {
+    if (
+      message.role !== "assistant" ||
+      !("api" in message) ||
+      message.api !== "openai-responses" ||
+      !("model" in message) ||
+      typeof message.model !== "string" ||
+      message.model.endsWith(ISOLATED_REASONING_REPLAY_MODEL_SUFFIX)
+    ) {
+      return message;
+    }
+    return {
+      ...message,
+      model: `${message.model}${ISOLATED_REASONING_REPLAY_MODEL_SUFFIX}`,
+    };
+  });
+}
+
 function normalizeHeaders(value: unknown): Record<string, string> {
   const inputHeaders = asObject(value);
   const headers: Record<string, string> = {};
@@ -820,6 +841,7 @@ function buildModels(config: ModelConfig): {
   models: MutableModels;
   model: Model<string>;
   provider: Provider;
+  isolateReasoningReplay: boolean;
   credentialStore?: BridgeCredentialStore;
 } {
   bridgeDebug("build_models_start", {
@@ -863,7 +885,7 @@ function buildModels(config: ModelConfig): {
     }
     models.setProvider(faux.provider);
     const model = faux.getModel(config.model_id) ?? faux.getModel();
-    return { models, model, provider: faux.provider };
+    return { models, model, provider: faux.provider, isolateReasoningReplay: false };
   }
 
   if (config.provider_type === "builtin") {
@@ -877,11 +899,12 @@ function buildModels(config: ModelConfig): {
       throw new Error(`Built-in Pi provider ${config.pi_provider_id} has no protocol template.`);
     }
     const defaultBaseUrl = provider.baseUrl ?? modelTemplate.baseUrl;
-    const customBaseUrlModelOverrides = isCustomResponsesEndpoint(
+    const isolateReasoningReplay = isCustomResponsesEndpoint(
       modelTemplate,
       config.base_url,
       defaultBaseUrl,
-    )
+    );
+    const customBaseUrlModelOverrides = isolateReasoningReplay
       ? {
           // Custom Responses endpoints must not inherit official prompt-cache capabilities.
           compat: {
@@ -924,7 +947,7 @@ function buildModels(config: ModelConfig): {
         ...config.custom_headers,
       },
     } as Model<string>;
-    return { models, model, provider, credentialStore };
+    return { models, model, provider, isolateReasoningReplay, credentialStore };
   }
 
   const models = createModels();
@@ -953,12 +976,13 @@ function buildModels(config: ModelConfig): {
     api: apiStreamsFor(config.pi_api),
   });
   models.setProvider(provider);
-  return { models, model, provider };
+  return { models, model, provider, isolateReasoningReplay: false };
 }
 
 async function buildModelRuntime(config: ModelConfig): Promise<{
   modelRuntime: ModelRuntime;
   model: Model<string>;
+  isolateReasoningReplay: boolean;
   credentialStore?: BridgeCredentialStore;
 }> {
   const startedAt = Date.now();
@@ -983,6 +1007,7 @@ async function buildModelRuntime(config: ModelConfig): Promise<{
   return {
     modelRuntime,
     model: built.model,
+    isolateReasoningReplay: built.isolateReasoningReplay,
     credentialStore: built.credentialStore,
   };
 }
@@ -1994,6 +2019,13 @@ function extensionUiContext(): ExtensionUIContext {
   } as unknown as ExtensionUIContext;
 }
 
+const aetherResponsesCompatibilityExtensionFactory: ExtensionFactory = (pi) => {
+  pi.on("context", (event): { messages: typeof event.messages } => ({
+    // Gateway-routed encrypted reasoning may not be decryptable by the next upstream credential.
+    messages: isolateResponsesReasoningReplay(event.messages),
+  }));
+};
+
 const aetherChromeExtensionFactory: ExtensionFactory = (pi) => {
   pi.registerTool({
     name: "browser",
@@ -2166,7 +2198,10 @@ async function createNativeAgentSession(
     agentDir,
     settingsManager,
     additionalExtensionPaths,
-    extensionFactories: platform === "android" ? [aetherChromeExtensionFactory] : [],
+    extensionFactories: [
+      ...(built.isolateReasoningReplay ? [aetherResponsesCompatibilityExtensionFactory] : []),
+      ...(platform === "android" ? [aetherChromeExtensionFactory] : []),
+    ],
     additionalSkillPaths: stringArray(payload.skill_paths),
     appendSystemPrompt: [asString(payload.system_prompt)].filter(Boolean),
   });
@@ -2561,11 +2596,14 @@ async function followUpNativeAgentSession(id: string, payload: JsonObject): Prom
 
 async function runSimpleCompletion(id: string, payload: JsonObject, stream: boolean): Promise<JsonObject> {
   const config = normalizeModelConfig(payload.model_config ?? defaultModelConfig);
-  const { models, model, credentialStore } = buildModels(config);
+  const { models, model, isolateReasoningReplay, credentialStore } = buildModels(config);
   const controller = new AbortController();
   activeAborters.set(id, () => controller.abort());
   try {
     const context = buildContext(payload);
+    if (isolateReasoningReplay) {
+      context.messages = isolateResponsesReasoningReplay(context.messages);
+    }
     const options = streamOptionsFor(payload, controller.signal, config, model);
     if (stream) {
       const eventStream = models.streamSimple(model, context, options);
