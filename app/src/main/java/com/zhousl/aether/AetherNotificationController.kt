@@ -17,6 +17,7 @@ import com.zhousl.aether.ui.ChatSession
 
 private const val ForegroundChannelId = "aether_background_runs"
 private const val CompletionChannelId = "aether_completed_runs"
+private const val LiveUpdateChannelId = "aether_live_updates"
 const val ForegroundNotificationId = 1001
 
 class AetherNotificationController(
@@ -43,10 +44,32 @@ class AetherNotificationController(
         ).apply {
             description = "Alerts you when a background Aether session finishes."
         }
+        val liveUpdateChannel = NotificationChannel(
+            LiveUpdateChannelId,
+            "Live task progress",
+            NotificationManager.IMPORTANCE_LOW,
+        ).apply {
+            description = "Shows real-time progress of Aether tasks while the app is in the background."
+            setShowBadge(false)
+        }
         manager.createNotificationChannel(foregroundChannel)
         manager.createNotificationChannel(completionChannel)
+        manager.createNotificationChannel(liveUpdateChannel)
     }
 
+    /**
+     * Builds the foreground notification for active background sessions.
+     *
+     * On Android 15+ (API 35+) the notification is promoted to a **Live Update**
+     * (a.k.a. focus notification): while the app is in the foreground the
+     * notification stays quiet, and when the app loses focus (goes to the
+     * background) the system surfaces it more prominently — status-bar chip,
+     * lock screen and top of the notification drawer — with the latest task
+     * progress, without the user opening the app.
+     *
+     * On older devices this gracefully degrades to a standard ongoing
+     * foreground notification.
+     */
     fun buildForegroundNotification(
         sessions: List<ChatSession>,
         executionStates: Map<String, SessionExecutionState>,
@@ -71,23 +94,46 @@ class AetherNotificationController(
             PendingIntent.FLAG_UPDATE_CURRENT or pendingIntentMutabilityFlags(),
         )
 
-        return NotificationCompat.Builder(context, ForegroundChannelId)
+        // Live status detail: the most relevant running tool/status for each active session.
+        val liveStatusLines = activeSessions.mapNotNull { session ->
+            val state = executionStates[session.id] ?: return@mapNotNull null
+            val detail = state.pendingStatusDetail.ifBlank { state.pendingStatusText }
+            val tool = state.pendingToolInvocations.firstOrNull { it.isRunning }?.toolName
+            val suffix = when {
+                tool != null -> " · $tool"
+                detail.isNotBlank() -> " · $detail"
+                else -> ""
+            }
+            (session.title.ifBlank { "Untitled chat" } + suffix).takeIf { it.isNotBlank() }
+        }
+
+        val builder = NotificationCompat.Builder(
+            context,
+            if (activeSessions.isNotEmpty()) LiveUpdateChannelId else ForegroundChannelId,
+        )
             .setSmallIcon(R.drawable.ic_notification_small)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(
                 NotificationCompat.BigTextStyle()
                     .bigText(
-                        activeSessions.joinToString(separator = "\n") { session ->
-                            "- ${session.title.ifBlank { "Untitled chat" }}"
-                        }.ifBlank { body }
+                        liveStatusLines.joinToString("\n").ifBlank { body }
                     )
             )
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setContentIntent(contentIntent)
-            .build()
+
+        if (activeSessions.isNotEmpty()) {
+            // Live Update / focus notification (Android 15+): request promoted-ongoing
+            // rendering so the task progress is elevated while the app is backgrounded.
+            // AndroidX Core 1.17 maps this to EXTRA_REQUEST_PROMOTED_ONGOING on the
+            // platform notification, which is the supported compat path for Live Updates.
+            builder.setRequestPromotedOngoing(true)
+        }
+
+        return builder.build()
     }
 
     fun notifyCompletion(
