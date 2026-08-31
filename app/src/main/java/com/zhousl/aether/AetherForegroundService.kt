@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import java.util.concurrent.atomic.AtomicBoolean
@@ -43,7 +44,7 @@ class AetherForegroundService : Service() {
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                 } else {
-                    enterForeground(
+                    updateForeground(
                         runtime.notificationController.buildForegroundNotification(
                             sessions = sessions,
                             executionStates = executionStates,
@@ -88,6 +89,20 @@ class AetherForegroundService : Service() {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
         )
         hasEnteredForeground = true
+    }
+
+    /**
+     * Updates the Live Update foreground notification in place (same ID), so the
+     * system keeps the promoted-ongoing behavior and just refreshes the content
+     * — this is what makes the task progress "live".
+     */
+    private fun updateForeground(notification: android.app.Notification) {
+        val notificationManager = NotificationManagerCompat.from(this)
+        if (hasEnteredForeground) {
+            notificationManager.notify(ForegroundNotificationId, notification)
+        } else {
+            enterForeground(notification)
+        }
     }
 
     companion object {
