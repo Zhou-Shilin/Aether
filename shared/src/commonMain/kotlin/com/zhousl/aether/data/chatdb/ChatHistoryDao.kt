@@ -56,7 +56,7 @@ interface ChatHistoryDao {
     @Query("SELECT * FROM chat_agent_message_refs WHERE chatSessionId = :sessionId AND aetherMessageId = :messageId ORDER BY ordinal")
     suspend fun getAgentMessageRefs(sessionId: String, messageId: String): List<ChatAgentMessageRefEntity>
 
-    @Query("SELECT COUNT(*) FROM chat_messages WHERE sessionId = :sessionId")
+    @Query("SELECT COUNT(*) FROM chat_messages WHERE sessionId = :sessionId AND position >= 0")
     suspend fun getMessageCountForSession(sessionId: String): Int
 
     @Query("SELECT COUNT(*) FROM chat_messages WHERE sessionId = :sessionId AND responseGroupId = :responseGroupId AND position >= :fromPosition")
@@ -66,13 +66,13 @@ interface ChatHistoryDao {
         fromPosition: Int,
     ): Int
 
-    @Query("SELECT * FROM chat_messages WHERE sessionId = :sessionId ORDER BY position ASC")
+    @Query("SELECT * FROM chat_messages WHERE sessionId = :sessionId AND position >= 0 ORDER BY position ASC")
     suspend fun getMessagesForSession(sessionId: String): List<ChatMessageEntity>
 
     @Query("""
         SELECT sessionId, COUNT(*) AS messageCount, MAX(COALESCE(createdAtMillis, 0)) AS lastMessageAtMillis
         FROM chat_messages
-        WHERE sessionId IN (:sessionIds)
+        WHERE sessionId IN (:sessionIds) AND position >= 0
         GROUP BY sessionId
     """)
     suspend fun getMessageStatsForSessions(sessionIds: List<String>): List<ChatSessionMessageStatsEntity>
@@ -80,7 +80,7 @@ interface ChatHistoryDao {
     @Query("""
         SELECT sessionId, COUNT(*) AS messageCount, MAX(COALESCE(createdAtMillis, 0)) AS lastMessageAtMillis
         FROM chat_messages
-        WHERE sessionId IN (:sessionIds)
+        WHERE sessionId IN (:sessionIds) AND position >= 0
         GROUP BY sessionId
     """)
     fun observeMessageStatsForSessions(sessionIds: List<String>): Flow<List<ChatSessionMessageStatsEntity>>
@@ -88,7 +88,7 @@ interface ChatHistoryDao {
     @Query("""
         SELECT sessionId, id, position, author, text, createdAtMillis, responseGroupId, displayKind, messageSchemaVersion, length(messageJson) AS messageJsonLength, isIncomplete
         FROM chat_messages
-        WHERE hasUsageStatistics = 1
+        WHERE hasUsageStatistics = 1 AND position >= 0
         ORDER BY sessionId ASC, position ASC
     """)
     suspend fun getUsageStatisticsMessageSummaries(): List<ChatMessageSummaryEntity>
@@ -96,7 +96,7 @@ interface ChatHistoryDao {
     @Query("""
         SELECT sessionId, id, position, author, text, createdAtMillis, responseGroupId, displayKind, messageSchemaVersion, length(messageJson) AS messageJsonLength, isIncomplete
         FROM chat_messages
-        WHERE sessionId = :sessionId
+        WHERE sessionId = :sessionId AND position >= 0
         ORDER BY position ASC
     """)
     fun observeMessageSummariesForSession(sessionId: String): Flow<List<ChatMessageSummaryEntity>>
@@ -104,7 +104,7 @@ interface ChatHistoryDao {
     @Query("""
         SELECT sessionId, id, position, author, text, createdAtMillis, responseGroupId, displayKind, messageSchemaVersion, length(messageJson) AS messageJsonLength, isIncomplete
         FROM chat_messages
-        WHERE sessionId IN (:sessionIds)
+        WHERE sessionId IN (:sessionIds) AND position >= 0
         ORDER BY sessionId ASC, position ASC
     """)
     suspend fun getMessageSummariesForSessions(sessionIds: List<String>): List<ChatMessageSummaryEntity>
@@ -188,6 +188,54 @@ interface ChatHistoryDao {
     @Upsert
     suspend fun upsertWorkspaceFileRefs(refs: List<ChatWorkspaceFileRefEntity>)
 
+    /**
+     * Replace only the changed suffix of a canonical active message list. The unchanged prefix
+     * and its workspace/agent references remain untouched, while deleting the suffix first avoids
+     * conflicts with the unique (sessionId, position) index.
+     *
+     * Parked checkpoint overflow is leftover state after a snapshot becomes canonical, so it is
+     * cleaned only after the active list has been compared. An unchanged active prefix stays on
+     * disk even when parked leftovers are removed.
+     */
+    @Transaction
+    suspend fun syncMessagesForSession(
+        sessionId: String,
+        messages: List<ChatMessageEntity>,
+        workspaceFileRefs: List<ChatWorkspaceFileRefEntity> = emptyList(),
+    ) {
+        val canonical = canonicalActiveChatMessages(sessionId, messages)
+        val existing = getMessagesForSession(sessionId)
+        val plan = planCanonicalMessageSync(existing, canonical)
+        if (plan.isNoOp) {
+            if (getStoredParkedMessageCount(sessionId) > 0) {
+                deleteParkedMessagesForSession(sessionId)
+                deleteOrphanedAgentMessageRefs(sessionId)
+                deleteWorkspaceFileRefsForInactiveMessages(sessionId)
+            }
+            return
+        }
+
+        deleteWorkspaceFileRefsFromPosition(sessionId, plan.firstChangedPosition)
+        deleteMessagesFromPosition(sessionId, plan.firstChangedPosition)
+        deleteParkedMessagesForSession(sessionId)
+        canonical.drop(plan.firstChangedPosition)
+            .chunked(ChatHistoryMessageSyncChunkSize)
+            .forEach { batch -> upsertMessages(batch) }
+        deleteOrphanedAgentMessageRefs(sessionId)
+        deleteWorkspaceFileRefsForInactiveMessages(sessionId)
+        workspaceFileRefs
+            .asSequence()
+            .filter { it.messageId in plan.changedMessageIds }
+            .chunked(ChatHistoryWorkspaceRefSyncChunkSize)
+            .forEach { batch -> upsertWorkspaceFileRefs(batch.toList()) }
+    }
+
+    @Query("SELECT COUNT(*) FROM chat_messages WHERE sessionId = :sessionId AND position < 0")
+    suspend fun getStoredParkedMessageCount(sessionId: String): Int
+
+    @Query("DELETE FROM chat_messages WHERE sessionId = :sessionId AND position < 0")
+    suspend fun deleteParkedMessagesForSession(sessionId: String)
+
     @Query("DELETE FROM chat_workspace_file_refs WHERE sessionId = :sessionId AND messageId = :messageId")
     suspend fun deleteWorkspaceFileRefsForMessage(sessionId: String, messageId: String)
 
@@ -200,6 +248,9 @@ interface ChatHistoryDao {
 
     @Query("DELETE FROM chat_workspace_file_refs WHERE sessionId = :sessionId AND messageId IN (SELECT id FROM chat_messages WHERE sessionId = :sessionId AND position >= :fromPosition)")
     suspend fun deleteWorkspaceFileRefsFromPosition(sessionId: String, fromPosition: Int)
+
+    @Query("DELETE FROM chat_workspace_file_refs WHERE sessionId = :sessionId AND messageId NOT IN (SELECT id FROM chat_messages WHERE sessionId = :sessionId AND position >= 0)")
+    suspend fun deleteWorkspaceFileRefsForInactiveMessages(sessionId: String)
 
     @Query("DELETE FROM chat_workspace_file_refs WHERE sessionId = :sessionId")
     suspend fun deleteWorkspaceFileRefsForSession(sessionId: String)
@@ -278,6 +329,13 @@ interface ChatHistoryDao {
 
     @Query("DELETE FROM chat_agent_message_refs WHERE chatSessionId = :sessionId")
     suspend fun deleteAgentMessageRefs(sessionId: String)
+
+    @Query("""
+        DELETE FROM chat_agent_message_refs
+        WHERE chatSessionId = :sessionId
+            AND aetherMessageId NOT IN (SELECT id FROM chat_messages WHERE sessionId = :sessionId)
+    """)
+    suspend fun deleteOrphanedAgentMessageRefs(sessionId: String)
 
     @Query("DELETE FROM chat_agent_sessions")
     suspend fun deleteAllAgentSessions()

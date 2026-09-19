@@ -659,11 +659,18 @@ class ChatRepository(
                     syncedMessages.isEmpty() &&
                     existingMessageCount > 0
                 if (!isMetadataOnlySnapshot) {
-                    chatHistoryDao.deleteWorkspaceFileRefsForSession(session.id)
-                    chatHistoryDao.deleteMessagesForSession(session.id)
-                    chatHistoryDao.upsertMessagesChunked(
+                    val messageEntities = syncedMessages.mapIndexed { index, message ->
+                        ChatMessageEntityMapper.toEntity(
+                            sessionId = session.id,
+                            position = index,
+                            message = message,
+                        )
+                    }
+                    val workspaceFileRefs = syncedMessages.toWorkspaceFileRefs(session.id)
+                    chatHistoryDao.syncMessagesForSession(
                         sessionId = session.id,
-                        messages = syncedMessages,
+                        messages = messageEntities,
+                        workspaceFileRefs = workspaceFileRefs,
                     )
                 }
             }
