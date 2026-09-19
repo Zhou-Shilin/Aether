@@ -342,4 +342,183 @@ class ChatRepositoryCheckpointInstrumentedTest {
         )
         assertEquals(otherResponseGroupId, grownMessages.last().responseGroupId)
     }
+
+    @Test
+    fun snapshotAfterCompletedCheckpointKeepsOverflowAndClearsParkedRows() = runBlocking {
+        val sessionId = "session-checkpoint-snapshot"
+        val responseGroupId = "agent-group-target"
+        val before = ChatMessage(
+            id = "user-before",
+            author = MessageAuthor.User,
+            text = "before",
+        )
+        val checkpoint = ChatMessage(
+            id = "agent-target",
+            author = MessageAuthor.Agent,
+            text = "partial",
+            isIncomplete = true,
+            responseGroupId = responseGroupId,
+        )
+        val overflow = ChatMessage(
+            id = "user-after",
+            author = MessageAuthor.User,
+            text = "keep overflow",
+        )
+        val session = ChatSession(
+            id = sessionId,
+            title = "Snapshot after checkpoint",
+            preview = "keep overflow",
+            messages = listOf(before, checkpoint, overflow),
+        )
+        repository.updateChatState(
+            sessions = listOf(session),
+            currentSessionId = sessionId,
+        )
+        repository.upsertAssistantResponseCheckpoints(
+            checkpoints = listOf(
+                AssistantResponseCheckpoint(
+                    target = AssistantResponseCheckpointTarget(
+                        sessionId = sessionId,
+                        responseGroupId = responseGroupId,
+                    ),
+                    fromPosition = 1,
+                    messages = listOf(
+                        checkpoint.copy(id = "agent-target-complete", text = "complete", isIncomplete = false),
+                    ),
+                ),
+            ),
+        )
+        assertEquals(0, database.chatHistoryDao().getStoredParkedMessageCount(sessionId))
+
+        val restored = repository.getSessionWithMessages(sessionId)?.messages.orEmpty()
+        repository.updateChatState(
+            sessions = listOf(
+                session.copy(
+                    preview = "complete",
+                    messages = restored,
+                ),
+            ),
+            currentSessionId = sessionId,
+        )
+
+        assertEquals(0, database.chatHistoryDao().getStoredParkedMessageCount(sessionId))
+        assertEquals(
+            listOf("user-before", "agent-target-complete", "user-after"),
+            repository.getSessionWithMessages(sessionId)?.messages.orEmpty().map { it.id },
+        )
+        assertEquals(
+            listOf(0, 1, 2),
+            database.chatHistoryDao().getMessageSummariesForSession(sessionId).map { it.position },
+        )
+    }
+
+    @Test
+    fun snapshotCleansLeftoverParkedWithoutRewritingUnchangedActiveMessages() = runBlocking {
+        val sessionId = "session-parked-leftover"
+        val before = ChatMessage(
+            id = "user-before",
+            author = MessageAuthor.User,
+            text = "before",
+        )
+        val agent = ChatMessage(
+            id = "agent-1",
+            author = MessageAuthor.Agent,
+            text = "answer",
+        )
+        val overflow = ChatMessage(
+            id = "user-after",
+            author = MessageAuthor.User,
+            text = "overflow",
+        )
+        repository.updateChatState(
+            sessions = listOf(
+                ChatSession(
+                    id = sessionId,
+                    title = "Parked leftover",
+                    preview = "overflow",
+                    messages = listOf(before, agent, overflow),
+                ),
+            ),
+            currentSessionId = sessionId,
+        )
+        database.chatHistoryDao().parkMessagesFromPositionOutsideResponseGroup(
+            sessionId = sessionId,
+            responseGroupId = "missing-group",
+            fromPosition = 2,
+            toPosition = 3,
+        )
+        assertTrue(database.chatHistoryDao().getStoredParkedMessageCount(sessionId) > 0)
+
+        repository.updateChatState(
+            sessions = listOf(
+                ChatSession(
+                    id = sessionId,
+                    title = "Parked leftover",
+                    preview = "answer",
+                    messages = listOf(before, agent),
+                ),
+            ),
+            currentSessionId = sessionId,
+        )
+
+        assertEquals(0, database.chatHistoryDao().getStoredParkedMessageCount(sessionId))
+        assertEquals(
+            listOf("user-before", "agent-1"),
+            repository.getSessionWithMessages(sessionId)?.messages.orEmpty().map { it.id },
+        )
+    }
+
+    @Test
+    fun snapshotRemovesDeletedSuffixAgentRefsAndKeepsPrefixRefs() = runBlocking {
+        val sessionId = "session-agent-refs"
+        val user = ChatMessage(
+            id = "user-1",
+            author = MessageAuthor.User,
+            text = "hello",
+        )
+        val agent = ChatMessage(
+            id = "agent-1",
+            author = MessageAuthor.Agent,
+            text = "answer",
+        )
+        val followUp = ChatMessage(
+            id = "user-2",
+            author = MessageAuthor.User,
+            text = "more",
+        )
+        repository.updateChatState(
+            sessions = listOf(
+                ChatSession(
+                    id = sessionId,
+                    title = "Refs",
+                    preview = "more",
+                    messages = listOf(user, agent, followUp),
+                ),
+            ),
+            currentSessionId = sessionId,
+        )
+        repository.upsertAgentMessageRefs(sessionId, listOf("user-1"), listOf("entry-user"))
+        repository.upsertAgentMessageRefs(sessionId, listOf("agent-1"), listOf("entry-agent"))
+        repository.upsertAgentMessageRefs(sessionId, listOf("user-2"), listOf("entry-follow-up"))
+
+        repository.updateChatState(
+            sessions = listOf(
+                ChatSession(
+                    id = sessionId,
+                    title = "Refs",
+                    preview = "answer",
+                    messages = listOf(user, agent),
+                ),
+            ),
+            currentSessionId = sessionId,
+        )
+
+        val remaining = database.chatHistoryDao().getAgentMessageRefs(sessionId)
+        assertEquals(setOf("user-1", "agent-1"), remaining.map { it.aetherMessageId }.toSet())
+        assertEquals(
+            listOf("entry-user"),
+            remaining.filter { it.aetherMessageId == "user-1" }.map { it.piEntryId },
+        )
+        assertTrue(remaining.none { it.aetherMessageId == "user-2" })
+    }
 }

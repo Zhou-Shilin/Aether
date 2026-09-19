@@ -470,28 +470,27 @@ class SharedChatHistoryStore(
                 sortOrder = -platformSortOrder(),
             )
         )
-        dao.deleteMessagesForSession(sessionId)
-        dao.deleteWorkspaceFileRefsForSession(sessionId)
-        dao.upsertMessages(
-            messages.mapIndexed { index, message ->
-                val json = message.toJsonObject()
-                ChatMessageEntity(
-                    sessionId = sessionId,
-                    id = message.id,
-                    position = index,
-                    messageJson = json.toString(),
-                    author = if (message.fromUser) "User" else "Agent",
-                    text = message.text,
-                    createdAtMillis = message.createdAtMillis,
-                    responseGroupId = message.responseGroupId.ifBlank { null },
-                    displayKind = message.displayKind.name,
-                    hasUsageStatistics = message.usage != null,
-                    isIncomplete = false,
-                )
-            }
+        val messageEntities = messages.mapIndexed { index, message ->
+            val json = message.toJsonObject()
+            ChatMessageEntity(
+                sessionId = sessionId,
+                id = message.id,
+                position = index,
+                messageJson = json.toString(),
+                author = if (message.fromUser) "User" else "Agent",
+                text = message.text,
+                createdAtMillis = message.createdAtMillis,
+                responseGroupId = message.responseGroupId.ifBlank { null },
+                displayKind = message.displayKind.name,
+                hasUsageStatistics = message.usage != null,
+                isIncomplete = false,
+            )
+        }
+        dao.syncMessagesForSession(
+            sessionId = sessionId,
+            messages = messageEntities,
+            workspaceFileRefs = messages.toWorkspaceFileRefs(sessionId),
         )
-        val workspaceFileRefs = messages.toWorkspaceFileRefs(sessionId)
-        if (workspaceFileRefs.isNotEmpty()) dao.upsertWorkspaceFileRefs(workspaceFileRefs)
         dao.upsertMeta(
             ChatStateMetaEntity(
                 currentSessionId = sessionId,
