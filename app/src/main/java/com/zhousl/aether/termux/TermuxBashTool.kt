@@ -712,7 +712,7 @@ class TermuxBashTool(
 
     private fun startTermuxRunCommandService(request: Intent): ComponentName? {
         return try {
-            ContextCompat.startForegroundService(context, request)
+            context.startForegroundService(request)
         } catch (throwable: Throwable) {
             logTermux("foreground service start failed message=${throwable.message.orEmpty()}")
             context.startService(request)
