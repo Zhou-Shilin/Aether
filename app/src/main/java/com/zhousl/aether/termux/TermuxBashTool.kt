@@ -608,13 +608,14 @@ class TermuxBashTool(
     ): String {
         val executionId = TermuxPendingResults.nextExecutionId()
         val deferred = TermuxPendingResults.register(executionId)
-        val resultIntent = Intent(context, TermuxResultReceiver::class.java)
+        val appContext = context.applicationContext
+        val resultIntent = Intent(appContext, TermuxResultReceiver::class.java)
             .putExtra(TermuxContract.ExecutionIdExtra, executionId)
         val flags = PendingIntent.FLAG_ONE_SHOT or
             PendingIntent.FLAG_UPDATE_CURRENT or
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
         val pendingIntent = PendingIntent.getBroadcast(
-            context,
+            appContext,
             executionId,
             resultIntent,
             flags,
@@ -643,7 +644,7 @@ class TermuxBashTool(
         }
 
         return try {
-            val startResult = context.startService(request)
+            val startResult = startTermuxRunCommandService(request)
             if (startResult == null) {
                 TermuxPendingResults.remove(executionId)
                 logTermux(
@@ -706,6 +707,15 @@ class TermuxBashTool(
                 message = throwable.message ?: "Failed to dispatch command to Termux.",
                 hint = "Check Termux permission, allow-external-apps, and battery restrictions.",
             )
+        }
+    }
+
+    private fun startTermuxRunCommandService(request: Intent): ComponentName? {
+        return try {
+            ContextCompat.startForegroundService(context, request)
+        } catch (throwable: Throwable) {
+            logTermux("foreground service start failed message=${throwable.message.orEmpty()}")
+            context.startService(request)
         }
     }
 
