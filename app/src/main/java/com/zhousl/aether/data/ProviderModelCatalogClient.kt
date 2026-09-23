@@ -131,8 +131,12 @@ object ProviderModelCatalogClient {
     ): FetchModelsResult = withContext(Dispatchers.IO) {
         try {
             val definition = PiProviderCatalog.resolve(config.piProviderId)
-            val providerModels = runCatching { fetchProviderModels(config) }.getOrElse { error ->
-                FetchModelsResult(emptyList(), error.message ?: "Unable to fetch models.")
+            val providerModels = if (definition.id == "requesty") {
+                fetchRequestyModels(config)
+            } else {
+                runCatching { fetchProviderModels(config) }.getOrElse { error ->
+                    FetchModelsResult(emptyList(), error.message ?: "Unable to fetch models.")
+                }
             }
             if (providerModels.models.isNotEmpty()) return@withContext providerModels
 
@@ -189,14 +193,30 @@ object ProviderModelCatalogClient {
         }
     }
 
-    private fun fetchProviderModels(config: LlmProviderConfig): FetchModelsResult {
+    // Requesty lists its curated managed models first, followed by the full catalog.
+    private fun fetchRequestyModels(config: LlmProviderConfig): FetchModelsResult {
+        val managedModels = runCatching { fetchProviderModels(config, endpointSuffix = "/managed") }
+            .getOrElse { error -> FetchModelsResult(emptyList(), error.message ?: "Unable to fetch models.") }
+        val catalogModels = runCatching { fetchProviderModels(config) }
+            .getOrElse { error -> FetchModelsResult(emptyList(), error.message ?: "Unable to fetch models.") }
+        val models = (managedModels.models + catalogModels.models).distinctBy { it.lowercase() }
+        return FetchModelsResult(
+            models,
+            if (models.isEmpty()) catalogModels.error ?: managedModels.error else null,
+        )
+    }
+
+    private fun fetchProviderModels(
+        config: LlmProviderConfig,
+        endpointSuffix: String = "",
+    ): FetchModelsResult {
         val baseUrl = config.baseUrl.trim().trimEnd('/')
         val modelsUrl = when {
             baseUrl.endsWith("/responses") -> baseUrl.replace("/responses", "/models")
             baseUrl.endsWith("/chat/completions") -> baseUrl.replace("/chat/completions", "/models")
             baseUrl.endsWith("/v1") -> "$baseUrl/models"
             else -> "$baseUrl/models"
-        }
+        } + endpointSuffix
 
         val connection = URL(modelsUrl).openConnection() as HttpURLConnection
         connection.requestMethod = "GET"

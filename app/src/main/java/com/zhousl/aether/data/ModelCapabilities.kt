@@ -10,6 +10,7 @@ internal enum class LlmCompatibilityFamily {
     MiMo,
     Moonshot,
     OpenRouter,
+    Requesty,
 }
 
 internal enum class ReasoningDisableStyle {
@@ -37,6 +38,11 @@ internal object ModelCapabilitiesResolver {
         return when {
             isOpenRouter(host, model) -> ModelCapabilities(
                 family = LlmCompatibilityFamily.OpenRouter,
+                reasoningDisableStyle = ReasoningDisableStyle.OpenRouterReasoningEffortNone,
+            )
+
+            isRequesty(host) -> ModelCapabilities(
+                family = LlmCompatibilityFamily.Requesty,
                 reasoningDisableStyle = ReasoningDisableStyle.OpenRouterReasoningEffortNone,
             )
 
@@ -70,6 +76,9 @@ internal object ModelCapabilitiesResolver {
 
     private fun isOpenRouter(host: String, model: String): Boolean =
         "openrouter" in host || model.startsWith("openrouter/") || model.startsWith("openrouter:")
+
+    private fun isRequesty(host: String): Boolean =
+        "requesty" in host
 
     private fun isDeepSeek(host: String, model: String): Boolean =
         "deepseek" in host || "deepseek" in model

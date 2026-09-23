@@ -56,6 +56,33 @@ class SharedProviderModelCatalogClientTest {
     }
 
     @Test
+    fun requestyListsManagedModelsBeforeFullCatalog() = runTest {
+        val requestedUrls = mutableListOf<String>()
+        val engine = MockEngine { request ->
+            requestedUrls += request.url.toString()
+            assertEquals("Bearer secret", request.headers[HttpHeaders.Authorization])
+            val body = when (request.url.encodedPath) {
+                "/v1/models/managed" -> """{"data":[{"id":"claude-sonnet-4-5"}]}"""
+                else -> """{"data":[{"id":"openai/gpt-4o-mini"},{"id":"claude-sonnet-4-5"}]}"""
+            }
+            respond(body, headers = headersOf(HttpHeaders.ContentType, "application/json"))
+        }
+        val result = SharedProviderModelCatalogClient(engine).fetchModels(
+            customConfig(
+                piProviderId = "requesty",
+                baseUrl = "https://router.requesty.ai/v1",
+            ),
+        )
+
+        assertEquals(
+            listOf("https://router.requesty.ai/v1/models/managed", "https://router.requesty.ai/v1/models"),
+            requestedUrls,
+        )
+        assertEquals(listOf("claude-sonnet-4-5", "openai/gpt-4o-mini"), result.models)
+        assertNull(result.error)
+    }
+
+    @Test
     fun modelsDevProviderAliasesMatchAetherBuiltIns() {
         assertEquals(
             listOf("togetherai"),

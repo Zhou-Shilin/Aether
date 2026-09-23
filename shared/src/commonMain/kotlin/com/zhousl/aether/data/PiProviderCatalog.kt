@@ -83,6 +83,7 @@ object PiProviderCatalog {
         builtin("huggingface", "Hugging Face", "https://router.huggingface.co/v1", "MiniMaxAI/MiniMax-M2.7", category = "Aggregators"),
         builtin("together", "Together", "https://api.together.ai/v1", "Qwen/Qwen3.5-397B-A17B", category = "Aggregators"),
         builtin("fireworks", "Fireworks", "https://api.fireworks.ai/inference", "accounts/fireworks/models/deepseek-v4-flash", category = "Aggregators"),
+        custom("requesty", "Requesty", "https://router.requesty.ai/v1", "openai/gpt-5.4", category = "Aggregators"),
         builtin("opencode", "OpenCode Zen", "", "big-pickle", category = "Coding"),
         builtin("opencode-go", "OpenCode Zen Go", "", "deepseek-v4-flash", category = "Coding"),
         builtin("kimi-coding", "Kimi For Coding", "https://api.kimi.com/coding", "k2p7", category = "Coding"),
@@ -169,15 +170,18 @@ private fun builtin(
 private fun custom(
     id: String,
     displayName: String,
+    defaultBaseUrl: String = DefaultCustomProviderBaseUrl,
+    defaultModelId: String = DefaultCustomModelId,
+    category: String = "Custom",
 ): PiProviderDefinition = PiProviderDefinition(
     id = id,
     displayName = displayName,
-    defaultBaseUrl = DefaultCustomProviderBaseUrl,
-    defaultModelId = DefaultCustomModelId,
+    defaultBaseUrl = defaultBaseUrl,
+    defaultModelId = defaultModelId,
     supportsApiKey = true,
     requiresBaseUrl = true,
     isBuiltIn = false,
-    category = "Custom",
+    category = category,
 )
 
 private fun hostOf(baseUrl: String): String {

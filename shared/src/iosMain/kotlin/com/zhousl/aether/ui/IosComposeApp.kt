@@ -7954,6 +7954,7 @@ private fun List<SharedChatToolInvocation>.upsertSharedTool(
 internal fun LlmProviderConfig.supportsSharedVisibleReasoningTrace(): Boolean =
     baseUrl.contains("deepseek", ignoreCase = true) ||
         baseUrl.contains("openrouter", ignoreCase = true) ||
+        baseUrl.contains("requesty", ignoreCase = true) ||
         modelId.contains("deepseek", ignoreCase = true) ||
         modelId.contains("openrouter", ignoreCase = true)
 
