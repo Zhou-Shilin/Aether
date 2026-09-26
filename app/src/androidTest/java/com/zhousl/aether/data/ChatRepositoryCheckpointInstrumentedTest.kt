@@ -9,6 +9,7 @@ import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.zhousl.aether.data.chatdb.ChatHistoryDatabase
+import com.zhousl.aether.ui.ChatBranchGroup
 import com.zhousl.aether.ui.ChatMessage
 import com.zhousl.aether.ui.ChatSession
 import com.zhousl.aether.ui.MessageAuthor
@@ -520,5 +521,61 @@ class ChatRepositoryCheckpointInstrumentedTest {
             remaining.filter { it.aetherMessageId == "user-1" }.map { it.piEntryId },
         )
         assertTrue(remaining.none { it.aetherMessageId == "user-2" })
+    }
+
+    @Test
+    fun branchSnapshotKeepsAgentRefsForInactiveMessages() = runBlocking {
+        val sessionId = "session-branch-agent-refs"
+        val inactiveUser = ChatMessage("user-inactive", MessageAuthor.User, "old branch")
+        val inactiveAgent = ChatMessage("agent-inactive", MessageAuthor.Agent, "old answer")
+        val activeUser = ChatMessage("user-active", MessageAuthor.User, "new branch")
+        val activeAgent = ChatMessage("agent-active", MessageAuthor.Agent, "new answer")
+        val branches = ChatBranchGroup(
+            branches = listOf(
+                listOf(inactiveUser, inactiveAgent),
+                listOf(activeUser, activeAgent),
+            ),
+            selectedIndex = 0,
+        )
+
+        repository.updateChatState(
+            sessions = listOf(
+                ChatSession(
+                    id = sessionId,
+                    title = "Branches",
+                    preview = "old answer",
+                    messages = listOf(inactiveUser.copy(branchGroup = branches), inactiveAgent),
+                ),
+            ),
+            currentSessionId = sessionId,
+        )
+        listOf("user-inactive", "agent-inactive", "user-active", "agent-active").forEach { messageId ->
+            repository.upsertAgentMessageRefs(sessionId, listOf(messageId), listOf("entry-$messageId"))
+        }
+
+        repository.updateChatState(
+            sessions = listOf(
+                ChatSession(
+                    id = sessionId,
+                    title = "Branches",
+                    preview = "new answer",
+                    messages = listOf(
+                        activeUser.copy(branchGroup = branches.copy(selectedIndex = 1)),
+                        activeAgent,
+                    ),
+                ),
+            ),
+            currentSessionId = sessionId,
+        )
+
+        val remaining = database.chatHistoryDao().getAgentMessageRefs(sessionId)
+        assertEquals(
+            setOf("user-inactive", "agent-inactive", "user-active", "agent-active"),
+            remaining.map { it.aetherMessageId }.toSet(),
+        )
+        assertEquals(
+            listOf("entry-user-inactive"),
+            remaining.filter { it.aetherMessageId == "user-inactive" }.map { it.piEntryId },
+        )
     }
 }

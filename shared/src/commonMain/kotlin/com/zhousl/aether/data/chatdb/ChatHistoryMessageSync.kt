@@ -2,6 +2,7 @@ package com.zhousl.aether.data.chatdb
 
 internal const val ChatHistoryMessageSyncChunkSize = 8
 internal const val ChatHistoryWorkspaceRefSyncChunkSize = 32
+internal const val ChatHistoryAgentRefSyncChunkSize = 500
 
 fun canonicalActiveChatMessages(
     sessionId: String,

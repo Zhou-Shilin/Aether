@@ -14,7 +14,7 @@ import androidx.room.RoomDatabaseConstructor
         ChatWorkspaceFileRefEntity::class,
         ChatStateMetaEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 @ConstructedBy(ChatHistoryDatabaseConstructor::class)

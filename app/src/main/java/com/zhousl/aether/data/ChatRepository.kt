@@ -670,6 +670,7 @@ class ChatRepository(
                     chatHistoryDao.syncMessagesForSession(
                         sessionId = session.id,
                         messages = messageEntities,
+                        retainedAgentMessageIds = syncedMessages.allBranchMessageIds(),
                         workspaceFileRefs = workspaceFileRefs,
                     )
                 }
@@ -1019,6 +1020,14 @@ private fun ChatSession.toSessionEntity(sortOrder: Long): ChatSessionEntity = Ch
     selectedModelKey = selectedModelKey,
     sortOrder = sortOrder,
 )
+
+private fun List<ChatMessage>.allBranchMessageIds(): Set<String> = buildSet {
+    fun collect(message: ChatMessage) {
+        add(message.id)
+        message.branchGroup?.branches.orEmpty().forEach { branch -> branch.forEach(::collect) }
+    }
+    forEach(::collect)
+}
 
 private fun List<ChatMessage>.toWorkspaceFileRefs(sessionId: String): List<ChatWorkspaceFileRefEntity> =
     flatMap { message -> message.toWorkspaceFileRefs(sessionId) }
