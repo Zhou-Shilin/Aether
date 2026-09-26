@@ -1086,6 +1086,27 @@ class SharedConversationMessagesTest {
     }
 
     @Test
+    fun retryBranchSkipsSyntheticCompactionStatus() {
+        val firstUser = SharedChatMessage(id = "u1", text = "first", fromUser = true)
+        val firstReply = SharedChatMessage(id = "a1", text = "first reply", fromUser = false)
+        val compactStatus = SharedChatMessage(
+            id = "compact",
+            text = "Context compacted",
+            fromUser = false,
+            displayKind = SharedMessageDisplayKind.CompactStatus,
+        )
+        val secondUser = SharedChatMessage(id = "u2", text = "second", fromUser = true)
+        val secondReply = SharedChatMessage(id = "a2", text = "reply", fromUser = false)
+        val messages = listOf(firstUser, firstReply, compactStatus, secondUser)
+
+        assertEquals(firstReply.id, messages.piBranchMessageIdBeforeUserAt(3))
+        assertEquals(
+            firstReply.id,
+            buildSharedAssistantRetryPlan(messages + secondReply, secondReply.id)?.piBranchMessageId,
+        )
+    }
+
+    @Test
     fun queueSelectionSkipsPendingSteersAndPromotesThemWithAndroidPriority() {
         val steer = SharedPendingTurn(id = "steer", text = "redirect", mode = SharedPendingTurnMode.Steer)
         val queue = SharedPendingTurn(id = "queue", text = "follow up")

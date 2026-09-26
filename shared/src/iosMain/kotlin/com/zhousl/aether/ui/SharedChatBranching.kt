@@ -1,5 +1,10 @@
 package com.zhousl.aether.ui
 
+internal fun List<SharedChatMessage>.piBranchMessageIdBeforeUserAt(userMessageIndex: Int): String? =
+    take(userMessageIndex).lastOrNull {
+        !it.fromUser && it.displayKind != SharedMessageDisplayKind.CompactStatus
+    }?.id
+
 internal fun createEditedSharedMessageBranch(
     messages: List<SharedChatMessage>,
     messageId: String,

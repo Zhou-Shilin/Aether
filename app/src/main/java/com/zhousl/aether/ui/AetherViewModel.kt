@@ -2309,7 +2309,12 @@ class AetherViewModel(
             )
         }
         viewModelScope.launch {
-            navigatePiBranch(sessionId, piBranchMessageId, resetWhenMissing = true)
+            navigatePiBranch(
+                sessionId = sessionId,
+                aetherMessageId = piBranchMessageId,
+                settings = turnRequest.settings,
+                resetWhenMissing = true,
+            )
             sessionExecutionManager.startTurn(turnRequest)
         }
     }
@@ -2334,7 +2339,7 @@ class AetherViewModel(
                 it.id == messageId && it.author == MessageAuthor.User
             } ?: return@update current
             val userMessageIndex = session.messages.indexOfFirst { it.id == messageId }
-            piBranchMessageId = session.messages.take(userMessageIndex).lastOrNull()?.id
+            piBranchMessageId = session.messages.piBranchMessageIdBeforeUserAt(userMessageIndex)
 
             val retryMessage = userMessage.copy(
                 id = "user-${System.currentTimeMillis()}",
@@ -2391,7 +2396,12 @@ class AetherViewModel(
             )
         }
         viewModelScope.launch {
-            navigatePiBranch(sessionId, piBranchMessageId, resetWhenMissing = true)
+            navigatePiBranch(
+                sessionId = sessionId,
+                aetherMessageId = piBranchMessageId,
+                settings = turnRequest.settings,
+                resetWhenMissing = true,
+            )
             sessionExecutionManager.startTurn(turnRequest)
         }
     }
@@ -2399,9 +2409,9 @@ class AetherViewModel(
     private suspend fun navigatePiBranch(
         sessionId: String,
         aetherMessageId: String?,
+        settings: AppSettings,
         resetWhenMissing: Boolean = false,
     ) {
-        val settings = _uiState.value.settings
         val workspaceDirectory = workspaceFileBridge.workspaceDirectory(
             sessionId = sessionId,
             mode = settings.agentWorkspaceMode,
@@ -4222,9 +4232,7 @@ class AetherViewModel(
                     if (editingMessageIndex >= 0) {
                         isEditingExistingMessage = true
                         editedMessagePredecessorId = editingSession.messages
-                            .take(editingMessageIndex)
-                            .lastOrNull()
-                            ?.id
+                            .piBranchMessageIdBeforeUserAt(editingMessageIndex)
                         val branchedMessages = createEditedMessageBranch(
                             messages = editingSession.messages,
                             messageId = current.editingMessageId,
@@ -4348,6 +4356,7 @@ class AetherViewModel(
                 navigatePiBranch(
                     sessionId = targetSessionId,
                     aetherMessageId = editedMessagePredecessorId,
+                    settings = turnRequest.settings,
                     resetWhenMissing = true,
                 )
                 sessionExecutionManager.startTurn(turnRequest)

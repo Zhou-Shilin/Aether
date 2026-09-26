@@ -26,6 +26,23 @@ class ConversationMessagesTest {
     }
 
     @Test
+    fun retryPiBranchSkipsSyntheticCompactionStatus() {
+        val firstUser = ChatMessage(id = "u1", author = MessageAuthor.User, text = "first")
+        val firstAssistant = ChatMessage(id = "a1", author = MessageAuthor.Agent, text = "first reply")
+        val compactStatus = ChatMessage(
+            id = "compact",
+            author = MessageAuthor.Agent,
+            text = "Context compacted",
+            displayKind = MessageDisplayKind.CompactStatus,
+        )
+        val secondUser = ChatMessage(id = "u2", author = MessageAuthor.User, text = "second")
+        val messages = listOf(firstUser, firstAssistant, compactStatus, secondUser)
+
+        assertEquals(firstAssistant.id, messages.piBranchMessageIdBeforeLastUser())
+        assertEquals(firstAssistant.id, messages.piBranchMessageIdBeforeUserAt(3))
+    }
+
+    @Test
     fun decodeUriAttachmentBitmapReturnsNullWhenPickerUriIsUnavailable() {
         val bitmap = decodeUriAttachmentBitmap(
             uriString = "content://media/picker/0/com.android.providers.media.photopicker/media/1000012900",

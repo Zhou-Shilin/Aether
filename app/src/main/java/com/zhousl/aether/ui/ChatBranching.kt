@@ -25,8 +25,13 @@ fun ChatMessage.branchNavigation(): ChatBranchNavigation? {
 fun List<ChatMessage>.piBranchMessageIdBeforeLastUser(): String? {
     val userMessageIndex = indexOfLast { it.author == MessageAuthor.User }
     if (userMessageIndex <= 0) return null
-    return take(userMessageIndex).lastOrNull { it.author == MessageAuthor.Agent }?.id
+    return piBranchMessageIdBeforeUserAt(userMessageIndex)
 }
+
+fun List<ChatMessage>.piBranchMessageIdBeforeUserAt(userMessageIndex: Int): String? =
+    take(userMessageIndex).lastOrNull {
+        it.author == MessageAuthor.Agent && it.displayKind != MessageDisplayKind.CompactStatus
+    }?.id
 
 fun createEditedMessageBranch(
     messages: List<ChatMessage>,

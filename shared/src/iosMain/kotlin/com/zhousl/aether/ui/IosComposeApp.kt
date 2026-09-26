@@ -773,7 +773,7 @@ internal fun buildSharedAssistantRetryPlan(
     } ?: targetIndex
     val retained = messages.take(trimIndex)
     val user = retained.lastOrNull()?.takeIf { it.fromUser } ?: return null
-    val piBranchMessageId = retained.dropLast(1).lastOrNull { !it.fromUser }?.id
+    val piBranchMessageId = retained.piBranchMessageIdBeforeUserAt(retained.lastIndex)
     return SharedAssistantRetryPlan(retained, user, piBranchMessageId)
 }
 
@@ -1874,7 +1874,7 @@ fun IosComposeApp(
                 target.messages.indexOfFirst { it.id == editingId && it.fromUser }
             } ?: -1
             val resolvedPiBranchMessageId = piBranchMessageId ?: if (editingIndex >= 0) {
-                target.messages.take(editingIndex).lastOrNull()?.id
+                target.messages.piBranchMessageIdBeforeUserAt(editingIndex)
             } else {
                 null
             }
@@ -3740,7 +3740,7 @@ fun IosComposeApp(
                         val original = messages.firstOrNull { it.id == messageId && it.fromUser }
                             ?: return@SharedChatScreen
                         val originalIndex = messages.indexOfFirst { it.id == messageId }
-                        val piBranchMessageId = messages.take(originalIndex).lastOrNull()?.id
+                        val piBranchMessageId = messages.piBranchMessageIdBeforeUserAt(originalIndex)
                         val replacement = original.copy(
                             id = platformRandomUuid(),
                             createdAtMillis = platformCurrentTimeMillis(),
