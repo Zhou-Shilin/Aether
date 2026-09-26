@@ -30,6 +30,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -62,7 +63,7 @@ jobs:
         id: nightly
         shell: bash
         run: |
-          short_sha="${GITHUB_SHA::12}"
+          short_sha="${GITHUB_SHA::7}"
           echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
           echo "version_name=Nightly $short_sha" >> "$GITHUB_OUTPUT"
 
@@ -95,4 +96,163 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: Aether-nightly
-          path: dist/nightly/*.apk
+          path: dist/nightly/Aether-nightly-${{ steps.nightly.outputs.short_sha }}.apk
+
+      - name: Prepare Telegram metadata
+        id: telegram_metadata
+        shell: bash
+        env:
+          SHORT_SHA: ${{ steps.nightly.outputs.short_sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+
+          apk_name="Aether-nightly-${SHORT_SHA}.apk"
+          apk_path="dist/nightly/${apk_name}"
+          commit_subject="$(git log -1 --pretty=%s)"
+          commit_author="$(git log -1 --pretty=%an)"
+          commit_display="$SHORT_SHA"
+          push_commit_count=1
+          commit_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}"
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            if [[ -z "${PUSH_BEFORE:-}" || "$PUSH_BEFORE" =~ ^0+$ ]] \
+              || ! git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null; then
+              echo "::error::The push base commit is unavailable; cannot determine this push's commits from Git history." >&2
+              exit 1
+            fi
+
+            push_range="${PUSH_BEFORE}..${GITHUB_SHA}"
+            pushed_commit_shas="$(git log --reverse --topo-order --format='%h' "$push_range")"
+            pushed_commit_subjects="$(git log --reverse --topo-order --format='%s' "$push_range")"
+            pushed_commit_count="$(git rev-list --count "$push_range")"
+            push_commit_count="$pushed_commit_count"
+            if (( pushed_commit_count == 0 )); then
+              echo "::error::No commits found in the push range ${push_range}." >&2
+              exit 1
+            fi
+            if (( pushed_commit_count > 1 )); then
+              first_pushed_sha="${pushed_commit_shas%%$'\n'*}"
+              last_pushed_sha="${pushed_commit_shas##*$'\n'}"
+              commit_display="${first_pushed_sha}...${last_pushed_sha}"
+              commit_subject="$pushed_commit_subjects"
+              commit_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/${PUSH_BEFORE}...${GITHUB_SHA}"
+            else
+              commit_subject="$pushed_commit_subjects"
+            fi
+          fi
+          workflow_run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          caption="$(COMMIT_SUBJECT="$commit_subject" COMMIT_AUTHOR="$commit_author" COMMIT_DISPLAY="$commit_display" PUSH_COMMIT_COUNT="$push_commit_count" COMMIT_URL="$commit_url" WORKFLOW_RUN_URL="$workflow_run_url" GIT_BRANCH="$GITHUB_REF_NAME" RUN_NUMBER="$GITHUB_RUN_NUMBER" python3 - <<'PY'
+          import html
+          import os
+
+          subject = os.environ["COMMIT_SUBJECT"].strip()
+          author = os.environ["COMMIT_AUTHOR"]
+          branch = os.environ["GIT_BRANCH"]
+          commit_display = os.environ["COMMIT_DISPLAY"]
+          run_number = os.environ["RUN_NUMBER"]
+          push_commit_count = int(os.environ["PUSH_COMMIT_COUNT"])
+          commit_url = html.escape(os.environ["COMMIT_URL"], quote=True)
+          run_url = html.escape(os.environ["WORKFLOW_RUN_URL"], quote=True)
+
+          def render_plain_caption(subject):
+              return "\n".join([
+                  "Aether Nightly",
+                  "",
+                  f"Commit: {commit_display}",
+                  subject,
+                  f"Author: {author}",
+                  f"Branch: {branch}",
+                  f"Workflow run #{run_number}",
+              ])
+
+          plain_caption = render_plain_caption(subject)
+          if len(plain_caption.encode("utf-16-le")) // 2 > 1024:
+              if push_commit_count > 1:
+                  subject = f"{push_commit_count} commits; see the comparison link above."
+              else:
+                  subject = "Subject exceeds caption limit; see the commit link above."
+              plain_caption = render_plain_caption(subject)
+              if len(plain_caption.encode("utf-16-le")) // 2 > 1024:
+                  raise SystemExit("Telegram caption template exceeds the 1024-character limit.")
+
+          caption = "\n".join([
+              "<b>Aether Nightly</b>",
+              "",
+              f'Commit: <a href="{commit_url}">{html.escape(commit_display)}</a>',
+              f"<pre>{html.escape(subject)}</pre>",
+              f"Author: {html.escape(author)}",
+              f"Branch: <code>{html.escape(branch)}</code>",
+              f'<a href="{run_url}">Workflow run #{html.escape(run_number)}</a>',
+          ])
+          print(caption, end="")
+          PY
+          )"
+
+          delimiter="TELEGRAM_CAPTION_$(openssl rand -hex 16)"
+          {
+            printf 'apk_path=%s\n' "$apk_path"
+            printf 'apk_name=%s\n' "$apk_name"
+            printf 'caption<<%s\n' "$delimiter"
+            printf '%s\n' "$caption"
+            printf '%s\n' "$delimiter"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Push APK to Telegram channel
+        shell: bash
+        env:
+          APK_PATH: ${{ steps.telegram_metadata.outputs.apk_path }}
+          APK_NAME: ${{ steps.telegram_metadata.outputs.apk_name }}
+          TELEGRAM_CAPTION: ${{ steps.telegram_metadata.outputs.caption }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "::error::Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID repository secret."
+            exit 1
+          fi
+
+          echo "Uploading ${APK_NAME} to Telegram."
+
+          response_file="$(mktemp)"
+          trap 'rm -f "$response_file"' EXIT
+          if ! http_code="$(curl \
+            --silent \
+            --show-error \
+            --connect-timeout 15 \
+            --max-time 300 \
+            --proto '=https' \
+            --tlsv1.2 \
+            --output "$response_file" \
+            --write-out '%{http_code}' \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+            --form-string "chat_id=${TELEGRAM_CHAT_ID}" \
+            --form "document=@${APK_PATH};filename=${APK_NAME}" \
+            --form-string "caption=${TELEGRAM_CAPTION}" \
+            --form-string "parse_mode=HTML")"; then
+            echo "::error::Telegram upload request failed before a successful response was received."
+            cat "$response_file" >&2
+            exit 1
+          fi
+          if [[ "$http_code" != "200" ]]; then
+            echo "::error::Telegram API returned HTTP ${http_code} while uploading ${APK_NAME}. Response:"
+            cat "$response_file" >&2
+            exit 1
+          fi
+          TELEGRAM_RESPONSE_FILE="$response_file" python3 - <<'PY'
+          import json
+          import os
+
+          with open(os.environ["TELEGRAM_RESPONSE_FILE"], encoding="utf-8") as response_file:
+              payload = json.load(response_file)
+
+          if payload["ok"] is not True:
+              raise SystemExit(payload["description"])
+
+          message_id = payload["result"]["message_id"]
+          if type(message_id) is not int:
+              raise SystemExit("Telegram returned an invalid message_id.")
+
+          print(f"Telegram upload succeeded: message {message_id}.")
+          PY
