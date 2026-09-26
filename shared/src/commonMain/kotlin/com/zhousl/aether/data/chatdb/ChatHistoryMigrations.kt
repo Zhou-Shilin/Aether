@@ -144,41 +144,6 @@ val Migration6To7 = object : Migration(6, 7) {
     }
 }
 
-/** Move Pi refs to session ownership so inactive-branch refs survive message-row deletion. */
-val Migration7To8 = object : Migration(7, 8) {
-    override fun migrate(connection: SQLiteConnection) {
-        connection.execSQL(
-            """
-            CREATE TABLE `chat_agent_message_refs_new` (
-                `chatSessionId` TEXT NOT NULL,
-                `aetherMessageId` TEXT NOT NULL,
-                `piEntryId` TEXT NOT NULL,
-                `ordinal` INTEGER NOT NULL,
-                PRIMARY KEY(`chatSessionId`, `aetherMessageId`, `piEntryId`),
-                FOREIGN KEY(`chatSessionId`) REFERENCES `chat_sessions`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
-            )
-            """.trimIndent(),
-        )
-        connection.execSQL(
-            """
-            INSERT INTO `chat_agent_message_refs_new` (
-                `chatSessionId`, `aetherMessageId`, `piEntryId`, `ordinal`
-            )
-            SELECT `chatSessionId`, `aetherMessageId`, `piEntryId`, `ordinal`
-            FROM `chat_agent_message_refs`
-            """.trimIndent(),
-        )
-        connection.execSQL("DROP TABLE `chat_agent_message_refs`")
-        connection.execSQL("ALTER TABLE `chat_agent_message_refs_new` RENAME TO `chat_agent_message_refs`")
-        connection.execSQL(
-            "CREATE INDEX IF NOT EXISTS `index_chat_agent_message_refs_chatSessionId_piEntryId` ON `chat_agent_message_refs` (`chatSessionId`, `piEntryId`)",
-        )
-        connection.execSQL(
-            "CREATE INDEX IF NOT EXISTS `index_chat_agent_message_refs_chatSessionId_aetherMessageId` ON `chat_agent_message_refs` (`chatSessionId`, `aetherMessageId`)",
-        )
-    }
-}
-
 val ChatHistoryMigrations = arrayOf(
     Migration1To2,
     Migration2To3,
@@ -186,5 +151,4 @@ val ChatHistoryMigrations = arrayOf(
     Migration4To5,
     Migration5To6,
     Migration6To7,
-    Migration7To8,
 )

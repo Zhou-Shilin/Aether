@@ -204,20 +204,9 @@ interface ChatHistoryDao {
     suspend fun syncMessagesForSession(
         sessionId: String,
         messages: List<ChatMessageEntity>,
-        retainedAgentMessageIds: Set<String>,
         workspaceFileRefs: List<ChatWorkspaceFileRefEntity> = emptyList(),
     ) {
         val canonical = canonicalActiveChatMessages(sessionId, messages)
-        val retainedMessageIds = retainedAgentMessageIds + canonical.map(ChatMessageEntity::id)
-        // Retain branch-only IDs from the snapshot; they have no row in chat_messages.
-        getAgentMessageRefs(sessionId)
-            .asSequence()
-            .map(ChatAgentMessageRefEntity::aetherMessageId)
-            .distinct()
-            .filterNot(retainedMessageIds::contains)
-            .toList()
-            .chunked(ChatHistoryAgentRefSyncChunkSize)
-            .forEach { batch -> deleteAgentMessageRefsForMessages(sessionId, batch) }
         val existingCount = getMessageCountForSession(sessionId)
         var firstChangedPosition: Int? = null
         for (startPosition in canonical.indices step ChatHistoryMessageSyncChunkSize) {
@@ -231,6 +220,7 @@ interface ChatHistoryDao {
         if (syncFromPosition == null) {
             if (getStoredParkedMessageCount(sessionId) > 0) {
                 deleteParkedMessagesForSession(sessionId)
+                deleteOrphanedAgentMessageRefs(sessionId)
                 deleteWorkspaceFileRefsForInactiveMessages(sessionId)
             }
             return
@@ -243,6 +233,7 @@ interface ChatHistoryDao {
         changedMessages
             .chunked(ChatHistoryMessageSyncChunkSize)
             .forEach { batch -> upsertMessages(batch) }
+        deleteOrphanedAgentMessageRefs(sessionId)
         deleteWorkspaceFileRefsForInactiveMessages(sessionId)
         val changedMessageIds = changedMessages.asSequence().map(ChatMessageEntity::id).toSet()
         workspaceFileRefs
@@ -349,11 +340,15 @@ interface ChatHistoryDao {
     @Query("DELETE FROM chat_agent_sessions WHERE chatSessionId = :sessionId")
     suspend fun deleteAgentSession(sessionId: String)
 
-    @Query("DELETE FROM chat_agent_message_refs WHERE chatSessionId = :sessionId AND aetherMessageId IN (:messageIds)")
-    suspend fun deleteAgentMessageRefsForMessages(sessionId: String, messageIds: List<String>)
-
     @Query("DELETE FROM chat_agent_message_refs WHERE chatSessionId = :sessionId")
     suspend fun deleteAgentMessageRefs(sessionId: String)
+
+    @Query("""
+        DELETE FROM chat_agent_message_refs
+        WHERE chatSessionId = :sessionId
+            AND aetherMessageId NOT IN (SELECT id FROM chat_messages WHERE sessionId = :sessionId)
+    """)
+    suspend fun deleteOrphanedAgentMessageRefs(sessionId: String)
 
     @Query("DELETE FROM chat_agent_sessions")
     suspend fun deleteAllAgentSessions()

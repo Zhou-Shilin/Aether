@@ -489,7 +489,6 @@ class SharedChatHistoryStore(
         dao.syncMessagesForSession(
             sessionId = sessionId,
             messages = messageEntities,
-            retainedAgentMessageIds = messages.allBranchMessageIds(),
             workspaceFileRefs = messages.toWorkspaceFileRefs(sessionId),
         )
         dao.upsertMeta(
@@ -500,14 +499,6 @@ class SharedChatHistoryStore(
             )
         )
     }
-}
-
-private fun List<PersistedChatMessage>.allBranchMessageIds(): Set<String> = buildSet {
-    fun collect(message: PersistedChatMessage) {
-        add(message.id)
-        message.userBranches.forEach { branch -> branch.forEach(::collect) }
-    }
-    forEach(::collect)
 }
 
 private const val WorkspaceFileRefQueryChunkSize = 500

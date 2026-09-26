@@ -40,15 +40,14 @@ data class ChatAgentSessionEntity(
     val updatedAtMillis: Long = 0L,
 )
 
-/** Maps Aether message IDs to Pi entry IDs across active and inactive branches. */
 @Entity(
     tableName = "chat_agent_message_refs",
     primaryKeys = ["chatSessionId", "aetherMessageId", "piEntryId"],
     foreignKeys = [
         ForeignKey(
-            entity = ChatSessionEntity::class,
-            parentColumns = ["id"],
-            childColumns = ["chatSessionId"],
+            entity = ChatMessageEntity::class,
+            parentColumns = ["sessionId", "id"],
+            childColumns = ["chatSessionId", "aetherMessageId"],
             onDelete = ForeignKey.CASCADE,
         ),
     ],

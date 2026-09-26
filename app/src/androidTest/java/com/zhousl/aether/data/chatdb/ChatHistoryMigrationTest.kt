@@ -21,7 +21,7 @@ class ChatHistoryMigrationTest {
     )
 
     @Test
-    fun migrate1To8PreservesDataAndAddsCurrentSchema() {
+    fun migrate1To7PreservesDataAndAddsCurrentSchema() {
         helper.createDatabase(TEST_DATABASE, 1).apply {
             execSQL(
                 """
@@ -78,7 +78,7 @@ class ChatHistoryMigrationTest {
 
         helper.runMigrationsAndValidate(
             TEST_DATABASE,
-            8,
+            7,
             true,
             *ChatHistoryMigrations,
         ).use { database ->
@@ -116,62 +116,6 @@ class ChatHistoryMigrationTest {
             ).use { cursor ->
                 assertTrue(cursor.moveToFirst())
                 assertEquals(0, cursor.getInt(0))
-            }
-        }
-    }
-
-    @Test
-    fun migrationPreservesBranchRefsUntilTheirChatSessionIsDeleted() {
-        helper.createDatabase(BRANCH_REF_DATABASE, 7).apply {
-            execSQL(
-                """
-                INSERT INTO chat_sessions (
-                    id, title, preview, hasCustomTitle, agentModeEnabled,
-                    chromeEnabled, selectedModelKey, sortOrder
-                ) VALUES ('session-1', 'Title', 'Preview', 0, 0, 0, '', 0)
-                """.trimIndent(),
-            )
-            execSQL(
-                """
-                INSERT INTO chat_messages (
-                    sessionId, id, position, messageJson, author, text,
-                    createdAtMillis, responseGroupId, displayKind, messageSchemaVersion,
-                    hasUsageStatistics, isIncomplete
-                ) VALUES (
-                    'session-1', 'message-1', 0, '{}',
-                    'Agent', 'Branch response', NULL, NULL, NULL, 1, 0, 0
-                )
-                """.trimIndent(),
-            )
-            execSQL(
-                """
-                INSERT INTO chat_agent_message_refs (
-                    chatSessionId, aetherMessageId, piEntryId, ordinal
-                ) VALUES ('session-1', 'message-1', 'entry-1', 0)
-                """.trimIndent(),
-            )
-            close()
-        }
-
-        helper.runMigrationsAndValidate(
-            BRANCH_REF_DATABASE,
-            8,
-            true,
-            *ChatHistoryMigrations,
-        ).use { database ->
-            database.execSQL("DELETE FROM chat_messages WHERE sessionId = 'session-1'")
-            database.query(
-                "SELECT piEntryId FROM chat_agent_message_refs WHERE chatSessionId = 'session-1'",
-            ).use { cursor ->
-                assertTrue(cursor.moveToFirst())
-                assertEquals("entry-1", cursor.getString(0))
-            }
-
-            database.execSQL("DELETE FROM chat_sessions WHERE id = 'session-1'")
-            database.query(
-                "SELECT piEntryId FROM chat_agent_message_refs WHERE chatSessionId = 'session-1'",
-            ).use { cursor ->
-                assertFalse(cursor.moveToFirst())
             }
         }
     }
@@ -218,7 +162,7 @@ class ChatHistoryMigrationTest {
 
         helper.runMigrationsAndValidate(
             MALFORMED_JSON_DATABASE,
-            8,
+            7,
             true,
             *ChatHistoryMigrations,
         ).use { database ->
@@ -274,7 +218,6 @@ class ChatHistoryMigrationTest {
 
     private companion object {
         const val TEST_DATABASE = "chat-history-migration-test"
-        const val BRANCH_REF_DATABASE = "chat-history-branch-ref-migration-test"
         const val MALFORMED_JSON_DATABASE = "chat-history-malformed-json-migration-test"
     }
 }
