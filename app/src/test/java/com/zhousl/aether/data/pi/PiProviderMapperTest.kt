@@ -118,6 +118,24 @@ class PiProviderMapperTest {
     }
 
     @Test
+    fun requestyMapsToCustomOpenAiCompletionsProvider() {
+        val config = AppSettings(
+            piProviderId = "requesty",
+            providerConfigId = "requesty",
+            apiKey = "requesty-key",
+            baseUrl = "https://router.requesty.ai/v1",
+            modelId = "openai/gpt-4o-mini",
+        ).toPiModelConfig()
+
+        assertEquals("custom", config.providerType)
+        assertEquals("openai-completions", config.piApi)
+        assertTrue(config.piProviderId.startsWith("aether-"))
+        assertEquals("https://router.requesty.ai/v1", config.baseUrl)
+        assertEquals("openai/gpt-4o-mini", config.modelId)
+        assertEquals("requesty-key", config.apiKey)
+    }
+
+    @Test
     fun legacyNoneReasoningEffortMigratesToPiOff() {
         assertEquals("off", AppSettings(
             piProviderId = "openai",
