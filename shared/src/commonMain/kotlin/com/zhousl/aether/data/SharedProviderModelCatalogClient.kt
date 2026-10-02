@@ -164,7 +164,11 @@ class SharedProviderModelCatalogClient(engine: HttpClientEngine? = null) {
         config: LlmProviderConfig,
     ): SharedProviderModelsResult {
         val definition = PiProviderCatalog.resolve(config.piProviderId)
-        val providerModels = fetchProviderModels(config)
+        val providerModels = if (definition.id == "requesty") {
+            fetchRequestyModels(config)
+        } else {
+            fetchProviderModels(config)
+        }
         if (providerModels.models.isNotEmpty()) return providerModels
 
         val publicModels = fetchPublicProviderModels(definition)
@@ -223,9 +227,23 @@ class SharedProviderModelCatalogClient(engine: HttpClientEngine? = null) {
             }
     }
 
-    private suspend fun fetchProviderModels(config: LlmProviderConfig): SharedProviderModelsResult {
+    // Requesty lists its curated managed models first, followed by the full catalog.
+    private suspend fun fetchRequestyModels(config: LlmProviderConfig): SharedProviderModelsResult {
+        val managedModels = fetchProviderModels(config, endpointSuffix = "/managed")
+        val catalogModels = fetchProviderModels(config)
+        val models = (managedModels.models + catalogModels.models).distinctBy(String::lowercase)
+        return SharedProviderModelsResult(
+            models,
+            if (models.isEmpty()) catalogModels.error ?: managedModels.error else null,
+        )
+    }
+
+    private suspend fun fetchProviderModels(
+        config: LlmProviderConfig,
+        endpointSuffix: String = "",
+    ): SharedProviderModelsResult {
         return runCatching {
-            val modelsUrl = modelsEndpoint(config.baseUrl)
+            val modelsUrl = modelsEndpoint(config.baseUrl) + endpointSuffix
             val response = client.get(modelsUrl) {
                 headers {
                     append(HttpHeaders.Authorization, "Bearer ${config.apiKey.trim()}")
