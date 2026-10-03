@@ -533,13 +533,22 @@ final class TerminalScrollContainerView: UIView {
             let linesToDrop = buf.scrollbackHeadIndex - frozenHeadIndex
             let preLen = cache.length
             let dropped = trimLeadingLines(from: cache, count: linesToDrop)
-            trimLeadingChars = preLen - cache.length
-            frozenCount -= dropped
-            frozenHeadIndex += dropped
-            if frozenCount <= 0 {
+            if dropped < 0 {
+                // Cache line accounting no longer matches the buffer —
+                // rebuild wholesale instead of desyncing.
                 frozenAttr = nil
                 frozenCount = 0
-                // Falls through; committed state synced below.
+                frozenHeadIndex = 0
+                wholesaleInvalidated = true
+            } else {
+                trimLeadingChars = preLen - cache.length
+                frozenCount -= dropped
+                frozenHeadIndex += dropped
+                if frozenCount <= 0 {
+                    frozenAttr = nil
+                    frozenCount = 0
+                    // Falls through; committed state synced below.
+                }
             }
         }
 
@@ -692,21 +701,22 @@ final class TerminalScrollContainerView: UIView {
     }
 
     /// Drop the first `count` newline-delimited lines from a mutable cache
-    /// in place. Returns the number of lines actually dropped (may be less
-    /// than requested if the cache has fewer lines). O(length) but runs
-    /// rarely (only when scrollback trims its front).
+    /// in place. Returns the number of lines actually dropped, or -1 when
+    /// the cache cannot be trimmed consistently (fewer separators than
+    /// requested lines) — callers must fall back to a wholesale rebuild.
+    /// O(length) but runs rarely (only when scrollback trims its front).
     private func trimLeadingLines(from cache: NSMutableAttributedString, count: Int) -> Int {
         guard count > 0, cache.length > 0 else { return 0 }
         let str = cache.string as NSString
         var idx = 0
         var dropped = 0
-        while dropped < count && idx < str.length {
+        while dropped < count {
             let range = str.range(of: "\n", options: [], range: NSRange(location: idx, length: str.length - idx))
-            if range.location == NSNotFound {
-                // No more newlines — this means one "line" remains at the
-                // end with no trailing newline. Drop it entirely.
-                cache.deleteCharacters(in: NSRange(location: 0, length: cache.length))
-                return dropped + 1
+            guard range.location != NSNotFound else {
+                // Fewer separators than requested: the caller's line
+                // accounting no longer matches this cache. Report failure
+                // so the caller rebuilds wholesale instead of desyncing.
+                return -1
             }
             idx = range.location + range.length
             dropped += 1

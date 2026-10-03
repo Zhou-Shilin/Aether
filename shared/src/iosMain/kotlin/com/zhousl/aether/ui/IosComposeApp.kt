@@ -188,6 +188,7 @@ import com.zhousl.aether.platform.SharedApplicationLifecycle
 import com.zhousl.aether.platform.createBackgroundExecutionManager
 import com.zhousl.aether.platform.applyPlatformAppLanguage
 import com.zhousl.aether.platform.LocalReduceMotion
+import com.zhousl.aether.platform.platformHapticFeedback
 import com.zhousl.aether.platform.NativeSettingsCommandHandler
 import com.zhousl.aether.platform.NativeSettingsHost
 import com.zhousl.aether.data.LlmProviderConfig
@@ -880,7 +881,10 @@ fun IosComposeApp(
         val extensionStateStore = remember(runtime) { SharedExtensionStateStore(runtime) }
         val bridgeClient = remember(runtime, extensionStateStore) {
             SharedPiBridgeClient(
-                transport = RuntimePiBridgeTransport(runtime),
+                transport = RuntimePiBridgeTransport(
+                    runtime = runtime,
+                    nodeArguments = listOf("--max-old-space-size=1024"),
+                ),
                 extensionLoadOptionsProvider = extensionStateStore::load,
             )
         }
@@ -889,6 +893,7 @@ fun IosComposeApp(
                 transport = RuntimePiBridgeTransport(
                     runtime = runtime,
                     bridgePath = "/root/.aether/pi-bridge/extension-bridge.mjs",
+                    nodeArguments = listOf("--max-old-space-size=512"),
                 ),
                 extensionLoadOptionsProvider = extensionStateStore::load,
             )
@@ -3606,14 +3611,21 @@ fun IosComposeApp(
                     SharedChatScreen(
                     sessions = sessions.map { summary ->
                         val state = sessionStates[summary.id]
-                        summary.copy(
-                            title = state?.title ?: summary.title,
-                            indicator = when {
-                                state?.isWorking == true -> SharedConversationIndicator.Working
-                                state?.hasUnviewedCompletion == true -> SharedConversationIndicator.UnviewedComplete
-                                else -> SharedConversationIndicator.None
-                            },
-                        )
+                        val desiredTitle = state?.title ?: summary.title
+                        val desiredIndicator = when {
+                            state?.isWorking == true -> SharedConversationIndicator.Working
+                            state?.hasUnviewedCompletion == true -> SharedConversationIndicator.UnviewedComplete
+                            else -> SharedConversationIndicator.None
+                        }
+                        // Reuse the instance when nothing changed: the summary is
+                        // unstable (List fields), so Compose compares it by
+                        // identity and a fresh copy() would recompose every
+                        // drawer row on each streaming tick.
+                        if (summary.title == desiredTitle && summary.indicator == desiredIndicator) {
+                            summary
+                        } else {
+                            summary.copy(title = desiredTitle, indicator = desiredIndicator)
+                        }
                     },
                     selectedSessionId = sessionId,
                     composerSessionKey = currentSession.composerKey,
@@ -5587,10 +5599,20 @@ private fun SharedChatScreen(
         if (composerBodyHeightPx > 0) composerBodyHeightPx.toDp() else 112.dp
     }
     val imeBottom = with(density) { WindowInsets.ime.getBottom(this).toDp() }
-    val sessionTotalTokens = messages.mapNotNull { it.usage }
-        .sumOf { usage -> if (usage.totalTokensAvailable) usage.totalTokens else 0L }
-        .takeIf { it > 0L }
-    val compactPercent = sharedCompactContextPercent(messages)
+    // Both walk the whole message list. `messages` is the session's
+    // SnapshotStateList, whose reference never changes, so a plain
+    // remember(messages) would freeze these values; derivedStateOf re-runs
+    // them only when the list contents change, not on every recomposition.
+    val sessionTotalTokens by remember(messages) {
+        derivedStateOf {
+            messages.mapNotNull { it.usage }
+                .sumOf { usage -> if (usage.totalTokensAvailable) usage.totalTokens else 0L }
+                .takeIf { it > 0L }
+        }
+    }
+    val compactPercent by remember(messages) {
+        derivedStateOf { sharedCompactContextPercent(messages) }
+    }
     val compactSuggestionText = compactPercent?.let { percent ->
         stringResource(
             if (useTabletLayout) {
@@ -5829,25 +5851,36 @@ private fun SharedChatScreen(
                                 SharedCompactStatusDivider(rawMessage.text)
                                 return@itemsIndexed
                             }
-                            val message = if (rawMessage.fromUser && rawMessage.userBranches.isNotEmpty()) {
-                                rawMessage.copy(
-                                    branchIndex = rawMessage.selectedUserBranchIndex,
-                                    branchCount = rawMessage.userBranches.size,
-                                )
+                            // Only copy when the branch fields actually change:
+                            // SharedChatMessage is unstable, so Compose skips the
+                            // item only when it gets the same instance, and an
+                            // unconditional copy() recomposed every visible
+                            // message (Markdown included) on each state tick.
+                            val wantsBranches = rawMessage.fromUser && rawMessage.userBranches.isNotEmpty()
+                            val desiredBranchIndex = if (wantsBranches) rawMessage.selectedUserBranchIndex else 0
+                            val desiredBranchCount = if (wantsBranches) rawMessage.userBranches.size else 1
+                            val message = if (rawMessage.branchIndex == desiredBranchIndex &&
+                                rawMessage.branchCount == desiredBranchCount
+                            ) {
+                                rawMessage
                             } else {
                                 rawMessage.copy(
-                                    branchIndex = 0,
-                                    branchCount = 1,
+                                    branchIndex = desiredBranchIndex,
+                                    branchCount = desiredBranchCount,
                                 )
                             }
                             val browserTools = message.sharedBrowserTools()
-                            val browserReplayFrames = message.sharedBrowserReplayFrames()
-                            val storedBrowserState = browserTools.asReversed()
-                                .asSequence()
-                                .map(SharedChatToolInvocation::sharedStoredBrowserDisplayState)
-                                .firstOrNull { state ->
-                                    state.previewPath.isNotBlank() || state.screenshotBase64.isNotBlank()
-                                }
+                            // Parsed once per message instance: each call walks the
+                            // tool list in reverse and JSON-parses full outputs
+                            // (screenshot base64 payloads can be megabytes).
+                            val storedBrowserState = remember(message) {
+                                browserTools.asReversed()
+                                    .asSequence()
+                                    .map(SharedChatToolInvocation::sharedStoredBrowserDisplayState)
+                                    .firstOrNull { state ->
+                                        state.previewPath.isNotBlank() || state.screenshotBase64.isNotBlank()
+                                    }
+                            }
                             val browserState = if (message.isStreaming) {
                                 browserDisplayState
                             } else {
@@ -5859,6 +5892,14 @@ private fun SharedChatScreen(
                                     browserState.previewPath.isNotBlank() ||
                                     browserState.screenshotBase64.isNotBlank()
                                 )
+                            // Only parse screenshot JSON when the card will actually
+                            // render; otherwise every browser-tool message pays for
+                            // full outputJson parsing on each recomposition.
+                            val browserReplayFrames = if (showBrowserCard) {
+                                message.sharedBrowserReplayFrames()
+                            } else {
+                                emptyList()
+                            }
                             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 if (showBrowserCard) {
                                     SharedBrowserPreviewCard(
@@ -7162,6 +7203,7 @@ private fun SharedComposer(
                                                 if (isSending) {
                                                     followUpMenuOpen = true
                                                 } else {
+                                                    sharedComposerSendHaptic()
                                                     onSend(attachments.toList())
                                                     attachments.clear()
                                                     menuOpen = false
@@ -7302,6 +7344,11 @@ private fun SharedComposerSubmitButton(
             modifier = Modifier.size(21.dp),
         )
     }
+}
+
+/** Short confirmation tick when a message actually goes out. */
+private fun sharedComposerSendHaptic() {
+    platformHapticFeedback()
 }
 
 @Composable

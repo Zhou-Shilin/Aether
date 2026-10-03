@@ -2,9 +2,12 @@ package com.zhousl.aether.ui
 
 import android.graphics.BitmapFactory
 import android.graphics.SurfaceTexture
+import android.os.Build
 import android.os.SystemClock
+import android.view.HapticFeedbackConstants
 import android.view.Surface
 import android.view.TextureView
+import android.view.View
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.Canvas
 import androidx.compose.animation.AnimatedVisibility
@@ -134,6 +137,7 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
@@ -2431,6 +2435,7 @@ private fun ConversationComposerBar(
     var measuredTextLineCount by remember { mutableIntStateOf(1) }
     var measuredTextHeight by remember { mutableStateOf(22.dp) }
     val density = LocalDensity.current
+    val view = LocalView.current
     val imeVisible = WindowInsets.ime.getBottom(density) > 0
     val selectedSkillSet = remember(selectedSkillIds) { selectedSkillIds.toSet() }
     val selectedMcpServerSet = remember(selectedMcpServerIds) { selectedMcpServerIds.toSet() }
@@ -2778,6 +2783,7 @@ private fun ConversationComposerBar(
                                         if (isSending) {
                                             followUpMenuExpanded = true
                                         } else {
+                                            performComposerSendHaptic(view)
                                             onSend()
                                         }
                                     },
@@ -3045,6 +3051,20 @@ private fun ComposerPauseButton(
                 .background(Color.White)
         )
     }
+}
+
+/**
+ * Light confirmation tick when a message actually goes out (not for queue or
+ * steer follow-ups). Mirrors the iOS composer's light impact; the system
+ * touch-feedback setting still applies.
+ */
+private fun performComposerSendHaptic(view: View) {
+    val feedback = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        HapticFeedbackConstants.CONFIRM
+    } else {
+        HapticFeedbackConstants.VIRTUAL_KEY
+    }
+    view.performHapticFeedback(feedback)
 }
 
 @Composable

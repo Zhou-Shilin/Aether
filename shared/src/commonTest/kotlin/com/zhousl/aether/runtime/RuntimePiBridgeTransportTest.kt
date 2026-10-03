@@ -28,6 +28,23 @@ class RuntimePiBridgeTransportTest {
     }
 
     @Test
+    fun passesNodeArgumentsBeforeTheBridgeScript() = runTest {
+        val runtime = FakeRuntime(bridgeInstalled = true)
+        val transport = RuntimePiBridgeTransport(
+            runtime,
+            nodeArguments = listOf("--max-old-space-size=1024"),
+            dispatcher = StandardTestDispatcher(testScheduler),
+        )
+
+        transport.start()
+
+        assertEquals(
+            listOf("--max-old-space-size=1024", "/root/.aether/pi-bridge/bridge.mjs"),
+            runtime.lastSpec?.arguments,
+        )
+    }
+
+    @Test
     @OptIn(ExperimentalCoroutinesApi::class)
     fun startsANewBridgeAfterThePreviousProcessExits() = runTest {
         val runtime = FakeRuntime(bridgeInstalled = true)

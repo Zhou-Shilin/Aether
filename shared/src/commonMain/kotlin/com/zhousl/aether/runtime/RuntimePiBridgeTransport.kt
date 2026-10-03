@@ -15,6 +15,10 @@ class RuntimePiBridgeTransport(
     private val runtime: MultiplatformLocalRuntime,
     private val nodeExecutable: String = "/usr/bin/node",
     private val bridgePath: String = "/root/.aether/pi-bridge/bridge.mjs",
+    // Extra VM flags for the Node process. Memory-capped on constrained
+    // devices so a leaking agent session degrades instead of triggering
+    // an OS-level jetsam kill of the whole app.
+    private val nodeArguments: List<String> = emptyList(),
     private val shutdownTimeoutMillis: Long = 2_000,
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : PiBridgeTransport {
@@ -39,7 +43,7 @@ class RuntimePiBridgeTransport(
         runtime.startProcess(
             RuntimeProcessSpec(
                 executable = nodeExecutable,
-                arguments = listOf(bridgePath),
+                arguments = nodeArguments + listOf(bridgePath),
                 environment = mapOf(
                     "HOME" to runtime.homeDirectory,
                     "AETHER_WORKSPACE" to runtime.workspaceRoot,

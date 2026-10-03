@@ -959,3 +959,60 @@ private extension KotlinByteArray {
         return result
     }
 }
+
+final class ANSIParserOSCTests: XCTestCase {
+    private let esc: UInt8 = 0x1B
+    private let bel: UInt8 = 0x07
+
+    private func actions(_ bytes: [UInt8], parser: ANSIParser = ANSIParser()) -> [String] {
+        var output: [String] = []
+        parser.feed(bytes) { action in
+            switch action {
+            case .printable(let character): output.append("print:\(character)")
+            case .controlChar(let byte): output.append("control:\(byte)")
+            case .csiDispatch(_, _, let finalByte): output.append("csi:\(finalByte)")
+            case .escDispatch(let character): output.append("esc:\(character)")
+            case .oscDispatch(let command, let payload): output.append("osc:\(command):\(payload)")
+            }
+        }
+        return output
+    }
+
+    private func osc(_ body: String, terminator: [UInt8]) -> [UInt8] {
+        [esc] + Array("]\(body)".utf8) + terminator
+    }
+
+    func testMultibyteTitlesDecodeAsUTF8() {
+        XCTAssertEqual(actions(osc("0;你好世界", terminator: [bel])), ["osc:0:你好世界"])
+        XCTAssertEqual(
+            actions(osc("2;build ✅ 🚀", terminator: [esc, 0x5C])),
+            ["osc:2:build ✅ 🚀", "esc:\\"]
+        )
+    }
+
+    func testBackslashInsidePayloadIsKept() {
+        XCTAssertEqual(actions(osc("0;C:\\Users\\a", terminator: [bel])), ["osc:0:C:\\Users\\a"])
+    }
+
+    func testMalformedUTF8InPayloadIsDropped() {
+        XCTAssertEqual(actions(osc("0;a", terminator: [0xE4, 0xBD, bel])), ["osc:0:a"])
+        XCTAssertEqual(actions([esc] + Array("]0;".utf8) + [0xE4] + Array("b".utf8) + [bel]), ["osc:0:b"])
+        XCTAssertEqual(actions([esc] + Array("]0;".utf8) + [0x80] + Array("c".utf8) + [bel]), ["osc:0:c"])
+    }
+
+    func testBareBackslashInCommandAbortsWithoutDispatch() {
+        // Must not dispatch an empty OSC 0, which would clear the title.
+        XCTAssertEqual(actions([esc] + Array("]0\\x".utf8)), ["print:x"])
+    }
+
+    func testResetDropsPendingPayloadBytes() {
+        let parser = ANSIParser()
+        _ = actions([esc] + Array("]0;".utf8) + [0xE4, 0xBD], parser: parser)
+        parser.reset()
+        // A lone continuation byte must not complete the discarded sequence.
+        XCTAssertEqual(
+            actions([esc] + Array("]0;".utf8) + [0xA0] + Array("ok".utf8) + [bel], parser: parser),
+            ["osc:0:ok"]
+        )
+    }
+}

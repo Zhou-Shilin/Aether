@@ -60,6 +60,9 @@ final class ANSIParser {
     private var oscCommand: Int = 0
     private var oscPayload: String = ""
     private var oscHasCommand: Bool = false
+    // UTF-8 accumulation for OSC payload (titles may contain multibyte text)
+    private var oscUtf8Buffer: [UInt8] = []
+    private var oscUtf8Remaining: Int = 0
 
     // ESC intermediate
     private var escIntermediate: Character?
@@ -92,6 +95,8 @@ final class ANSIParser {
         oscCommand = 0
         oscPayload = ""
         oscHasCommand = false
+        oscUtf8Buffer = []
+        oscUtf8Remaining = 0
         escIntermediate = nil
         utf8Buffer = []
         utf8Remaining = 0
@@ -332,19 +337,58 @@ final class ANSIParser {
         }
     }
 
+    private func flushOscUtf8() {
+        if !oscUtf8Buffer.isEmpty,
+           let str = String(bytes: oscUtf8Buffer, encoding: .utf8) {
+            oscPayload.append(contentsOf: str)
+        }
+        oscUtf8Buffer.removeAll()
+        oscUtf8Remaining = 0
+    }
+
     private func processOSCString(_ byte: UInt8, action: (ParsedAction) -> Void) {
+        // Handle in-progress UTF-8 sequence first
+        if oscUtf8Remaining > 0 {
+            if byte & 0xC0 == 0x80 {
+                oscUtf8Buffer.append(byte)
+                oscUtf8Remaining -= 1
+                if oscUtf8Remaining == 0 {
+                    flushOscUtf8()
+                }
+                return
+            } else {
+                // Invalid continuation — discard pending bytes and reprocess this one
+                oscUtf8Buffer.removeAll()
+                oscUtf8Remaining = 0
+            }
+        }
+
         switch byte {
         case 0x07: // BEL — string terminator
+            flushOscUtf8()
             action(.oscDispatch(command: oscCommand, payload: oscPayload))
             state = .ground
-        case 0x1B: // ESC — possible ST
+        case 0x1B: // ESC — possible ST (ESC \)
+            flushOscUtf8()
             action(.oscDispatch(command: oscCommand, payload: oscPayload))
             state = .escape
-        case 0x20...0x7E, 0x80...0xFF:
-            // Printable or high byte — accumulate
+        case 0x20...0x7E:
+            // Printable ASCII
             oscPayload.append(Character(UnicodeScalar(byte)))
+        case 0xC0...0xDF:
+            // UTF-8 2-byte start
+            oscUtf8Buffer = [byte]
+            oscUtf8Remaining = 1
+        case 0xE0...0xEF:
+            // UTF-8 3-byte start
+            oscUtf8Buffer = [byte]
+            oscUtf8Remaining = 2
+        case 0xF0...0xF7:
+            // UTF-8 4-byte start
+            oscUtf8Buffer = [byte]
+            oscUtf8Remaining = 3
         default:
-            // Control chars in OSC — ignore
+            // Control chars or invalid bytes in OSC — ignore
             break
         }
     }
