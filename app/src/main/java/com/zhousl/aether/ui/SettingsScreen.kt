@@ -528,7 +528,9 @@ fun SettingsScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
-    val agentModeRequiresTermuxToastLabel = stringResource(R.string.settings_agent_mode_requires_termux_toast)
+    // Agent Mode only needs a local runtime to hold its workspace and screenshots; either runtime will do.
+    val isLocalRuntimeReadyForAgentMode = termuxSetupState.isReady || alpineSetupState.isReady
+    val agentModeRequiresRuntimeToastLabel = stringResource(R.string.settings_agent_mode_requires_runtime_toast)
     // Mutable field values - survive recomposition & config changes
     var systemPromptValue by rememberSaveable(stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(systemPrompt))
@@ -784,10 +786,10 @@ fun SettingsScreen(
                 statisticsSummary = buildSettingsStatisticsSummary(usageStatisticsSnapshots),
                 onReplayOnboarding = ::persistAndReplayOnboarding,
                 onNavigate = { page ->
-                    if (page == SettingsPage.AgentMode && !termuxSetupState.isReady) {
+                    if (page == SettingsPage.AgentMode && !isLocalRuntimeReadyForAgentMode) {
                         Toast.makeText(
                             context,
-                            agentModeRequiresTermuxToastLabel,
+                            agentModeRequiresRuntimeToastLabel,
                             Toast.LENGTH_SHORT,
                         ).show()
                     } else {
@@ -1231,6 +1233,7 @@ fun SettingsScreen(
             SettingsPage.AgentMode -> AgentModeSettingsPage(
                 title = stringResource(R.string.settings_agent_mode),
                 termuxSetupState = termuxSetupState,
+                alpineSetupState = alpineSetupState,
                 agentModeAuthorizationEnabled = agentModeAuthorizationEnabledValue,
                 agentModeAuthorizationMethod = agentModeAuthorizationMethodValue,
                 agentModeAuthorizationState = agentModeAuthorizationState,
@@ -1496,12 +1499,12 @@ private fun SettingsHub(
                 SettingsNavRow(
                     icon = LucideIcons.MousePointer2,
                     title = stringResource(R.string.settings_agent_mode),
-                    subtitle = if (termuxReady) {
+                    subtitle = if (termuxReady || alpineReady) {
                         stringResource(R.string.settings_agent_mode_subtitle)
                     } else {
-                        stringResource(R.string.settings_requires_termux_setup)
+                        stringResource(R.string.settings_requires_runtime_setup)
                     },
-                    enabled = termuxReady,
+                    enabled = termuxReady || alpineReady,
                     onClick = { onNavigate(SettingsPage.AgentMode) },
                 )
             }
@@ -5760,6 +5763,7 @@ private fun WorkspaceModeSettingsSection(
 private fun AgentModeSettingsPage(
     title: String,
     termuxSetupState: TermuxSetupState,
+    alpineSetupState: LocalRuntimeSetupState,
     agentModeAuthorizationEnabled: Boolean,
     agentModeAuthorizationMethod: AgentModeAuthorizationMethod,
     agentModeAuthorizationState: AgentModeAuthorizationState,
@@ -5802,7 +5806,7 @@ private fun AgentModeSettingsPage(
         onRefreshAgentModeDisplays(agentModeAuthorizationMethod)
     }
 
-    if (!termuxSetupState.isReady) {
+    if (!termuxSetupState.isReady && !alpineSetupState.isReady) {
         LaunchedEffect(Unit) {
             onRefreshTermuxSetup()
         }

@@ -278,8 +278,8 @@
     <string name="settings_install_shizuku">Install Shizuku</string>
     <string name="settings_open_shizuku">Open Shizuku</string>
     <string name="settings_grant_access">Grant access</string>
-    <string name="settings_agent_mode_requires_termux_toast">Complete Termux setup before configuring Agent Mode.</string>
-    <string name="settings_requires_termux_setup">Requires Termux setup</string>
+    <string name="settings_agent_mode_requires_runtime_toast">Complete Termux or Alpine setup before configuring Agent Mode.</string>
+    <string name="settings_requires_runtime_setup">Requires Termux or Alpine setup</string>
     <string name="settings_root_setup_step_root_access">Root access</string>
     <string name="settings_root_setup_step_root_access_subtitle">Detect su and wait for authorization.</string>
     <string name="settings_root_setup_step_termux_access">Termux command access</string>
@@ -357,7 +357,7 @@
     <string name="settings_root_setup_progress_body_failed">The setup command finished with an error. Review the detail above and retry when ready.</string>
     <string name="settings_root_setup_configuring">Configuring Root setup</string>
     <string name="settings_custom_instructions_variables_hint">Supports {{current_datetime}}, {{current_date}}, {{current_time}}, {{timezone}}, and {{unix_timestamp}}.</string>
-    <string name="settings_agent_mode_unavailable_body">Configure Termux first. Agent Mode uses the Termux bridge for its workspace and screenshot flow, so authorization cannot be enabled until Termux is ready.</string>
+    <string name="settings_agent_mode_unavailable_body">Configure Termux or Alpine first. Agent Mode needs a local runtime for its workspace and screenshot flow, so authorization cannot be enabled until one of them is ready.</string>
     <string name="settings_agent_mode_root_already_configured_body">Root Agent Mode authorization is already ready. You do not need to run Root automatic setup again.</string>
     <string name="settings_agent_mode_already_configured_body">Agent Mode authorization is already ready. Root automatic setup is not required; continuing will reconfigure Agent Mode to Root.</string>
     <string name="settings_agent_mode_root_setup_body">Use su to select Root mode and prepare local device control automatically.</string>
@@ -863,7 +863,7 @@
     <string name="settings_alpine_rootfs_unavailable">Alpine root filesystem is unavailable.</string>
     <string name="settings_alpine_installing_packages">Installing packages</string>
     <string name="settings_runtime_defaults_description">Choose where tools run when a request omits the environment parameter. Agent calls can still explicitly select Termux or Alpine.</string>
-    <string name="settings_runtime_termux_ready_subtitle">Android-side command bridge and Agent Mode workspace.</string>
+    <string name="settings_runtime_termux_ready_subtitle">Android-side command bridge.</string>
     <string name="settings_runtime_termux_unavailable_subtitle">Configure Termux before selecting it as default.</string>
     <string name="settings_runtime_alpine_ready_subtitle">Built-in app-private Linux VM for development tools.</string>
     <string name="settings_runtime_alpine_unavailable_subtitle">Initialize Alpine before selecting it as default.</string>

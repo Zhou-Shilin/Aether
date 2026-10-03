@@ -6416,9 +6416,11 @@ internal fun AetherUiState.withFinalizedPausedSession(
     )
 }
 
-private fun AetherUiState.isTermuxReadyForAgentMode(): Boolean =
-    developerTermuxReadyOverride ?: (
+private fun AetherUiState.isLocalRuntimeReadyForAgentMode(): Boolean =
+    // The developer override only simulates Termux readiness; Alpine still counts, matching AetherApp's composer gate.
+    developerTermuxReadyOverride?.let { it || alpineSetupState.isReady } ?: (
         termuxSetupState.isReady ||
+            alpineSetupState.isReady ||
             rootSetupState.isReady ||
             (
                 settings.agentModeAuthorizationEnabled &&
@@ -6430,7 +6432,7 @@ private fun AetherUiState.isTermuxReadyForAgentMode(): Boolean =
 private fun AetherUiState.isAgentModeReady(): Boolean =
     settings.agentModeAuthorizationEnabled &&
         agentModeAuthorizationState.isReady &&
-        isTermuxReadyForAgentMode()
+        isLocalRuntimeReadyForAgentMode()
 
 private fun AppSettings.withRuntimeEnabled(
     runtimeId: LocalRuntimeId,

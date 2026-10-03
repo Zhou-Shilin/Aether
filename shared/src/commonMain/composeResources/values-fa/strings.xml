@@ -273,8 +273,8 @@
     <string name="settings_install_shizuku">Shizuku را نصب کنید</string>
     <string name="settings_open_shizuku">Shizuku را باز کنید</string>
     <string name="settings_grant_access">اجازه دسترسی</string>
-    <string name="settings_agent_mode_requires_termux_toast">تنظیمات Termux را قبل از پیکربندی Agent Mode کامل کنید.</string>
-    <string name="settings_requires_termux_setup">به تنظیمات Termux نیاز دارد</string>
+    <string name="settings_agent_mode_requires_runtime_toast">تنظیمات Termux یا Alpine را قبل از پیکربندی Agent Mode تکمیل کنید.</string>
+    <string name="settings_requires_runtime_setup">به تنظیمات Termux یا Alpine نیاز دارد</string>
     <string name="settings_root_setup_step_root_access">دسترسی ریشه</string>
     <string name="settings_root_setup_step_root_access_subtitle">su را شناسایی کنید و منتظر مجوز باشید.</string>
     <string name="settings_root_setup_step_termux_access">دسترسی به فرمان Termux</string>
@@ -351,7 +351,7 @@
     <string name="settings_root_setup_progress_body_failed">دستور setup با یک خطا به پایان رسید. جزئیات بالا را مرور کنید و پس از آماده شدن دوباره امتحان کنید.</string>
     <string name="settings_root_setup_configuring">پیکربندی تنظیمات ریشه</string>
     <string name="settings_custom_instructions_variables_hint">از {{current_datetime}}، {{current_date}}، {{current_time}}، {{timezone}} و {{unix_timestamp}} پشتیبانی می‌کند.</string>
-    <string name="settings_agent_mode_unavailable_body">ابتدا Termux را پیکربندی کنید. Agent Mode از پل Termux برای فضای کاری و جریان اسکرین شات خود استفاده می کند، بنابراین تا زمانی که Termux آماده نباشد، مجوز فعال نمی شود.</string>
+    <string name="settings_agent_mode_unavailable_body">ابتدا Termux یا Alpine را پیکربندی کنید. Agent Mode برای فضای کاری و جریان اسکرین شات خود به یک زمان اجرای محلی نیاز دارد، بنابراین تا زمانی که یکی از آن‌ها آماده نباشد، مجوز فعال نمی شود.</string>
     <string name="settings_agent_mode_root_already_configured_body">مجوز حالت عامل ریشه از قبل آماده است. نیازی به اجرای مجدد Root Automatic Setup ندارید.</string>
     <string name="settings_agent_mode_already_configured_body">مجوز حالت عامل از قبل آماده است. نیازی به تنظیم خودکار ریشه نیست. ادامه، Agent Mode را مجدداً به Root پیکربندی می کند.</string>
     <string name="settings_agent_mode_root_setup_body">از su برای انتخاب حالت Root و آماده سازی کنترل محلی دستگاه به طور خودکار استفاده کنید.</string>
@@ -837,7 +837,7 @@
     <string name="settings_alpine_status_failed">آلپاین نیاز به تعمیر یا تنظیم مجدد دارد.</string>
     <string name="settings_alpine_status_not_ready">آلپاین آماده نیست.</string>
     <string name="settings_runtime_defaults_description">زمانی که یک درخواست پارامتر محیط را حذف می کند، محل اجرا ابزارها را انتخاب کنید. تماس‌های نماینده همچنان می‌توانند به صراحت Termux یا Alpine را انتخاب کنند.</string>
-    <string name="settings_runtime_termux_ready_subtitle">پل فرمان سمت Android و فضای کاری Agent Mode.</string>
+    <string name="settings_runtime_termux_ready_subtitle">پل فرمان سمت Android.</string>
     <string name="settings_runtime_termux_unavailable_subtitle">Termux را قبل از انتخاب به عنوان پیش فرض پیکربندی کنید.</string>
     <string name="settings_runtime_alpine_ready_subtitle">لینوکس VM اختصاصی برنامه داخلی برای ابزارهای توسعه.</string>
     <string name="settings_runtime_alpine_unavailable_subtitle">قبل از اینکه Alpine را به عنوان پیش فرض انتخاب کنید، مقداردهی اولیه کنید.</string>
