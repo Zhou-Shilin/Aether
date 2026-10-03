@@ -16,11 +16,13 @@ import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.Image
 import android.media.ImageReader
+import android.os.Binder
 import android.os.Build
 import android.os.Handler
 import android.os.ParcelFileDescriptor
 import android.os.Process
 import android.os.SystemClock
+import android.os.UserHandle
 import android.view.InputDevice
 import android.view.InputEvent
 import android.view.KeyCharacterMap
@@ -67,19 +69,64 @@ class AetherAgentModeShizukuService @Keep constructor(
      * under Shizuku (shell UID) every write failed with "Package com.baimoqilin.aether does not belong
      * to 2000". Build the manager on a context that reports this process's own package instead.
      */
-    @delegate:SuppressLint("DiscouragedPrivateApi")
-    private val clipboardManager: ClipboardManager by lazy {
-        val identityContext = object : ContextWrapper(privilegedContext) {
+    @SuppressLint("DiscouragedPrivateApi")
+    private fun createClipboardManager(userContext: Context): ClipboardManager {
+        val identityContext = object : ContextWrapper(userContext) {
             override fun getOpPackageName(): String = baseContext.packageName
         }
-        runCatching {
+        return runCatching {
             ClipboardManager::class.java
                 .getDeclaredConstructor(Context::class.java, Handler::class.java)
                 .apply { isAccessible = true }
                 .newInstance(identityContext, null)
         }.getOrNull()
-            ?: privilegedContext.getSystemService<ClipboardManager>()
+            ?: userContext.getSystemService<ClipboardManager>()
             ?: error("Clipboard service is unavailable for this display.")
+    }
+
+    /**
+     * This process runs as shell (Shizuku) or root, both in user 0, and the context Shizuku hands
+     * the constructor is bound to user 0 as well. Package queries, activity launches and the
+     * clipboard are per-user, so on a secondary user they must target the Android user that owns
+     * the calling Aether process, never the process's own user.
+     */
+    private val userContexts = ConcurrentHashMap<UserHandle, Context>()
+    private val clipboardManagers = ConcurrentHashMap<UserHandle, ClipboardManager>()
+
+    /** Must be called on the binder thread of the incoming call. */
+    private fun callerUserHandle(): UserHandle = UserHandle.getUserHandleForUid(Binder.getCallingUid())
+
+    private fun callerUserContext(): Context = userContextFor(callerUserHandle())
+
+    private fun callerClipboardManager(): ClipboardManager {
+        val user = callerUserHandle()
+        return clipboardManagers.computeIfAbsent(user) {
+            createClipboardManager(userContextFor(user))
+        }
+    }
+
+    private fun userContextFor(user: UserHandle): Context =
+        userContexts.computeIfAbsent(user) {
+            // privilegedContext is bound to this process's own user (see the constructor note).
+            if (user == Process.myUserHandle()) privilegedContext else createPackageContextAsUser(user)
+        }
+
+    @SuppressLint("DiscouragedPrivateApi")
+    private fun createPackageContextAsUser(user: UserHandle): Context {
+        val packageName = privilegedContext.packageName
+        return runCatching {
+            Context::class.java
+                .getMethod(
+                    "createPackageContextAsUser",
+                    String::class.java,
+                    Int::class.javaPrimitiveType,
+                    UserHandle::class.java,
+                )
+                .invoke(privilegedContext, packageName, Context.CONTEXT_IGNORE_SECURITY, user) as Context
+        }.getOrElse { throwable ->
+            val cause = (throwable as? java.lang.reflect.InvocationTargetException)?.targetException ?: throwable
+            error("Agent Mode cannot act on behalf of Android user $user: ${cause.message ?: cause.javaClass.simpleName}")
+        }
     }
     private val displays = ConcurrentHashMap<Int, VirtualDisplay>()
     private val imageReaders = ConcurrentHashMap<Int, ImageReader>()
@@ -175,7 +222,8 @@ class AetherAgentModeShizukuService @Keep constructor(
     }
 
     override fun launchPackage(packageName: String, displayId: Int) {
-        val intent = privilegedContext.packageManager.getLaunchIntentForPackage(packageName)
+        val userContext = callerUserContext()
+        val intent = userContext.packageManager.getLaunchIntentForPackage(packageName)
             ?: error("No launchable activity for $packageName.")
         val options = ActivityOptions.makeBasic()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -186,7 +234,7 @@ class AetherAgentModeShizukuService @Keep constructor(
 
         val targetDisplay = displayManager.getDisplay(displayId)
             ?: error("Display $displayId is not available.")
-        val displayContext = privilegedContext.createDisplayContext(targetDisplay)
+        val displayContext = userContext.createDisplayContext(targetDisplay)
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
         PendingIntent.getActivity(
@@ -195,7 +243,7 @@ class AetherAgentModeShizukuService @Keep constructor(
             intent,
             flags,
         ).send(
-            privilegedContext,
+            userContext,
             0,
             null,
             null,
@@ -316,7 +364,7 @@ class AetherAgentModeShizukuService @Keep constructor(
     }
 
     private fun pasteText(displayId: Int, text: String) {
-        clipboardManager.setPrimaryClip(ClipData.newPlainText("Aether Agent Mode", text))
+        callerClipboardManager().setPrimaryClip(ClipData.newPlainText("Aether Agent Mode", text))
         val downTime = SystemClock.uptimeMillis()
         injectKeyEvent(
             displayId = displayId,
@@ -513,7 +561,7 @@ class AetherAgentModeShizukuService @Keep constructor(
 
     @Suppress("DEPRECATION")
     override fun listInstalledAppsJson(): String {
-        val packageManager = privilegedContext.packageManager
+        val packageManager = callerUserContext().packageManager
         val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val launchables = packageManager.queryIntentActivities(
             launcherIntent,

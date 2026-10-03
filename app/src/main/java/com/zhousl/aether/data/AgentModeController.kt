@@ -51,7 +51,7 @@ private const val ShizukuPermissionRequestCode = 4201
 private const val RootAuthorizationProbeTimeoutMillis = 2_000L
 private const val ShizukuUserServiceBindTimeoutMillis = 20_000L
 private const val ShizukuUserServiceTag = "aether-agent-mode"
-private const val ShizukuUserServiceVersion = 2
+private const val ShizukuUserServiceVersion = 3
 
 private val ShizukuManagerPackages = listOf(
     "moe.shizuku.privileged.api",
