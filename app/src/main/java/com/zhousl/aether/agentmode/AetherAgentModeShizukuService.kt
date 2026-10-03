@@ -16,11 +16,15 @@ import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.Image
 import android.media.ImageReader
+import android.os.Binder
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.ParcelFileDescriptor
 import android.os.Process
 import android.os.SystemClock
+import android.os.UserHandle
+import android.util.Log
 import android.view.InputDevice
 import android.view.InputEvent
 import android.view.KeyCharacterMap
@@ -47,6 +51,7 @@ private const val InjectInputEventModeWaitForFinish = 2
 private const val TapDurationMillis = 60L
 private const val KeyPressDurationMillis = 30L
 private const val ShellPackageName = "com.android.shell"
+private const val AgentModeLogTag = "AetherAgentMode"
 private const val TextInputMethodKeyEvents = "key_events"
 private const val TextInputMethodClipboardPaste = "clipboard_paste"
 private const val SystemPackageName = "android"
@@ -62,31 +67,26 @@ class AetherAgentModeShizukuService @Keep constructor(
     }
 
     /**
-     * ClipboardService verifies the caller's op package against its UID. [privilegedContext] is a
-     * package context created from Aether's context, and such contexts keep Aether's op package, so
-     * under Shizuku (shell UID) every write failed with "Package com.baimoqilin.aether does not belong
-     * to 2000". Build the manager on a context that reports this process's own package instead.
+     * One context per Android user this service was asked to act on. The user service never runs in
+     * Aether's user: Shizuku and the su-based fallback both start it as shell (uid 2000) or root
+     * (uid 0), and Shizuku shares a single user service process between the same package in every
+     * user, so [privilegedContext] may belong to whichever user bound the service first. Everything
+     * that acts on "the user" therefore goes through [contextForUser].
      */
-    @delegate:SuppressLint("DiscouragedPrivateApi")
-    private val clipboardManager: ClipboardManager by lazy {
-        val identityContext = object : ContextWrapper(privilegedContext) {
-            override fun getOpPackageName(): String = baseContext.packageName
-        }
-        runCatching {
-            ClipboardManager::class.java
-                .getDeclaredConstructor(Context::class.java, Handler::class.java)
-                .apply { isAccessible = true }
-                .newInstance(identityContext, null)
-        }.getOrNull()
-            ?: privilegedContext.getSystemService<ClipboardManager>()
-            ?: error("Clipboard service is unavailable for this display.")
-    }
+    private val userContexts = ConcurrentHashMap<Int, Context>()
+    private val clipboardManagers = ConcurrentHashMap<Int, ClipboardManager>()
     private val displays = ConcurrentHashMap<Int, VirtualDisplay>()
     private val imageReaders = ConcurrentHashMap<Int, ImageReader>()
     private val previewSurfaces = ConcurrentHashMap<Int, Surface>()
     private val displayLocks = ConcurrentHashMap<Int, Any>()
     private val displaysWithLaunchedContent = ConcurrentHashMap.newKeySet<Int>()
+    private val displaysWithFailedLaunch = ConcurrentHashMap.newKeySet<Int>()
 
+    /**
+     * Virtual displays are not owned by an Android user: DisplayManagerService only records the
+     * calling package, so this display is the same one the launched app draws into regardless of the
+     * user the launch later targets. Only the calls that act on "the user" need [contextForUser].
+     */
     override fun createDisplay(
         name: String,
         width: Int,
@@ -159,6 +159,7 @@ class AetherAgentModeShizukuService @Keep constructor(
             displays.remove(displayId)?.release()
             imageReaders.remove(displayId)?.close()
             displaysWithLaunchedContent.remove(displayId)
+            displaysWithFailedLaunch.remove(displayId)
             displayLocks.remove(displayId)
         }
     }
@@ -170,13 +171,29 @@ class AetherAgentModeShizukuService @Keep constructor(
         previewSurfaces.clear()
         imageReaders.clear()
         displaysWithLaunchedContent.clear()
+        displaysWithFailedLaunch.clear()
         displayLocks.clear()
         System.exit(0)
     }
 
-    override fun launchPackage(packageName: String, displayId: Int) {
-        val intent = privilegedContext.packageManager.getLaunchIntentForPackage(packageName)
-            ?: error("No launchable activity for $packageName.")
+    override fun launchPackage(packageName: String, displayId: Int, userId: Int) {
+        warnIfCallerUserDiffers(userId)
+        try {
+            launchPackageInUser(packageName, displayId, userId)
+        } catch (throwable: Throwable) {
+            // Remember the failed launch so later captures report "nothing was drawn" instead of
+            // handing back a black image that looks like a rendered screen.
+            displaysWithFailedLaunch.add(displayId)
+            throw throwable
+        }
+        displaysWithFailedLaunch.remove(displayId)
+        displaysWithLaunchedContent.add(displayId)
+    }
+
+    private fun launchPackageInUser(packageName: String, displayId: Int, userId: Int) {
+        val launchContext = contextForUser(userId)
+        val intent = launchContext.packageManager.getLaunchIntentForPackage(packageName)
+            ?: error("No launchable activity for $packageName in user $userId.")
         val options = ActivityOptions.makeBasic()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             options.launchDisplayId = displayId
@@ -186,16 +203,12 @@ class AetherAgentModeShizukuService @Keep constructor(
 
         val targetDisplay = displayManager.getDisplay(displayId)
             ?: error("Display $displayId is not available.")
-        val displayContext = privilegedContext.createDisplayContext(targetDisplay)
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
-        PendingIntent.getActivity(
-            displayContext,
-            intent.hashCode(),
-            intent,
-            flags,
-        ).send(
-            privilegedContext,
+        // createDisplayContext keeps the user of its base context, and PendingIntent.getActivity
+        // stamps that user into the pending intent on Android 9+, so the activity starts as Aether's
+        // user instead of the user service's user (issue #100).
+        val displayContext = launchContext.createDisplayContext(targetDisplay)
+        activityPendingIntentForUser(displayContext, intent, userId).send(
+            launchContext,
             0,
             null,
             null,
@@ -203,7 +216,43 @@ class AetherAgentModeShizukuService @Keep constructor(
             null,
             options.toBundle(),
         )
-        displaysWithLaunchedContent.add(displayId)
+    }
+
+    /**
+     * `PendingIntent.getActivity` only honours the context's user since Android 9; before that it
+     * stamps the *process* user, which would silently launch in the user service's user. Ask for the
+     * target user explicitly there and refuse to launch rather than acting on the wrong user.
+     */
+    private fun activityPendingIntentForUser(
+        context: Context,
+        intent: Intent,
+        userId: Int,
+    ): PendingIntent {
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return PendingIntent.getActivity(context, intent.hashCode(), intent, flags)
+        }
+        val userHandle = runCatching {
+            UserHandle.getUserHandleForUid(userId * AgentModePerUserUidRange)
+        }.getOrNull()
+        val asUser = userHandle?.let { user ->
+            runCatching {
+                PendingIntent::class.java
+                    .getMethod(
+                        "getActivityAsUser",
+                        Context::class.java,
+                        Int::class.javaPrimitiveType,
+                        Intent::class.java,
+                        Int::class.javaPrimitiveType,
+                        Bundle::class.java,
+                        UserHandle::class.java,
+                    )
+                    .invoke(null, context, intent.hashCode(), intent, flags, null, user) as? PendingIntent
+            }.getOrNull()
+        }
+        return asUser
+            ?: error("Agent Mode cannot launch apps as user $userId on this Android version.")
     }
 
     override fun runInputCommand(command: String) {
@@ -281,7 +330,7 @@ class AetherAgentModeShizukuService @Keep constructor(
         injectKeyEvent(displayId, downTime, SystemClock.uptimeMillis(), KeyEvent.ACTION_UP, code, 0)
     }
 
-    override fun text(displayId: Int, text: String): String {
+    override fun text(displayId: Int, text: String, userId: Int): String {
         ensureManagedDisplay(displayId)
         if (text.isEmpty()) return TextInputMethodKeyEvents
         val keyMap = KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD)
@@ -289,7 +338,7 @@ class AetherAgentModeShizukuService @Keep constructor(
         // letters, ...). Those cannot be typed as KeyEvents, so the whole text is pasted instead.
         val events = keyMap.getEvents(text.toCharArray())
         if (events == null) {
-            pasteText(displayId, text)
+            pasteText(displayId, text, userId)
             return TextInputMethodClipboardPaste
         }
         var downTime = SystemClock.uptimeMillis()
@@ -315,8 +364,10 @@ class AetherAgentModeShizukuService @Keep constructor(
         return TextInputMethodKeyEvents
     }
 
-    private fun pasteText(displayId: Int, text: String) {
-        clipboardManager.setPrimaryClip(ClipData.newPlainText("Aether Agent Mode", text))
+    private fun pasteText(displayId: Int, text: String, userId: Int) {
+        // The clipboard is per user, so a paste into an app that belongs to another user needs that
+        // user's clipboard, not the user service's one.
+        clipboardManagerFor(userId).setPrimaryClip(ClipData.newPlainText("Aether Agent Mode", text))
         val downTime = SystemClock.uptimeMillis()
         injectKeyEvent(
             displayId = displayId,
@@ -342,13 +393,14 @@ class AetherAgentModeShizukuService @Keep constructor(
         output: ParcelFileDescriptor,
         maxEdge: Int,
         quality: Int,
-    ) {
+    ): String {
         val display = displays[displayId]
             ?: error("Display $displayId is not managed by Aether Agent Mode.")
         val reader = imageReaders[displayId]
             ?: error("Display $displayId does not have an internal capture surface.")
         val boundedMaxEdge = maxEdge.coerceIn(320, 4096)
         val boundedQuality = quality.coerceIn(40, 95)
+        var status = agentModeCaptureStatus(AgentModeCaptureSourceDisplay)
         synchronized(displayLock(displayId)) {
             drainImageReader(reader)
             val previewSurface = previewSurfaces[displayId]?.takeIf { it.isValid }
@@ -356,27 +408,49 @@ class AetherAgentModeShizukuService @Keep constructor(
             try {
                 val image = awaitLatestImage(reader)
                 ParcelFileDescriptor.AutoCloseOutputStream(output).use { stream ->
-                    if (image != null) {
-                        try {
-                            imageToJpegStream(
-                                image = image,
+                    when {
+                        image != null -> {
+                            try {
+                                imageToJpegStream(
+                                    image = image,
+                                    output = stream,
+                                    maxEdge = boundedMaxEdge,
+                                    quality = boundedQuality,
+                                )
+                            } finally {
+                                image.close()
+                            }
+                        }
+
+                        displaysWithFailedLaunch.contains(displayId) -> {
+                            blankImageToJpegStream(
+                                width = reader.width,
+                                height = reader.height,
                                 output = stream,
                                 maxEdge = boundedMaxEdge,
                                 quality = boundedQuality,
                             )
-                        } finally {
-                            image.close()
+                            status = agentModeCaptureStatus(
+                                source = AgentModeCaptureSourceBlank,
+                                blankReason = AgentModeBlankReasonLaunchFailed,
+                            )
                         }
-                    } else if (!displaysWithLaunchedContent.contains(displayId)) {
-                        blankImageToJpegStream(
-                            width = reader.width,
-                            height = reader.height,
-                            output = stream,
-                            maxEdge = boundedMaxEdge,
-                            quality = boundedQuality,
-                        )
-                    } else {
-                        error("Timed out while capturing display $displayId.")
+
+                        !displaysWithLaunchedContent.contains(displayId) -> {
+                            blankImageToJpegStream(
+                                width = reader.width,
+                                height = reader.height,
+                                output = stream,
+                                maxEdge = boundedMaxEdge,
+                                quality = boundedQuality,
+                            )
+                            status = agentModeCaptureStatus(
+                                source = AgentModeCaptureSourceBlank,
+                                blankReason = AgentModeBlankReasonNoLaunchedContent,
+                            )
+                        }
+
+                        else -> error("Timed out while capturing display $displayId.")
                     }
                 }
             } finally {
@@ -385,6 +459,7 @@ class AetherAgentModeShizukuService @Keep constructor(
                 }
             }
         }
+        return status
     }
 
     private fun displayLock(displayId: Int): Any =
@@ -512,8 +587,9 @@ class AetherAgentModeShizukuService @Keep constructor(
         }.toString()
 
     @Suppress("DEPRECATION")
-    override fun listInstalledAppsJson(): String {
-        val packageManager = privilegedContext.packageManager
+    override fun listInstalledAppsJson(userId: Int): String {
+        warnIfCallerUserDiffers(userId)
+        val packageManager = contextForUser(userId).packageManager
         val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val launchables = packageManager.queryIntentActivities(
             launcherIntent,
@@ -548,6 +624,96 @@ class AetherAgentModeShizukuService @Keep constructor(
         val packageName = packageNameForCurrentProcess(baseContext.packageName)
         if (packageName == baseContext.packageName) return baseContext
         return baseContext.createPackageContext(packageName, Context.CONTEXT_IGNORE_SECURITY)
+    }
+
+    /** Builds (and caches) the context that acts on [userId] instead of on the service's user. */
+    private fun contextForUser(userId: Int): Context {
+        require(userId >= 0) { "Agent Mode received an invalid user id ($userId)." }
+        return userContexts.computeIfAbsent(userId) { targetUserId ->
+            createUserScopedContext(privilegedContext, targetUserId)
+                ?: error(
+                    "Agent Mode cannot act on user $targetUserId. Cross-user Agent Mode is not " +
+                        "supported by this device's framework.",
+                )
+        }
+    }
+
+    /**
+     * `Context.createContextAsUser` and `Context.createPackageContextAsUser` are `@SystemApi`, so
+     * they are invoked through reflection.
+     *
+     * The `android` package is preferred because the framework special-cases it: it copies the
+     * current context and only replaces its user instead of looking the package up for the target
+     * user. That keeps this process's package identity (`com.android.shell` under Shizuku, which the
+     * clipboard and the virtual display owner check rely on) and also works in users where the host
+     * package is not installed.
+     */
+    private fun createUserScopedContext(baseContext: Context, userId: Int): Context? {
+        val userHandle = runCatching {
+            UserHandle.getUserHandleForUid(userId * AgentModePerUserUidRange)
+        }.getOrNull() ?: return null
+        runCatching {
+            Context::class.java
+                .getMethod(
+                    "createPackageContextAsUser",
+                    String::class.java,
+                    Int::class.javaPrimitiveType,
+                    UserHandle::class.java,
+                )
+                .invoke(baseContext, SystemPackageName, Context.CONTEXT_IGNORE_SECURITY, userHandle) as Context
+        }.getOrNull()?.let { userContext ->
+            Log.i(AgentModeLogTag, "Agent Mode user service scoped to user $userId")
+            return userContext
+        }
+        return runCatching {
+            Context::class.java
+                .getMethod("createContextAsUser", UserHandle::class.java, Int::class.javaPrimitiveType)
+                .invoke(baseContext, userHandle, 0) as Context
+        }.getOrNull()?.also {
+            Log.i(AgentModeLogTag, "Agent Mode user service scoped to user $userId")
+        }
+    }
+
+    /**
+     * The service binder lives in this process, so a call from Aether reports Aether's own uid as the
+     * caller. A different user means the caller is not the app whose user we were asked to act on;
+     * that is worth a log line, but the explicit [userId] still wins because it came from Aether.
+     */
+    private fun warnIfCallerUserDiffers(userId: Int) {
+        val callerUserId = runCatching {
+            agentModeUserIdFromUid(Binder.getCallingUid())
+        }.getOrNull() ?: return
+        if (callerUserId != userId) {
+            Log.w(
+                AgentModeLogTag,
+                "Agent Mode was asked to act on user $userId but the caller runs in user $callerUserId.",
+            )
+        }
+    }
+
+    /**
+     * ClipboardService verifies the caller's op package against its UID. [privilegedContext] is a
+     * package context created from Aether's context, and such contexts keep Aether's op package, so
+     * under Shizuku (shell UID) every write failed with "Package com.baimoqilin.aether does not belong
+     * to 2000". Build the manager on a context that reports this process's own package instead, and
+     * for the user the clipboard write must happen in.
+     */
+    @SuppressLint("DiscouragedPrivateApi")
+    private fun clipboardManagerFor(userId: Int): ClipboardManager {
+        val userContext = contextForUser(userId)
+        return clipboardManagers.computeIfAbsent(userId) {
+            val identityContext = object : ContextWrapper(userContext) {
+                override fun getOpPackageName(): String = baseContext.packageName
+            }
+            runCatching {
+                ClipboardManager::class.java
+                    .getDeclaredConstructor(Context::class.java, Handler::class.java)
+                    .apply { isAccessible = true }
+                    .newInstance(identityContext, null)
+            }.getOrNull()
+                ?: userContext.getSystemService<ClipboardManager>()
+                ?: error("Clipboard service is unavailable for this display.")
+        }
     }
 
     private fun packageNameForCurrentProcess(defaultPackageName: String): String =

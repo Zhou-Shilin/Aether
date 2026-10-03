@@ -10,13 +10,17 @@ import android.graphics.Point
 import android.hardware.display.DisplayManager
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
+import android.os.Process
 import android.util.Base64
 import android.view.Display
 import android.view.Surface
 import androidx.core.content.getSystemService
 import com.rosan.app_process.AppProcess
 import com.zhousl.aether.agentmode.AetherAgentModeShizukuService
+import com.zhousl.aether.agentmode.AgentModeCaptureOutcome
 import com.zhousl.aether.agentmode.IAetherAgentModeService
+import com.zhousl.aether.agentmode.agentModeUserIdFromUid
+import com.zhousl.aether.agentmode.parseAgentModeCaptureOutcome
 import com.zhousl.aether.termux.TermuxBashTool
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -51,7 +55,9 @@ private const val ShizukuPermissionRequestCode = 4201
 private const val RootAuthorizationProbeTimeoutMillis = 2_000L
 private const val ShizukuUserServiceBindTimeoutMillis = 20_000L
 private const val ShizukuUserServiceTag = "aether-agent-mode"
-private const val ShizukuUserServiceVersion = 2
+// Bumped whenever the service AIDL or its user scoping changes: Shizuku reuses a running user
+// service until this version differs, and an old process would keep acting on the owner user.
+private const val ShizukuUserServiceVersion = 3
 
 private val ShizukuManagerPackages = listOf(
     "moe.shizuku.privileged.api",
@@ -118,6 +124,11 @@ class AgentModeController(
     private val diagnosticLogger: AetherDiagnosticLogger = AetherDiagnosticLogger.NoOp,
 ) {
     private val displayManager = context.getSystemService<DisplayManager>()!!
+    /**
+     * The user Aether runs as. The Shizuku and root user services run in user 0, so every call that
+     * acts on "the user" carries this id instead of letting the service guess (issue #100).
+     */
+    private val agentModeUserId: Int = agentModeUserIdFromUid(Process.myUid())
     private val cacheDirectory = File(context.cacheDir, "agent-mode").apply { mkdirs() }
     private val controllerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val captureMutex = Mutex()
@@ -331,7 +342,7 @@ class AgentModeController(
                             action = action,
                         )
                     } else {
-                        val method = requireAgentModeService(settings).text(displayId, text)
+                        val method = requireAgentModeService(settings).text(displayId, text, agentModeUserId)
                         captureAfterDelay(
                             settings,
                             workspaceDirectory,
@@ -492,6 +503,7 @@ class AgentModeController(
                 "height" to displaySpec.height,
                 "density_dpi" to displaySpec.densityDpi,
                 "method" to settings.agentModeAuthorizationMethod.storageValue,
+                "user_id" to agentModeUserId,
             ),
         )
         _displayState.value = AgentModeDisplayState(
@@ -583,7 +595,7 @@ class AgentModeController(
         val displayId = ensureDisplay(settings)
         val launchPackage = resolveLaunchPackage(settings, target)
             ?: error("No launchable app matched '$target'. Try a package name such as com.android.chrome, or a shorter app label.")
-        requireAgentModeService(settings).launchPackage(launchPackage, displayId)
+        requireAgentModeService(settings).launchPackage(launchPackage, displayId, agentModeUserId)
     }
 
     private suspend fun resolveLaunchPackage(
@@ -684,7 +696,7 @@ class AgentModeController(
 
     private suspend fun currentInstalledApps(settings: AppSettings): List<AgentModeInstalledAppInfo> {
         val privilegedApps = runCatching {
-            parseInstalledApps(requireAgentModeService(settings).listInstalledAppsJson())
+            parseInstalledApps(requireAgentModeService(settings).listInstalledAppsJson(agentModeUserId))
         }.getOrNull()
         return (privilegedApps?.takeIf { it.isNotEmpty() } ?: currentInstalledAppsLocal())
             .distinctBy { it.packageName }
@@ -747,7 +759,7 @@ class AgentModeController(
         if (delayMillis > 0) delay(delayMillis)
         val captureId = "capture-${System.currentTimeMillis()}"
         val previewFile = File(cacheDirectory, "$captureId.$AgentModeCaptureExtension")
-        captureImageFile(settings, previewFile)
+        val captureOutcome = captureImageFile(settings, previewFile)
         if (!previewFile.isFile || previewFile.length() <= 0L) {
             error("Agent Mode screenshot capture produced an empty file.")
         }
@@ -795,9 +807,24 @@ class AgentModeController(
                 put("cursor_norm_y", normalizeAgentModePixel(it, state.height))
             }
             extras?.keys()?.forEach { key -> put(key, extras.get(key)) }
+            if (captureOutcome.isBlank) {
+                put("screenshot_blank", true)
+                put("screenshot_blank_reason", captureOutcome.blankReason)
+            }
             put("screenshot_mime_type", AgentModeCaptureMimeType)
             put("screenshot_base64", Base64.encodeToString(bytes, Base64.NO_WRAP))
-            put("stdout", "Captured Agent Mode screenshot: $workspacePath")
+            put(
+                "stdout",
+                buildString {
+                    append("Captured Agent Mode screenshot: ")
+                    append(workspacePath)
+                    if (captureOutcome.isBlank) {
+                        append("\nThe virtual display has no drawn content yet (")
+                        append(captureOutcome.blankReason)
+                        append("); the image is a black placeholder, not app content.")
+                    }
+                },
+            )
         }.toString()
     }
 
@@ -818,9 +845,9 @@ class AgentModeController(
     private suspend fun captureImageFile(
         settings: AppSettings,
         outputFile: File,
-    ) {
+    ): AgentModeCaptureOutcome {
         val displayId = ensureDisplay(settings)
-        captureMutex.withLock {
+        return captureMutex.withLock {
             outputFile.parentFile?.mkdirs()
             runCatching { outputFile.delete() }
             try {
@@ -830,11 +857,13 @@ class AgentModeController(
                         ParcelFileDescriptor.MODE_WRITE_ONLY or
                         ParcelFileDescriptor.MODE_TRUNCATE,
                 ).use { descriptor ->
-                    requireAgentModeService(settings).captureImageToFd(
-                        displayId,
-                        descriptor,
-                        AgentModeCaptureMaxEdge,
-                        AgentModeCaptureJpegQuality,
+                    parseAgentModeCaptureOutcome(
+                        requireAgentModeService(settings).captureImageToFd(
+                            displayId,
+                            descriptor,
+                            AgentModeCaptureMaxEdge,
+                            AgentModeCaptureJpegQuality,
+                        ),
                     )
                 }
             } catch (throwable: Throwable) {

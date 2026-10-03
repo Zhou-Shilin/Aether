@@ -226,7 +226,10 @@ private fun agentModeToolDefinition(): JSONObject = JSONObject().apply {
         "Operate Aether Agent Mode on an isolated Android virtual display. Use this only when Agent Mode is selected in the chat composer. " +
             "tap/swipe coordinates are normalized 0..1000 on each axis, independent of resolution; values above 1000 are rejected. " +
             "Results report width/height (display pixels), image_width/image_height (screenshot pixels), " +
-            "cursor_norm_x/cursor_norm_y (last touch point, normalized) and cursor_x/cursor_y (the same point in display pixels).",
+            "cursor_norm_x/cursor_norm_y (last touch point, normalized) and cursor_x/cursor_y (the same point in display pixels). " +
+            "When the display has nothing to show yet the result carries screenshot_blank=true and " +
+            "screenshot_blank_reason: that image is a black placeholder, not app content, so launch an app " +
+            "and check the launch result before judging the screen.",
     )
     put(
         "parameters",
