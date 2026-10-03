@@ -6416,9 +6416,10 @@ internal fun AetherUiState.withFinalizedPausedSession(
     )
 }
 
-private fun AetherUiState.isTermuxReadyForAgentMode(): Boolean =
+private fun AetherUiState.isLocalRuntimeReadyForAgentMode(): Boolean =
     developerTermuxReadyOverride ?: (
         termuxSetupState.isReady ||
+            alpineSetupState.isReady ||
             rootSetupState.isReady ||
             (
                 settings.agentModeAuthorizationEnabled &&
@@ -6430,7 +6431,7 @@ private fun AetherUiState.isTermuxReadyForAgentMode(): Boolean =
 private fun AetherUiState.isAgentModeReady(): Boolean =
     settings.agentModeAuthorizationEnabled &&
         agentModeAuthorizationState.isReady &&
-        isTermuxReadyForAgentMode()
+        isLocalRuntimeReadyForAgentMode()
 
 private fun AppSettings.withRuntimeEnabled(
     runtimeId: LocalRuntimeId,

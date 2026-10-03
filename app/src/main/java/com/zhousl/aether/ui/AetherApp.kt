@@ -483,8 +483,10 @@ private fun AetherAppContent(
         developerOverride = uiState.developerTermuxReadyOverride,
         termuxSetupCompleted = uiState.settings.termuxSetupCompleted,
     )
+    // Agent Mode needs a local runtime only for its workspace and screenshot flow; Termux and Alpine are interchangeable.
+    val localRuntimeReadyForAgentMode = effectiveTermuxSetupState.isReady || uiState.alpineSetupState.isReady
     val agentModeReady = uiState.settings.agentModeAuthorizationEnabled &&
-        effectiveTermuxSetupState.isReady &&
+        localRuntimeReadyForAgentMode &&
         uiState.agentModeAuthorizationState.isReady
     val agentModeSelected = activeSession?.agentModeEnabled ?: uiState.draftAgentModeEnabled
     val chromeAvailable = uiState.alpineSetupState.isReady &&

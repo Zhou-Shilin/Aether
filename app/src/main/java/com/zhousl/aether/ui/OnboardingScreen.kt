@@ -233,8 +233,11 @@ fun OnboardingScreen(
         onCompleteFollowUp()
     }
     fun continueAfterTermuxStep() {
-        if (termuxSetupState.isReady) currentStep = OnboardingStep.AgentModeAuthorization
-        else onCompleteFollowUp()
+        if (termuxSetupState.isReady || alpineSetupState.isReady) {
+            currentStep = OnboardingStep.AgentModeAuthorization
+        } else {
+            onCompleteFollowUp()
+        }
     }
 
     AnimatedContent(
