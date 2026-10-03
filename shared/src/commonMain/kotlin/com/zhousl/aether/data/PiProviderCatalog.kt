@@ -118,7 +118,7 @@ fun PiProviderDefinition.modelsDevProviderIds(): List<String> = when (id) {
     "vercel-ai-gateway" -> listOf("vercel")
     "together" -> listOf("togetherai")
     "fireworks" -> listOf("fireworks-ai")
-    "kimi-coding" -> listOf("kimi-for-coding")
+    "kimi-coding" -> listOf("kimi-code-plan-cn", "kimi-code-plan-global")
     "zai-coding-cn" -> listOf("zhipuai-coding-plan")
     else -> listOf(id)
 }

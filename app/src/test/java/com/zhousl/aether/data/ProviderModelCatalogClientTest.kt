@@ -123,7 +123,7 @@ class ProviderModelCatalogClientTest {
             PiProviderCatalog.resolve("fireworks").modelsDevProviderIds(),
         )
         assertEquals(
-            listOf("kimi-for-coding"),
+            listOf("kimi-code-plan-cn", "kimi-code-plan-global"),
             PiProviderCatalog.resolve("kimi-coding").modelsDevProviderIds(),
         )
     }
@@ -244,5 +244,61 @@ class ProviderModelCatalogClientTest {
         assertEquals(true, key in result.levelsByProviderModel)
         assertEquals(emptyList<String>(), result.levelsByProviderModel[key])
         assertEquals(emptyMap<String, Map<String, String>>(), result.levelMapsByProviderModel)
+    }
+
+    private val museSparkCatalog = JSONObject(
+        """{
+          "models":{"meta/muse-spark-1.3":{"id":"meta/muse-spark-1.3","name":"Muse Spark 1.3","reasoning":true}},
+          "providers":{
+            "nano-gpt":{"models":{"meta/muse-spark-1.3":{"id":"meta/muse-spark-1.3","canonical_model_id":"meta/muse-spark-1.3","reasoning":true,
+              "reasoning_options":[{"type":"effort","values":["minimal","low","medium","high","xhigh"]}],
+              "limit":{"context":1048576,"output":943718},"modalities":{"input":["text","image"]}}}},
+            "vercel":{"models":{"meta/muse-spark-1.3":{"id":"meta/muse-spark-1.3","canonical_model_id":"meta/muse-spark-1.3","reasoning":true,
+              "reasoning_options":[{"type":"effort","values":["minimal","low","medium","high","xhigh"]}],
+              "limit":{"context":1048576,"output":1048576}}}},
+            "meta":{"models":{"muse-spark-1.3":{"id":"muse-spark-1.3","canonical_model_id":"meta/muse-spark-1.3","reasoning":true,
+              "reasoning_options":[{"type":"effort","values":["minimal","low","medium","high","xhigh","max"]}],
+              "limit":{"context":1048576,"output":131072},"modalities":{"input":["text","image","video"]}}}}
+          }
+        }""",
+    )
+
+    private fun museSparkOption(piProviderId: String, modelId: String, baseUrl: String = "https://relay.example/v1") =
+        listOf(
+            LlmProviderConfig(
+                providerId = "relay",
+                name = "Relay",
+                piProviderId = piProviderId,
+                apiKey = "test-key",
+                baseUrl = baseUrl,
+                modelId = modelId,
+                cachedModels = listOf(modelId),
+                enabledModelIds = listOf(modelId),
+            ),
+        ).availableModelOptions().single()
+
+    @Test
+    fun customEndpointUsesFirstPartyLabEntryInsteadOfFirstAggregator() {
+        val option = museSparkOption("openai-compatible", "muse-spark-1.3")
+        val key = thinkingCatalogKey("openai-compatible", "muse-spark-1.3")
+
+        val result = publicCatalogThinkingResult(museSparkCatalog, listOf(option))
+
+        assertEquals(
+            listOf("minimal", "low", "medium", "high", "xhigh", "max"),
+            result.levelsByProviderModel[key],
+        )
+        assertEquals(ModelsDevModelLimits(1_048_576, 131_072, true), result.limitsByProviderModel[key])
+    }
+
+    @Test
+    fun builtInProviderUsesItsOwnModelsDevEntry() {
+        val option = museSparkOption("vercel-ai-gateway", "meta/muse-spark-1.3", "https://ai-gateway.vercel.sh")
+        val key = thinkingCatalogKey("vercel-ai-gateway", "meta/muse-spark-1.3")
+
+        val result = publicCatalogThinkingResult(museSparkCatalog, listOf(option))
+
+        assertEquals(listOf("minimal", "low", "medium", "high", "xhigh"), result.levelsByProviderModel[key])
+        assertEquals(1_048_576, result.limitsByProviderModel[key]?.maxOutputTokens)
     }
 }

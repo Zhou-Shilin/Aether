@@ -1,6 +1,7 @@
 package com.zhousl.aether.data.pi
 
 import com.zhousl.aether.data.LlmProviderConfig
+import com.zhousl.aether.data.ModelsDevModelLimits
 import com.zhousl.aether.data.PiProviderCatalog
 import com.zhousl.aether.data.ProviderAuthMethod
 import com.zhousl.aether.data.SharedDiagnosticLogger
@@ -19,6 +20,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -110,6 +112,8 @@ class SharedPiChatClient(
         timeoutMillis: Int = 360_000,
         thinkingLevelMap: Map<String, String> = emptyMap(),
         isReasoningModel: Boolean? = null,
+        modelsDevThinkingLevels: List<String>? = null,
+        modelsDevLimits: ModelsDevModelLimits? = null,
     ): SharedPiTurnResult {
         val response = bridge.request(
             type = "complete_once",
@@ -120,6 +124,8 @@ class SharedPiChatClient(
                         reasoning != "off" || thinkingLevelMap["off"] == "none"
                     ),
                     thinkingLevelMap = thinkingLevelMap,
+                    modelsDevThinkingLevels = modelsDevThinkingLevels,
+                    modelsDevLimits = modelsDevLimits,
                 ))
                 put("system_prompt", systemPrompt.ifBlank { platformDefaultSystemPrompt() })
                 put("messages", messages.toPiMessages())
@@ -157,6 +163,8 @@ class SharedPiChatClient(
         timeoutMillis: Int = 360_000,
         thinkingLevelMap: Map<String, String> = emptyMap(),
         isReasoningModel: Boolean? = null,
+        modelsDevThinkingLevels: List<String>? = null,
+        modelsDevLimits: ModelsDevModelLimits? = null,
         onAssistantTextDelta: suspend (String) -> Unit = {},
         onAssistantReasoningDelta: suspend (String) -> Unit = {},
         onAssistantReasoningSummaryDelta: suspend (String) -> Unit = {},
@@ -183,6 +191,8 @@ class SharedPiChatClient(
             timeoutMillis = timeoutMillis,
             reasoningEnabled = resolvedReasoningEnabled,
             thinkingLevelMap = thinkingLevelMap,
+            modelsDevThinkingLevels = modelsDevThinkingLevels,
+            modelsDevLimits = modelsDevLimits,
         )
         val payload = buildJsonObject {
             put("model_config", modelConfig)
@@ -454,6 +464,8 @@ fun LlmProviderConfig.toSharedPiModelConfig(
     timeoutMillis: Int = 360_000,
     reasoningEnabled: Boolean = false,
     thinkingLevelMap: Map<String, String> = emptyMap(),
+    modelsDevThinkingLevels: List<String>? = null,
+    modelsDevLimits: ModelsDevModelLimits? = null,
 ): JsonObject {
     val definition = PiProviderCatalog.resolve(piProviderId)
     val effectiveAuthMethod = if (
@@ -492,8 +504,22 @@ fun LlmProviderConfig.toSharedPiModelConfig(
                 thinkingLevelMap.forEach { (k, v) -> put(k, v) }
             })
         }
-        put("context_window", 128_000)
-        put("max_tokens", 16_384)
+        if (modelsDevThinkingLevels != null) {
+            put("models_dev", buildJsonObject {
+                put("reasoning", reasoningEnabled)
+                put("thinking_levels", buildJsonArray { modelsDevThinkingLevels.forEach { add(it) } })
+                modelsDevLimits?.contextWindow?.let { put("context_window", it) }
+                modelsDevLimits?.maxOutputTokens?.let { put("max_tokens", it) }
+                modelsDevLimits?.supportsImageInput?.let { supportsImages ->
+                    put("input", buildJsonArray {
+                        add("text")
+                        if (supportsImages) add("image")
+                    })
+                }
+            })
+        }
+        put("context_window", modelsDevLimits?.contextWindow ?: 128_000)
+        put("max_tokens", modelsDevLimits?.maxOutputTokens ?: 16_384)
         put("timeout_ms", timeoutMillis.coerceIn(30_000, 3_600_000))
         put("max_retries", 5)
         put("max_retry_delay_ms", 60_000)

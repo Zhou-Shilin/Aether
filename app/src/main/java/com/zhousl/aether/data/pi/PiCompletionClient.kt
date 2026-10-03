@@ -4,6 +4,7 @@ import com.zhousl.aether.data.AppSettings
 import com.zhousl.aether.data.LlmImagePart
 import com.zhousl.aether.data.LlmMessage
 import com.zhousl.aether.data.LlmTextPart
+import com.zhousl.aether.data.ModelsDevModelLimits
 import com.zhousl.aether.data.SettingsRepository
 import org.json.JSONArray
 import org.json.JSONObject
@@ -20,6 +21,8 @@ class PiCompletionClient(
         stream: Boolean = false,
         thinkingLevelMap: Map<String, String> = emptyMap(),
         isReasoningModel: Boolean? = null,
+        modelsDevThinkingLevels: List<String>? = null,
+        modelsDevLimits: ModelsDevModelLimits? = null,
         onEvent: (suspend (String, JSONObject) -> Unit)? = null,
     ): Result<PiCompletionResult> = runCatching {
         val payload = JSONObject().apply {
@@ -28,6 +31,8 @@ class PiCompletionClient(
                 settings.toPiModelConfig(
                     thinkingLevelMap = thinkingLevelMap,
                     isReasoningModel = isReasoningModel,
+                    modelsDevThinkingLevels = modelsDevThinkingLevels,
+                    modelsDevLimits = modelsDevLimits,
                 ).toJson(),
             )
             put("system_prompt", systemPrompt)

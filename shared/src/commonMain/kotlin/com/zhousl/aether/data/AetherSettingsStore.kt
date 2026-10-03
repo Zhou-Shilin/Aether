@@ -20,6 +20,7 @@ data class SharedThinkingCatalogCache(
     val levelsByProviderModel: Map<String, List<String>> = emptyMap(),
     val clampsByProviderModel: Map<String, Map<String, String>> = emptyMap(),
     val reasoningModels: Set<String> = emptySet(),
+    val limitsByProviderModel: Map<String, ModelsDevModelLimits> = emptyMap(),
 )
 
 @Serializable
@@ -175,6 +176,8 @@ class AetherSettingsStore(
                 clampsByProviderModel =
                     (current.clampsByProviderModel - refreshedKeys) + cache.clampsByProviderModel,
                 reasoningModels = (current.reasoningModels - refreshedKeys) + cache.reasoningModels,
+                limitsByProviderModel =
+                    (current.limitsByProviderModel - refreshedKeys) + cache.limitsByProviderModel,
             )
             preferences[ThinkingCatalogCacheJson] = serializeSharedThinkingCatalogCache(merged)
         }

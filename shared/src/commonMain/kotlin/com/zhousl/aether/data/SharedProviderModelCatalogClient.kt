@@ -32,6 +32,7 @@ data class SharedThinkingCatalogResult(
     val levelsByProviderModel: Map<String, List<String>> = emptyMap(),
     val levelMapsByProviderModel: Map<String, Map<String, String>> = emptyMap(),
     val reasoningModels: Set<String> = emptySet(),
+    val limitsByProviderModel: Map<String, ModelsDevModelLimits> = emptyMap(),
 )
 
 @Serializable
@@ -45,10 +46,8 @@ data class SharedModelCatalogInfo(
     val labLogoViewportHeight: Float = 40f,
 )
 
-private val SharedThinkingLevels = listOf("off", "minimal", "low", "medium", "high", "xhigh", "max")
-
 internal fun sharedThinkingCatalogKey(providerId: String, modelId: String): String =
-    "${providerId.trim()}/${modelId.substringAfterLast('/').trim()}"
+    modelsDevCatalogKey(providerId, modelId)
 
 class SharedProviderModelCatalogClient(engine: HttpClientEngine? = null) {
     private val client = if (engine == null) createClient() else createClient(engine)
@@ -103,56 +102,15 @@ class SharedProviderModelCatalogClient(engine: HttpClientEngine? = null) {
     suspend fun fetchThinkingCatalog(
         options: List<ProviderModelOption>,
     ): SharedThinkingCatalogResult = runCatching {
-        val providers = fetchPublicCatalog()?.get("providers") as? JsonObject ?: return@runCatching SharedThinkingCatalogResult()
+        val catalog = fetchPublicCatalog() ?: return@runCatching SharedThinkingCatalogResult()
         withContext(Dispatchers.Default) {
-            val fallbackModels = providers.sharedPublicCatalogModelIndex()
-            val levelsMap = mutableMapOf<String, List<String>>()
-            val levelMapsMap = mutableMapOf<String, Map<String, String>>()
-            val reasoningModels = mutableSetOf<String>()
-            options.forEach { option ->
-                val model = option.publicCatalogProviderIds()
-                    .firstNotNullOfOrNull { providerId ->
-                        ((providers[providerId] as? JsonObject)?.get("models") as? JsonObject)
-                            ?.findSharedPublicCatalogModel(option)
-                    }
-                    ?: option.sharedPublicCatalogModelKeys()
-                        .firstNotNullOfOrNull { fallbackModels[it.lowercase()] }
-                val key = sharedThinkingCatalogKey(option.piProviderId, option.modelId)
-                if (model?.get("reasoning")?.jsonPrimitive?.booleanOrNull == true) {
-                    reasoningModels += key
-                    val optionsArray = model["reasoning_options"] as? JsonArray
-                    val hasToggle = optionsArray.orEmpty().any { entry ->
-                        (entry as? JsonObject)?.stringValue("type") == "toggle"
-                    }
-                    var hasNone = false
-                    val levels = buildList {
-                        if (hasToggle) add("off")
-                        optionsArray.orEmpty().forEach { entry ->
-                            val reasoningOption = entry as? JsonObject ?: return@forEach
-                            if (reasoningOption.stringValue("type") != "effort") return@forEach
-                            (reasoningOption["values"] as? JsonArray).orEmpty()
-                                .mapNotNull { it.jsonPrimitive.contentOrNull }
-                                .forEach { raw ->
-                                    val trimmed = raw.trim()
-                                    if (trimmed == "none") {
-                                        hasNone = true
-                                        if ("off" !in this) add("off")
-                                    } else if (trimmed in SharedThinkingLevels && trimmed !in this) {
-                                        add(trimmed)
-                                    }
-                                }
-                        }
-                    }
-                    val levelMap = buildMap<String, String> {
-                        if (hasToggle || hasNone) put("off", "none")
-                    }
-                    levelsMap[key] = levels
-                    if (levelMap.isNotEmpty()) levelMapsMap[key] = levelMap
-                } else {
-                    levelsMap[key] = emptyList()
-                }
-            }
-            SharedThinkingCatalogResult(levelsMap, levelMapsMap, reasoningModels)
+            val resolved = resolveModelsDevCapabilities(catalog, options)
+            SharedThinkingCatalogResult(
+                levelsByProviderModel = resolved.levelsByProviderModel,
+                levelMapsByProviderModel = resolved.levelMapsByProviderModel,
+                reasoningModels = resolved.reasoningModels,
+                limitsByProviderModel = resolved.limitsByProviderModel,
+            )
         }
     }.getOrDefault(SharedThinkingCatalogResult())
 
@@ -317,57 +275,6 @@ private fun ProviderModelOption.sharedCatalogLookupKeys(): List<String> = listOf
     modelId,
     modelId.substringAfterLast('/'),
 ).map(String::trim).filter(String::isNotEmpty).distinct()
-
-private fun ProviderModelOption.sharedPublicCatalogModelKeys(): List<String> = listOf(
-    modelId,
-    modelId.substringAfter("$piProviderId/", modelId),
-    modelId.substringAfterLast('/'),
-).map(String::trim).filter(String::isNotEmpty).distinct()
-
-private fun JsonObject.findSharedPublicCatalogModel(option: ProviderModelOption): JsonObject? {
-    val lookupKeys = option.sharedPublicCatalogModelKeys()
-    lookupKeys.firstNotNullOfOrNull { key -> this[key] as? JsonObject }?.let { return it }
-    val normalizedModelId = option.modelId.substringAfterLast('/').trim()
-    return entries.firstNotNullOfOrNull { (key, value) ->
-        val model = value as? JsonObject ?: return@firstNotNullOfOrNull null
-        val candidateIds = listOf(key, model.stringValue("id"))
-        model.takeIf { candidateIds.any { id ->
-            id.substringAfterLast('/').trim().equals(normalizedModelId, ignoreCase = true)
-        } }
-    }
-}
-
-private fun JsonObject.sharedPublicCatalogModelIndex(): Map<String, JsonObject> = buildMap {
-    this@sharedPublicCatalogModelIndex.values.forEach { providerValue ->
-        val provider = providerValue as? JsonObject ?: return@forEach
-        val models = provider["models"] as? JsonObject ?: return@forEach
-        models.forEach { (key, modelValue) ->
-            val model = modelValue as? JsonObject ?: return@forEach
-            val id = model.stringValue("id").ifBlank { key }.trim()
-            listOf(key, id, id.substringAfterLast('/'))
-                .map(String::trim)
-                .filter(String::isNotBlank)
-                .forEach { lookupKey ->
-                    val normalizedKey = lookupKey.lowercase()
-                    if (normalizedKey !in this) put(normalizedKey, model)
-                }
-        }
-    }
-}
-
-private fun ProviderModelOption.publicCatalogProviderIds(): List<String> = buildList {
-    add(
-        when (piProviderId) {
-            "openai-codex" -> "openai"
-            "kimi-coding" -> "moonshotai"
-            else -> piProviderId
-        }
-    )
-    modelId.substringBeforeLast('/', "").trim().takeIf(String::isNotBlank)?.let(::add)
-    if (modelId.substringAfterLast('/').trim().startsWith("kimi-", ignoreCase = true)) {
-        add("moonshotai")
-    }
-}.filter(String::isNotBlank).distinct()
 
 private fun sharedModelCatalogInfo(displayName: String, labId: String): SharedModelCatalogInfo =
     SharedModelCatalogInfo(

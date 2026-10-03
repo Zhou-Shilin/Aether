@@ -218,6 +218,7 @@ import com.zhousl.aether.data.SharedProviderModelCatalogClient
 import com.zhousl.aether.data.SharedModelCatalogInfo
 import com.zhousl.aether.data.SharedThinkingCatalogCache
 import com.zhousl.aether.data.ModelsDevThinkingCatalogSource
+import com.zhousl.aether.data.ModelsDevModelLimits
 import com.zhousl.aether.data.PiProviderCatalog
 import com.zhousl.aether.data.ProviderAuthMethod
 import com.zhousl.aether.data.AetherPrivacyPolicyUrl
@@ -980,6 +981,9 @@ fun IosComposeApp(
             mutableStateOf<Map<String, Map<String, String>>>(emptyMap())
         }
         var reasoningModels by remember { mutableStateOf<Set<String>>(emptySet()) }
+        var modelLimitsByProviderModel by remember {
+            mutableStateOf<Map<String, ModelsDevModelLimits>>(emptyMap())
+        }
         val thinkingCatalogRefreshMutex = remember { Mutex() }
         LaunchedEffect(modelCatalogRequestKey) {
             if (modelOptions.isNotEmpty()) {
@@ -1002,11 +1006,15 @@ fun IosComposeApp(
                 val restoredReasoningModels = cachedThinkingCatalog?.reasoningModels
                     .orEmpty()
                     .filterTo(mutableSetOf(), validKeys::contains)
+                val restoredLimits = cachedThinkingCatalog?.limitsByProviderModel
+                    .orEmpty()
+                    .filterKeys(validKeys::contains)
                 if (restoredLevels.isNotEmpty()) {
                     thinkingLevelsByProviderModel = thinkingLevelsByProviderModel + restoredLevels
                     thinkingLevelClampsByProviderModel =
                         thinkingLevelClampsByProviderModel + restoredClamps
                     reasoningModels += restoredReasoningModels
+                    modelLimitsByProviderModel = modelLimitsByProviderModel + restoredLimits
                 }
             }
             val fetched = modelCatalogClient.fetchModelInfo(modelOptions)
@@ -1527,6 +1535,7 @@ fun IosComposeApp(
                 clampsByProviderModel =
                     thinkingLevelClampsByProviderModel.filterKeys(validKeys::contains),
                 reasoningModels = reasoningModels.filterTo(mutableSetOf(), validKeys::contains),
+                limitsByProviderModel = modelLimitsByProviderModel.filterKeys(validKeys::contains),
             )
             withContext(Dispatchers.Default) {
                 settingsStore?.saveThinkingCatalogCache(cache)
@@ -1545,6 +1554,9 @@ fun IosComposeApp(
                             result.levelMapsByProviderModel
                     reasoningModels = (reasoningModels - result.levelsByProviderModel.keys) +
                         result.reasoningModels
+                    modelLimitsByProviderModel =
+                        (modelLimitsByProviderModel - result.levelsByProviderModel.keys) +
+                            result.limitsByProviderModel
                     persistThinkingCatalogCache()
                 }
                 true
@@ -1653,6 +1665,8 @@ fun IosComposeApp(
                             .coerceIn(30, 3_600) * 1_000,
                         thinkingLevelMap = titleThinkingLevelMap,
                         isReasoningModel = titleIsReasoningModel,
+                        modelsDevThinkingLevels = thinkingLevelsByProviderModel[titleThinkingKey],
+                        modelsDevLimits = modelLimitsByProviderModel[titleThinkingKey],
                     )
                 }.getOrNull() ?: return@launch
                 val title = result.assistantText.sanitizeSharedSessionTitle()
@@ -1730,6 +1744,8 @@ fun IosComposeApp(
                                     .coerceIn(30, 3_600) * 1_000,
                                 thinkingLevelMap = summaryThinkingLevelMap,
                                 isReasoningModel = summaryIsReasoningModel,
+                                modelsDevThinkingLevels = thinkingLevelsByProviderModel[summaryThinkingKey],
+                                modelsDevLimits = modelLimitsByProviderModel[summaryThinkingKey],
                             )
                             if (result.errorMessage.isBlank()) {
                                 parseSharedReasoningSummary(result.assistantText)
@@ -2005,6 +2021,8 @@ fun IosComposeApp(
                                     .coerceIn(30, 3_600) * 1_000,
                                 reasoningEnabled = reasoningEnabled,
                                 thinkingLevelMap = thinkingLevelMap,
+                                modelsDevThinkingLevels = thinkingLevelsByProviderModel[modelKey],
+                                modelsDevLimits = modelLimitsByProviderModel[modelKey],
                             ),
                             workspaceDirectory = runtime.workspaceRoot,
                             systemPrompt = sharedAppSettings.systemPrompt,
@@ -2059,6 +2077,8 @@ fun IosComposeApp(
                             .coerceIn(30, 3_600) * 1_000,
                         thinkingLevelMap = thinkingLevelMap,
                         isReasoningModel = isReasoningModel,
+                        modelsDevThinkingLevels = thinkingLevelsByProviderModel[modelKey],
+                        modelsDevLimits = modelLimitsByProviderModel[modelKey],
                         onAssistantTextDelta = { delta ->
                             backgroundLeases[target.id]?.update("Writing response")
                             reasoningTracker.finishDirectSummaryChunk()

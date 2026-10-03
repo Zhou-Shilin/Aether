@@ -294,4 +294,29 @@ class PiProviderMapperTest {
         assertTrue(config.reasoning)
         assertTrue(config.thinkingLevelMap.isEmpty())
     }
+
+    @Test
+    fun modelsDevCapabilitiesAreSentToPi() {
+        val json = AppSettings(
+            piProviderId = "openai-compatible",
+            baseUrl = "https://relay.example/v1",
+            modelId = "muse-spark-1.3",
+            reasoningEffort = "max",
+        ).toPiModelConfig(
+            isReasoningModel = true,
+            modelsDevThinkingLevels = listOf("minimal", "low", "medium", "high", "xhigh", "max"),
+            modelsDevLimits = com.zhousl.aether.data.ModelsDevModelLimits(1_048_576, 131_072, true),
+        ).toJson()
+
+        val modelsDev = json.getJSONObject("models_dev")
+        assertEquals(true, modelsDev.getBoolean("reasoning"))
+        assertEquals("max", modelsDev.getJSONArray("thinking_levels").getString(5))
+        assertEquals(1_048_576, modelsDev.getInt("context_window"))
+        assertEquals(131_072, modelsDev.getInt("max_tokens"))
+        assertEquals("image", modelsDev.getJSONArray("input").getString(1))
+        assertEquals(1_048_576, json.getInt("context_window"))
+        assertFalse(
+            AppSettings(piProviderId = "openai", modelId = "gpt-5.4").toPiModelConfig().toJson().has("models_dev"),
+        )
+    }
 }

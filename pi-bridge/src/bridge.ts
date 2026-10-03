@@ -6,7 +6,6 @@ import * as path from "node:path";
 import { createInterface } from "node:readline";
 import { stdin as input, stderr } from "node:process";
 import {
-  getSupportedThinkingLevels,
   clampThinkingLevel,
   createModels,
   createProvider,
@@ -98,9 +97,9 @@ reserveProtocolStdout();
 registerBunOAuthFlows();
 
 const BRIDGE_VERSION = "2.0.0-alpha.0";
-const PI_AI_VERSION = "0.87.1";
-const PI_AGENT_CORE_VERSION = "0.87.1";
-const PI_CODING_AGENT_VERSION = "0.87.1";
+const PI_AI_VERSION = "0.99.2";
+const PI_AGENT_CORE_VERSION = "0.99.2";
+const PI_CODING_AGENT_VERSION = "0.99.2";
 const AETHER_LOOPBACK_OAUTH_CALLBACK_HOST = "127.0.0.1";
 const OAUTH_FETCH_MAX_ATTEMPTS = 3;
 const DEFAULT_AGENT_RETRY_MAX_RETRIES = 5;
@@ -128,6 +127,11 @@ interface ModelConfig {
   supports_developer_role?: boolean;
   reasoning?: boolean;
   thinking_level_map?: Record<string, string | null>;
+  /**
+   * Model capabilities resolved by the host from models.dev. When present they
+   * replace the values Pi's bundled catalog would otherwise supply.
+   */
+  models_dev?: ModelsDevMetadata;
   context_window?: number;
   max_tokens?: number;
   timeout_ms?: number;
@@ -139,6 +143,31 @@ interface ModelConfig {
   faux_response?: string;
   faux_tool_calls?: Array<{ name: string; arguments: JsonObject; id?: string }>;
   faux_tokens_per_second?: number;
+}
+
+type PiThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+
+const PI_THINKING_LEVELS: readonly PiThinkingLevel[] = [
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
+
+// Gemini's discrete thinkingLevel control only has these wire values; Pi's
+// Google transport rejects any other mapping at request time.
+const GOOGLE_THINKING_WIRE_LEVELS = new Set<string>(["minimal", "low", "medium", "high"]);
+
+interface ModelsDevMetadata {
+  reasoning?: boolean;
+  /** Pi thinking levels the provider accepts for this model, from models.dev reasoning options. */
+  thinking_levels?: PiThinkingLevel[];
+  context_window?: number;
+  max_tokens?: number;
+  input?: Array<"text" | "image">;
 }
 
 interface HostToolDefinition {
@@ -722,6 +751,114 @@ function normalizeThinkingLevelMap(rawValue: unknown): Record<string, string | n
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
+function positiveInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
+}
+
+function normalizeModelsDevMetadata(rawValue: unknown): ModelsDevMetadata | undefined {
+  const raw = asObject(rawValue);
+  if (Object.keys(raw).length === 0) return undefined;
+  const metadata: ModelsDevMetadata = {};
+  if (typeof raw.reasoning === "boolean") metadata.reasoning = raw.reasoning;
+  if (Array.isArray(raw.thinking_levels)) {
+    const levels = new Set(raw.thinking_levels.map((level) => asString(level).trim().toLowerCase()));
+    metadata.thinking_levels = PI_THINKING_LEVELS.filter((level) => levels.has(level));
+  }
+  const contextWindow = positiveInteger(raw.context_window);
+  if (contextWindow) metadata.context_window = contextWindow;
+  const maxTokens = positiveInteger(raw.max_tokens);
+  if (maxTokens) metadata.max_tokens = maxTokens;
+  if (Array.isArray(raw.input)) {
+    const input = new Set(raw.input.map((entry) => asString(entry).trim().toLowerCase()));
+    metadata.input = input.has("image") ? ["text", "image"] : ["text"];
+  }
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
+}
+
+/**
+ * Rebuild Pi's per-level support map from the levels models.dev reports.
+ *
+ * Pi treats a level as supported unless it maps to null, except xhigh/max,
+ * which need an explicit wire value. Existing wire values are kept because
+ * they encode transport-specific spellings; levels models.dev reports
+ * without one are sent under their own name. The off entry is left alone:
+ * the host decides it separately (models.dev "none" effort or toggle).
+ */
+function modelsDevThinkingLevelMap(
+  model: Model<string>,
+  levels: readonly PiThinkingLevel[] | undefined,
+): Record<string, string | null> | undefined {
+  const supported = new Set(levels ?? []);
+  // Without an explicit effort list (budget-token or toggle-only models)
+  // models.dev cannot say which levels exist, so Pi's defaults stay.
+  if (!PI_THINKING_LEVELS.some((level) => level !== "off" && supported.has(level))) return undefined;
+  const base = (model.thinkingLevelMap ?? {}) as Record<string, string | null | undefined>;
+  const googleTransport = model.api.startsWith("google");
+  const result: Record<string, string | null> = {};
+  if (base.off !== undefined) result.off = base.off;
+  for (const level of PI_THINKING_LEVELS) {
+    if (level === "off") continue;
+    const existing = base[level];
+    if (!supported.has(level)) {
+      result[level] = null;
+    } else if (typeof existing === "string") {
+      result[level] = existing;
+    } else if (googleTransport && !GOOGLE_THINKING_WIRE_LEVELS.has(level)) {
+      result[level] = null;
+    } else if (existing === null || level === "xhigh" || level === "max") {
+      result[level] = level;
+    }
+  }
+  return result;
+}
+
+function applyModelsDevMetadata(model: Model<string>, metadata: ModelsDevMetadata | undefined): Model<string> {
+  if (!metadata) return model;
+  const next = { ...model } as Model<string> & Record<string, unknown>;
+  if (metadata.reasoning !== undefined) next.reasoning = metadata.reasoning;
+  if (metadata.context_window) next.contextWindow = metadata.context_window;
+  if (metadata.max_tokens) next.maxTokens = metadata.max_tokens;
+  if (metadata.input) next.input = metadata.input;
+  const thinkingLevelMap = modelsDevThinkingLevelMap(next, metadata.thinking_levels);
+  if (thinkingLevelMap) next.thinkingLevelMap = thinkingLevelMap;
+  return next;
+}
+
+function withExplicitThinkingLevelMap(
+  model: Model<string>,
+  thinkingLevelMap: Record<string, string | null> | undefined,
+): Model<string> {
+  if (!thinkingLevelMap) return model;
+  return {
+    ...model,
+    thinkingLevelMap: {
+      ...(model.thinkingLevelMap ?? {}),
+      ...thinkingLevelMap,
+    },
+  } as Model<string>;
+}
+
+/**
+ * Serve the configured model from the provider's catalog so every Pi lookup
+ * by id (session restore, extensions, compaction) sees the same
+ * host-resolved metadata instead of the bundled catalog entry.
+ */
+function providerServingModel(provider: Provider, model: Model<string>): Provider {
+  return {
+    ...provider,
+    getModels: () => {
+      const models = provider.getModels();
+      let replaced = false;
+      const merged = models.map((candidate) => {
+        if (candidate.id !== model.id) return candidate;
+        replaced = true;
+        return model;
+      });
+      return replaced ? merged : [...merged, model];
+    },
+  } as Provider;
+}
+
 function normalizeModelConfig(rawValue: unknown): ModelConfig {
   const raw = asObject(rawValue);
   const providerType = asString(raw.provider_type).trim();
@@ -766,6 +903,7 @@ function normalizeModelConfig(rawValue: unknown): ModelConfig {
     supports_developer_role: raw.supports_developer_role === false ? false : undefined,
     reasoning: asBoolean(raw.reasoning, false),
     thinking_level_map: normalizeThinkingLevelMap(raw.thinking_level_map),
+    models_dev: normalizeModelsDevMetadata(raw.models_dev),
     context_window: asNumber(raw.context_window, 128000),
     max_tokens: asNumber(raw.max_tokens, 16384),
     timeout_ms: asNumber(raw.timeout_ms, 360000),
@@ -1130,8 +1268,7 @@ function buildModels(config: ModelConfig): {
       credentials: credentialStore,
       authContext: authContextFor(config),
     });
-    models.setProvider(provider);
-    const model = {
+    const catalogModel = {
       ...modelTemplate,
       ...(builtinModel
         ? {}
@@ -1146,6 +1283,7 @@ function buildModels(config: ModelConfig): {
             reasoning: config.reasoning ?? false,
             contextWindow: config.context_window ?? 128000,
             maxTokens: config.max_tokens ?? 16384,
+            thinkingLevelMap: undefined,
             cost: {
               input: 0,
               output: 0,
@@ -1153,14 +1291,6 @@ function buildModels(config: ModelConfig): {
               cacheWrite: 0,
             },
           }),
-      ...(config.thinking_level_map
-        ? {
-            thinkingLevelMap: {
-              ...(builtinModel ? modelTemplate.thinkingLevelMap ?? {} : {}),
-              ...config.thinking_level_map,
-            },
-          }
-        : {}),
       ...customBaseUrlModelOverrides,
       ...(config.base_url ? { baseUrl: config.base_url } : {}),
       headers: {
@@ -1168,11 +1298,22 @@ function buildModels(config: ModelConfig): {
         ...config.custom_headers,
       },
     } as Model<string>;
-    return { models, model, provider, credentialStore, compatibilityFallbackState };
+    // models.dev is the capability source of truth; Pi's bundled catalog only
+    // supplies transport details (api, compat, base URL) it cannot describe.
+    const model = withExplicitThinkingLevelMap(
+      applyModelsDevMetadata(catalogModel, config.models_dev),
+      config.thinking_level_map,
+    );
+    const servingProvider = providerServingModel(provider, model);
+    models.setProvider(servingProvider);
+    return { models, model, provider: servingProvider, credentialStore, compatibilityFallbackState };
   }
 
   const models = createModels();
-  const model = createAetherModel(config);
+  const model = withExplicitThinkingLevelMap(
+    applyModelsDevMetadata(createAetherModel(config), config.models_dev),
+    config.thinking_level_map,
+  );
   bridgeDebug("build_models_path", { path: "custom", pi_api: config.pi_api });
   const headers = config.custom_headers ?? {};
   const provider = createProvider({
@@ -1250,11 +1391,14 @@ async function credentialPayload(
 }
 
 function providerCatalogPayload(): JsonObject {
+  // Model capabilities (reasoning, thinking levels, limits, modalities) come
+  // from models.dev on the host; Pi's bundled catalog only lists what exists.
   return {
-    providers: getBuiltinProviders().map((providerId) => {
+    providers: getBuiltinProviders().flatMap((providerId) => {
       const provider = builtinProviderById.get(providerId);
       const models = getBuiltinModels(providerId);
-      return {
+      if (models.length === 0) return [];
+      return [{
         id: providerId,
         name: provider?.name ?? providerId,
         base_url: provider?.baseUrl ?? "",
@@ -1268,19 +1412,8 @@ function providerCatalogPayload(): JsonObject {
           id: model.id,
           name: model.name,
           api: model.api,
-          reasoning: model.reasoning,
-          thinking_levels: getSupportedThinkingLevels(model),
-          thinking_level_clamps: Object.fromEntries(
-            ["off", "minimal", "low", "medium", "high", "xhigh", "max"].map((level) => [
-              level,
-              clampThinkingLevel(model, level as "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"),
-            ]),
-          ),
-          input: model.input,
-          context_window: model.contextWindow,
-          max_tokens: model.maxTokens,
         })),
-      };
+      }];
     }),
   };
 }

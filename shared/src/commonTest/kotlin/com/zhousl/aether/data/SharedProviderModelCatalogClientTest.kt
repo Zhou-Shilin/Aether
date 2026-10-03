@@ -62,7 +62,7 @@ class SharedProviderModelCatalogClientTest {
             PiProviderCatalog.resolve("together").modelsDevProviderIds(),
         )
         assertEquals(
-            listOf("kimi-for-coding"),
+            listOf("kimi-code-plan-cn", "kimi-code-plan-global"),
             PiProviderCatalog.resolve("kimi-coding").modelsDevProviderIds(),
         )
     }

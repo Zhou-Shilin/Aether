@@ -40,6 +40,7 @@ google-services.json
 # Agent/editor scratch data
 .agents/
 .claude/
+.kiro/
 .trash/
 reports/
 *-report.md

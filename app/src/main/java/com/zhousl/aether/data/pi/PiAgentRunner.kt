@@ -12,6 +12,7 @@ import com.zhousl.aether.data.AppSettings
 import com.zhousl.aether.data.LlmMessage
 import com.zhousl.aether.data.LlmTextPart
 import com.zhousl.aether.data.LocalRuntimeId
+import com.zhousl.aether.data.ModelsDevModelLimits
 import com.zhousl.aether.data.PiExtensionStateRepository
 import com.zhousl.aether.data.StreamingStatus
 import com.zhousl.aether.data.SettingsRepository
@@ -59,6 +60,8 @@ class PiAgentRunner(
         sessionFile: String = "",
         thinkingLevelMap: Map<String, String> = emptyMap(),
         isReasoningModel: Boolean = true,
+        modelsDevThinkingLevels: List<String>? = null,
+        modelsDevLimits: ModelsDevModelLimits? = null,
         onToolEvent: suspend (AgentToolEvent) -> Unit = {},
         onToolProgress: (suspend (AgentToolEvent) -> Unit)? = null,
         onAssistantTextDelta: suspend (String) -> Unit = {},
@@ -102,7 +105,12 @@ class PiAgentRunner(
                         chromeEnabled = chromeEnabled,
                     )
                 }
-                val modelConfig = settings.toPiModelConfig(thinkingLevelMap, isReasoningModel)
+                val modelConfig = settings.toPiModelConfig(
+                    thinkingLevelMap = thinkingLevelMap,
+                    isReasoningModel = isReasoningModel,
+                    modelsDevThinkingLevels = modelsDevThinkingLevels,
+                    modelsDevLimits = modelsDevLimits,
+                )
                 val payload = JSONObject().apply {
                     val extensionLoadOptions = piExtensionStateRepository?.loadOptions()
                     put("model_config", modelConfig.toJson())

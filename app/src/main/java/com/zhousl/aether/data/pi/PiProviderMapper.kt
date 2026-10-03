@@ -3,10 +3,12 @@ package com.zhousl.aether.data.pi
 import com.zhousl.aether.data.AppSettings
 import com.zhousl.aether.data.LlmCustomHeader
 import com.zhousl.aether.data.LlmTokenUsage
+import com.zhousl.aether.data.ModelsDevModelLimits
 import com.zhousl.aether.data.PiProviderCatalog
 import com.zhousl.aether.data.normalizeLlmUserAgent
 import com.zhousl.aether.data.normalizeReasoningEffort
 import com.zhousl.aether.data.ProviderAuthMethod
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
 
@@ -37,6 +39,9 @@ data class PiModelConfig(
     val oauthCredentialJson: String = "",
     val providerEnvironment: Map<String, String> = emptyMap(),
     val fauxResponse: String = "",
+    /** Levels models.dev reports for this model; null when models.dev does not know it. */
+    val modelsDevThinkingLevels: List<String>? = null,
+    val modelsDevLimits: ModelsDevModelLimits? = null,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("provider_type", providerType)
@@ -55,6 +60,17 @@ data class PiModelConfig(
         if (thinkingLevelMap.isNotEmpty()) {
             put("thinking_level_map", JSONObject().apply {
                 thinkingLevelMap.forEach { (name, value) -> put(name, value) }
+            })
+        }
+        if (modelsDevThinkingLevels != null) {
+            put("models_dev", JSONObject().apply {
+                put("reasoning", reasoning)
+                put("thinking_levels", JSONArray(modelsDevThinkingLevels))
+                modelsDevLimits?.contextWindow?.let { put("context_window", it) }
+                modelsDevLimits?.maxOutputTokens?.let { put("max_tokens", it) }
+                modelsDevLimits?.supportsImageInput?.let { supportsImages ->
+                    put("input", JSONArray(if (supportsImages) listOf("text", "image") else listOf("text")))
+                }
             })
         }
         put("context_window", contextWindow)
@@ -98,6 +114,8 @@ data class PiCompletionResult(
 fun AppSettings.toPiModelConfig(
     thinkingLevelMap: Map<String, String> = emptyMap(),
     isReasoningModel: Boolean? = null,
+    modelsDevThinkingLevels: List<String>? = null,
+    modelsDevLimits: ModelsDevModelLimits? = null,
 ): PiModelConfig {
     val definition = PiProviderCatalog.resolve(piProviderId)
     val effectiveAuthMethod = if (
@@ -137,6 +155,10 @@ fun AppSettings.toPiModelConfig(
         developerRoleUnsupported = developerRoleUnsupported,
         reasoning = reasoningEnabled,
         thinkingLevelMap = thinkingLevelMap,
+        contextWindow = modelsDevLimits?.contextWindow ?: DefaultContextWindow,
+        maxTokens = modelsDevLimits?.maxOutputTokens ?: DefaultMaxTokens,
+        modelsDevThinkingLevels = modelsDevThinkingLevels,
+        modelsDevLimits = modelsDevLimits,
         timeoutMillis = llmInactivityReconnectTimeoutSeconds
             .coerceIn(30, 3_600) * 1_000,
         authMethod = effectiveAuthMethod,

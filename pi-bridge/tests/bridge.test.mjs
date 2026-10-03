@@ -1131,9 +1131,9 @@ test("reports pinned bridge and Pi versions", async () => {
   const ping = await client.request("ping-1", "ping");
 
   assert.equal(ping.bridge_version, "2.0.0-alpha.0");
-  assert.equal(ping.pi_ai_version, "0.87.1");
-  assert.equal(ping.pi_agent_core_version, "0.87.1");
-  assert.equal(ping.pi_coding_agent_version, "0.87.1");
+  assert.equal(ping.pi_ai_version, "0.99.2");
+  assert.equal(ping.pi_agent_core_version, "0.99.2");
+  assert.equal(ping.pi_coding_agent_version, "0.99.2");
   assert.match(ping.node_version, /^v\d+\./);
 });
 
@@ -2232,6 +2232,109 @@ test("passes reasoning_effort none when off is selected for a model with thinkin
   assert.equal(Object.hasOwn(result.usage, "reasoning_tokens"), false);
 });
 
+test("uses models.dev thinking levels instead of Pi's bundled catalog", async (t) => {
+  const receivedBodies = [];
+  const server = createServer((request, response) => {
+    const chunks = [];
+    request.on("data", (chunk) => chunks.push(chunk));
+    request.on("end", () => {
+      receivedBodies.push(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.write(
+        `data: ${JSON.stringify({
+          id: "chatcmpl-models-dev",
+          object: "chat.completion.chunk",
+          created: 1,
+          model: "muse-spark-1.3",
+          choices: [{ index: 0, delta: { role: "assistant", content: "OK" }, finish_reason: "stop" }],
+        })}\n\n`,
+      );
+      response.end("data: [DONE]\n\n");
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+
+  const client = new BridgeClient();
+  const complete = (id, reasoning, thinkingLevels) =>
+    client.request(id, "complete_once", {
+      model_config: {
+        provider_type: "custom",
+        provider_config_id: id,
+        pi_provider_id: `aether-${id}`,
+        pi_api: "openai-completions",
+        model_id: "muse-spark-1.3",
+        base_url: `http://127.0.0.1:${address.port}/v1`,
+        api_key: "secret-key",
+        reasoning: true,
+        models_dev: { reasoning: true, thinking_levels: thinkingLevels },
+      },
+      reasoning,
+      system_prompt: "Reply briefly.",
+      messages: [userMessage("hello")],
+      stream: false,
+    });
+
+  await complete("models-dev-max", "max", ["minimal", "low", "medium", "high", "xhigh", "max"]);
+  await complete("models-dev-no-max", "max", ["minimal", "low", "medium", "high", "xhigh"]);
+  await complete("models-dev-no-minimal", "minimal", ["low", "medium", "high"]);
+
+  assert.deepEqual(
+    receivedBodies.map((body) => body.reasoning_effort),
+    ["max", "xhigh", "low"],
+  );
+});
+
+test("models.dev thinking levels override Pi's bundled catalog for built-in providers", async (t) => {
+  const receivedBodies = [];
+  const server = createServer((request, response) => {
+    const chunks = [];
+    request.on("data", (chunk) => chunks.push(chunk));
+    request.on("end", () => {
+      receivedBodies.push(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      response.writeHead(400, { "content-type": "application/json" });
+      response.end(JSON.stringify({ error: { message: "expected test failure" } }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+
+  const client = new BridgeClient();
+  const complete = (providerId, modelId, thinkingLevels) =>
+    client.request(`builtin-models-dev-${providerId}`, "complete_once", {
+      model_config: {
+        provider_type: "builtin",
+        provider_config_id: `builtin-models-dev-${providerId}`,
+        pi_provider_id: providerId,
+        pi_api: "builtin",
+        model_id: modelId,
+        base_url: `http://127.0.0.1:${address.port}/v1`,
+        api_key: "secret-key",
+        reasoning: true,
+        max_retries: 0,
+        models_dev: { reasoning: true, thinking_levels: thinkingLevels },
+      },
+      system_prompt: "Reply briefly.",
+      messages: [userMessage("hello")],
+      reasoning: "max",
+      stream: false,
+    });
+
+  // Pi's bundled OpenCode entry maps max to null; models.dev says it is supported.
+  await complete("opencode", "muse-spark-1.3", ["minimal", "low", "medium", "high", "xhigh", "max"]);
+  // Pi's bundled OpenRouter entry supports max; models.dev says it is not.
+  await complete("openrouter", "meta/muse-spark-1.3", ["minimal", "low", "medium", "high", "xhigh"]);
+
+  assert.deepEqual(
+    receivedBodies.map((body) => body.reasoning?.effort ?? body.reasoning_effort),
+    ["max", "xhigh"],
+  );
+});
+
 test("updates reasoning effort when reusing an agent session", async (t) => {
   const receivedBodies = [];
   const server = createServer((request, response) => {
@@ -2539,6 +2642,7 @@ test("lists every built-in Pi provider and its model catalog", async () => {
   const catalog = await client.request("providers", "list_providers");
   const providers = catalog.providers;
 
+  // 42 bundled Pi providers minus the classifier-only typesafe provider.
   assert.equal(providers.length, 41);
   assert.equal(new Set(providers.map((provider) => provider.id)).size, 41);
   assert.ok(providers.every((provider) => provider.models.length > 0));
@@ -2553,6 +2657,7 @@ test("lists every built-in Pi provider and its model catalog", async () => {
     "github-copilot",
     "kimi-coding",
     "meta",
+    "openai",
     "openai-codex",
     "openrouter",
     "radius",
@@ -2570,8 +2675,8 @@ test("validates Pi OAuth protocol requests without legacy provider fallbacks", a
 
   await assert.rejects(
     client.request("oauth-unsupported", "login_provider", {
-      provider_id: "openai",
-      provider_config_id: `test-${"openai"}`,
+      provider_id: "deepseek",
+      provider_config_id: `test-${"deepseek"}`,
     }),
     /does not support OAuth/,
   );

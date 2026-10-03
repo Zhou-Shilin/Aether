@@ -679,6 +679,8 @@ class SessionExecutionManager(
             val cachedReasoningModels = settingsRepository.loadReasoningModelsCache()
             val thinkingLevelMap = cachedThinkingLevelMaps[modelKey].orEmpty()
             val isReasoningModel = modelKey in cachedReasoningModels
+            val modelsDevThinkingLevels = settingsRepository.loadThinkingCatalogCache()[modelKey]
+            val modelsDevLimits = settingsRepository.loadModelLimitsCache()[modelKey]
             val result = piAgentRunner.runTurn(
                 settings = request.settings,
                 messages = buildRequestMessages(
@@ -697,6 +699,8 @@ class SessionExecutionManager(
                 runtimeId = activeRuntimeId,
                 thinkingLevelMap = thinkingLevelMap,
                 isReasoningModel = isReasoningModel,
+                modelsDevThinkingLevels = modelsDevThinkingLevels,
+                modelsDevLimits = modelsDevLimits,
                 onToolEvent = emitToolEvent,
                 onToolProgress = emitToolEvent,
                 onAssistantReasoningDelta = { delta ->
@@ -2464,6 +2468,8 @@ class SessionExecutionManager(
             disableReasoning = true,
             thinkingLevelMap = thinkingLevelMap,
             isReasoningModel = isReasoningModel,
+            modelsDevThinkingLevels = settingsRepository.loadThinkingCatalogCache()[modelKey],
+            modelsDevLimits = settingsRepository.loadModelLimitsCache()[modelKey],
         )?.getOrNull()?.assistantText?.trim().orEmpty()
         return parseReasoningSummary(result)
     }

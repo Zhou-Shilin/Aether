@@ -38,21 +38,27 @@ class SettingsRepository(
     suspend fun loadReasoningModelsCache(): Set<String> = context.dataStore.data.first()
         .let { preferences -> parseThinkingCatalogCache(preferences[THINKING_CATALOG_CACHE_JSON].orEmpty()).reasoningModels }
 
+    suspend fun loadModelLimitsCache(): Map<String, ModelsDevModelLimits> = context.dataStore.data.first()
+        .let { preferences -> parseThinkingCatalogCache(preferences[THINKING_CATALOG_CACHE_JSON].orEmpty()).limits }
+
     suspend fun saveThinkingCatalogCache(
         cache: Map<String, List<String>>,
         levelMaps: Map<String, Map<String, String>> = emptyMap(),
         reasoningModels: Set<String> = emptySet(),
+        limits: Map<String, ModelsDevModelLimits> = emptyMap(),
     ) {
-        if (cache.isEmpty() && levelMaps.isEmpty() && reasoningModels.isEmpty()) return
+        if (cache.isEmpty() && levelMaps.isEmpty() && reasoningModels.isEmpty() && limits.isEmpty()) return
         context.dataStore.edit { preferences ->
             val existing = parseThinkingCatalogCache(preferences[THINKING_CATALOG_CACHE_JSON].orEmpty())
             val mergedLevels = existing.levels + cache
             val mergedLevelMaps = (existing.clamps - cache.keys) + levelMaps
             val mergedReasoningModels = (existing.reasoningModels - cache.keys) + reasoningModels
+            val mergedLimits = (existing.limits - cache.keys) + limits
             preferences[THINKING_CATALOG_CACHE_JSON] = serializeThinkingCatalogCache(
                 mergedLevels,
                 mergedLevelMaps,
                 mergedReasoningModels,
+                mergedLimits,
             )
         }
     }
@@ -1039,8 +1045,9 @@ private fun serializeThinkingCatalogCache(
     levels: Map<String, List<String>>,
     clamps: Map<String, Map<String, String>> = emptyMap(),
     reasoningModels: Set<String> = emptySet(),
+    limits: Map<String, ModelsDevModelLimits> = emptyMap(),
 ): String = JSONArray().apply {
-    val allKeys = (levels.keys + clamps.keys + reasoningModels).distinct()
+    val allKeys = (levels.keys + clamps.keys + reasoningModels + limits.keys).distinct()
     allKeys.forEach { key ->
         put(JSONObject().apply {
             put("key", key)
@@ -1053,6 +1060,13 @@ private fun serializeThinkingCatalogCache(
                     })
                 }
             }
+            limits[key]?.let { modelLimits ->
+                put("limits", JSONObject().apply {
+                    modelLimits.contextWindow?.let { put("context_window", it) }
+                    modelLimits.maxOutputTokens?.let { put("max_output_tokens", it) }
+                    modelLimits.supportsImageInput?.let { put("image_input", it) }
+                })
+            }
         })
     }
 }.toString()
@@ -1061,6 +1075,7 @@ private data class ThinkingCatalogCache(
     val levels: Map<String, List<String>> = emptyMap(),
     val clamps: Map<String, Map<String, String>> = emptyMap(),
     val reasoningModels: Set<String> = emptySet(),
+    val limits: Map<String, ModelsDevModelLimits> = emptyMap(),
 )
 
 private fun parseThinkingCatalogCache(raw: String): ThinkingCatalogCache = runCatching {
@@ -1068,6 +1083,7 @@ private fun parseThinkingCatalogCache(raw: String): ThinkingCatalogCache = runCa
     val levelsMap = mutableMapOf<String, List<String>>()
     val clampsMap = mutableMapOf<String, Map<String, String>>()
     val reasoningModels = mutableSetOf<String>()
+    val limitsMap = mutableMapOf<String, ModelsDevModelLimits>()
     for (index in 0 until array.length()) {
         val item = array.optJSONObject(index) ?: continue
         val key = item.optString("key").takeIf(String::isNotBlank) ?: continue
@@ -1088,6 +1104,13 @@ private fun parseThinkingCatalogCache(raw: String): ThinkingCatalogCache = runCa
             }
             if (clamps.isNotEmpty()) clampsMap[key] = clamps
         }
+        item.optJSONObject("limits")?.let { limitsObj ->
+            limitsMap[key] = ModelsDevModelLimits(
+                contextWindow = limitsObj.optInt("context_window").takeIf { it > 0 },
+                maxOutputTokens = limitsObj.optInt("max_output_tokens").takeIf { it > 0 },
+                supportsImageInput = if (limitsObj.has("image_input")) limitsObj.optBoolean("image_input") else null,
+            )
+        }
     }
-    ThinkingCatalogCache(levelsMap, clampsMap, reasoningModels)
+    ThinkingCatalogCache(levelsMap, clampsMap, reasoningModels, limitsMap)
 }.getOrDefault(ThinkingCatalogCache())

@@ -31,6 +31,7 @@ import com.zhousl.aether.data.PiExtensionInstallKind
 import com.zhousl.aether.data.PiExtensionCatalogEntry
 import com.zhousl.aether.data.PiDiscoveredSkillSource
 import com.zhousl.aether.data.ProviderModelCatalogClient
+import com.zhousl.aether.data.PublicCatalogThinkingResult
 import com.zhousl.aether.data.thinkingCatalogKey
 import com.zhousl.aether.data.LlmProviderConfig
 import com.zhousl.aether.data.LlmTokenUsage
@@ -72,6 +73,7 @@ import com.zhousl.aether.data.LlmTextPart
 import com.zhousl.aether.data.ProviderAuthMethod
 import com.zhousl.aether.data.pi.PiCompletionClient
 import com.zhousl.aether.data.pi.PiKernelBridge
+import com.zhousl.aether.data.pi.PiModelConfig
 import com.zhousl.aether.data.pi.PiCoreSetupActivity
 import com.zhousl.aether.data.pi.PiCoreSetupPhase
 import com.zhousl.aether.data.pi.PiCoreSetupState
@@ -430,12 +432,15 @@ class AetherViewModel(
                 .filterKeys(thinkingCacheKeys::contains)
             val cachedReasoningModels = settingsRepository.loadReasoningModelsCache()
                 .filterTo(mutableSetOf(), thinkingCacheKeys::contains)
+            val cachedModelLimits = settingsRepository.loadModelLimitsCache()
+                .filterKeys(thinkingCacheKeys::contains)
             if (cachedThinkingLevels.isNotEmpty() && requestKey == lastModelCatalogRequestKey) {
                 _uiState.update { current ->
                     current.copy(
                         thinkingLevelsByProviderModel = current.thinkingLevelsByProviderModel + cachedThinkingLevels,
                         thinkingLevelClampsByProviderModel = current.thinkingLevelClampsByProviderModel + cachedThinkingLevelMaps,
                         reasoningModels = current.reasoningModels + cachedReasoningModels,
+                        modelLimitsByProviderModel = current.modelLimitsByProviderModel + cachedModelLimits,
                     )
                 }
             }
@@ -451,28 +456,46 @@ class AetherViewModel(
             // picker is opened. Cached values are already applied above, so an
             // unavailable network never delays the initial picker state.
             val catalogResult = ProviderModelCatalogClient.fetchPublicThinkingCatalog(options)
-            if (catalogResult.levelsByProviderModel.isNotEmpty()) {
-                settingsRepository.saveThinkingCatalogCache(
-                    catalogResult.levelsByProviderModel,
-                    catalogResult.levelMapsByProviderModel,
-                    catalogResult.reasoningModels,
-                )
-                if (requestKey == lastModelCatalogRequestKey) {
-                    _uiState.update { state ->
-                        state.copy(
-                            thinkingLevelsByProviderModel =
-                                state.thinkingLevelsByProviderModel + catalogResult.levelsByProviderModel,
-                            thinkingLevelClampsByProviderModel =
-                                (state.thinkingLevelClampsByProviderModel -
-                                    catalogResult.levelsByProviderModel.keys) +
-                                    catalogResult.levelMapsByProviderModel,
-                            reasoningModels =
-                                (state.reasoningModels - catalogResult.levelsByProviderModel.keys) +
-                                    catalogResult.reasoningModels,
-                        )
-                    }
-                }
-            }
+            applyThinkingCatalog(catalogResult, updateState = requestKey == lastModelCatalogRequestKey)
+        }
+    }
+
+    /** Pi model config carrying the models.dev capabilities currently known for this model. */
+    private fun AppSettings.toCatalogPiModelConfig(): PiModelConfig {
+        val state = _uiState.value
+        val modelKey = thinkingCatalogKey(piProviderId, modelId)
+        return toPiModelConfig(
+            thinkingLevelMap = state.thinkingLevelClampsByProviderModel[modelKey].orEmpty(),
+            isReasoningModel = modelKey in state.reasoningModels,
+            modelsDevThinkingLevels = state.thinkingLevelsByProviderModel[modelKey],
+            modelsDevLimits = state.modelLimitsByProviderModel[modelKey],
+        )
+    }
+
+    private suspend fun applyThinkingCatalog(
+        catalogResult: PublicCatalogThinkingResult,
+        updateState: Boolean = true,
+    ) {
+        if (catalogResult.levelsByProviderModel.isEmpty()) return
+        settingsRepository.saveThinkingCatalogCache(
+            catalogResult.levelsByProviderModel,
+            catalogResult.levelMapsByProviderModel,
+            catalogResult.reasoningModels,
+            catalogResult.limitsByProviderModel,
+        )
+        if (!updateState) return
+        val resolvedKeys = catalogResult.levelsByProviderModel.keys
+        _uiState.update { state ->
+            state.copy(
+                thinkingLevelsByProviderModel =
+                    state.thinkingLevelsByProviderModel + catalogResult.levelsByProviderModel,
+                thinkingLevelClampsByProviderModel =
+                    (state.thinkingLevelClampsByProviderModel - resolvedKeys) +
+                        catalogResult.levelMapsByProviderModel,
+                reasoningModels = (state.reasoningModels - resolvedKeys) + catalogResult.reasoningModels,
+                modelLimitsByProviderModel =
+                    (state.modelLimitsByProviderModel - resolvedKeys) + catalogResult.limitsByProviderModel,
+            )
         }
     }
 
@@ -2433,10 +2456,7 @@ class AetherViewModel(
                     put("runtime", metadata?.runtime ?: settings.defaultRuntimeId?.storageValue.orEmpty())
                     put("platform", "android")
                     put("workspace_trusted", true)
-                    val modelKey = thinkingCatalogKey(settings.piProviderId, settings.modelId)
-                    val thinkingLevelMap = _uiState.value.thinkingLevelClampsByProviderModel[modelKey].orEmpty()
-                    val isReasoningModel = modelKey in _uiState.value.reasoningModels
-                    put("model_config", settings.toPiModelConfig(thinkingLevelMap, isReasoningModel).toJson())
+                    put("model_config", settings.toCatalogPiModelConfig().toJson())
                     put("system_prompt", "")
                     put("host_tools", JSONArray())
                 },
@@ -2667,26 +2687,7 @@ class AetherViewModel(
         }
         viewModelScope.launch {
             val catalogResult = ProviderModelCatalogClient.fetchPublicThinkingCatalog(listOf(option))
-            if (catalogResult.levelsByProviderModel.isNotEmpty()) {
-                settingsRepository.saveThinkingCatalogCache(
-                    catalogResult.levelsByProviderModel,
-                    catalogResult.levelMapsByProviderModel,
-                    catalogResult.reasoningModels,
-                )
-                _uiState.update { state ->
-                    state.copy(
-                        thinkingLevelsByProviderModel =
-                            state.thinkingLevelsByProviderModel + catalogResult.levelsByProviderModel,
-                        thinkingLevelClampsByProviderModel =
-                            (state.thinkingLevelClampsByProviderModel -
-                                catalogResult.levelsByProviderModel.keys) +
-                                catalogResult.levelMapsByProviderModel,
-                        reasoningModels =
-                            (state.reasoningModels - catalogResult.levelsByProviderModel.keys) +
-                                catalogResult.reasoningModels,
-                    )
-                }
-            }
+            applyThinkingCatalog(catalogResult)
             onResolved(catalogResult.levelsByProviderModel[cacheKey].orEmpty().isNotEmpty())
         }
     }
@@ -2703,26 +2704,7 @@ class AetherViewModel(
             .firstOrNull { it.key == selectedModelKey }
             ?: return
         viewModelScope.launch {
-            val catalogResult = ProviderModelCatalogClient.fetchPublicThinkingCatalog(listOf(option))
-            if (catalogResult.levelsByProviderModel.isEmpty()) return@launch
-            settingsRepository.saveThinkingCatalogCache(
-                catalogResult.levelsByProviderModel,
-                catalogResult.levelMapsByProviderModel,
-                catalogResult.reasoningModels,
-            )
-            _uiState.update { state ->
-                state.copy(
-                    thinkingLevelsByProviderModel =
-                        state.thinkingLevelsByProviderModel + catalogResult.levelsByProviderModel,
-                    thinkingLevelClampsByProviderModel =
-                        (state.thinkingLevelClampsByProviderModel -
-                            catalogResult.levelsByProviderModel.keys) +
-                            catalogResult.levelMapsByProviderModel,
-                    reasoningModels =
-                        (state.reasoningModels - catalogResult.levelsByProviderModel.keys) +
-                            catalogResult.reasoningModels,
-                )
-            }
+            applyThinkingCatalog(ProviderModelCatalogClient.fetchPublicThinkingCatalog(listOf(option)))
         }
     }
 
@@ -5348,6 +5330,8 @@ class AetherViewModel(
                 disableReasoning = true,
                 thinkingLevelMap = thinkingLevelMap,
                 isReasoningModel = isReasoningModel,
+                modelsDevThinkingLevels = _uiState.value.thinkingLevelsByProviderModel[modelKey],
+                modelsDevLimits = _uiState.value.modelLimitsByProviderModel[modelKey],
             ).getOrNull()
                 ?.assistantText
                 ?.sanitizeGeneratedSessionTitle()
@@ -5452,10 +5436,7 @@ class AetherViewModel(
                         put("termux_workspace_directory", termuxWorkspaceDirectory)
                         put("runtime", metadata?.runtime ?: settings.defaultRuntimeId?.storageValue.orEmpty())
                         put("platform", "android")
-                        val modelKey = thinkingCatalogKey(settings.piProviderId, settings.modelId)
-                        val thinkingLevelMap = _uiState.value.thinkingLevelClampsByProviderModel[modelKey].orEmpty()
-                        val isReasoningModel = modelKey in _uiState.value.reasoningModels
-                        put("model_config", settings.toPiModelConfig(thinkingLevelMap, isReasoningModel).toJson())
+                        put("model_config", settings.toCatalogPiModelConfig().toJson())
                         put("system_prompt", "")
                         put("host_tools", JSONArray())
                     },
