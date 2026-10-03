@@ -367,6 +367,7 @@ private fun AetherExtensionView(
     }
 }
 
+/** Renders Android extension nodes, translating display text for the selected app language while preserving code and action payloads. */
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 private fun AetherExtensionNode(
@@ -391,7 +392,8 @@ private fun AetherExtensionNode(
     when (type.lowercase()) {
         "text",
         "code" -> {
-            val text = node.optString("text")
+            val text = if (type.equals("code", ignoreCase = true)) node.optString("text")
+                else extensionText(node.optString("text"), LocalAetherLanguage.current)
             Text(
                 text = text,
                 modifier = clickableModifier,
@@ -507,7 +509,7 @@ private fun AetherExtensionNode(
                 Spacer(Modifier.width(8.dp))
             }
             Text(
-                text = node.optString("label", node.optString("text")),
+                text = extensionText(node.optString("label", node.optString("text")), LocalAetherLanguage.current),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

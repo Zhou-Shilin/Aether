@@ -3691,6 +3691,7 @@ class AetherViewModel(
         }
     }
 
+    /** Dispatches extension host requests and localizes known notification messages using the Android app language. */
     suspend fun handleAetherExtensionHostCall(
         method: String,
         args: JSONObject,
@@ -3828,7 +3829,7 @@ class AetherViewModel(
         }
 
         "app.notify" -> {
-            emitTransientMessage(UiText.Raw(args.optString("message")))
+            emitTransientMessage(UiText.Raw(extensionText(args.optString("message"), _uiState.value.settings.language)))
             JSONObject().put("notified", true)
         }
 
@@ -4072,6 +4073,7 @@ class AetherViewModel(
         }
     }
 
+    /** Dispatches before-send extension hooks, preserving unknown cancellation reasons and translating known UI messages. */
     private fun submitCurrentMessage(
         runningFollowUpMode: SessionFollowUpMode,
     ) {
@@ -4113,7 +4115,7 @@ class AetherViewModel(
             ).getOrNull()
             if (eventResult?.cancelled == true) {
                 eventResult.reason.takeIf(String::isNotBlank)?.let { reason ->
-                    emitTransientMessage(UiText.Raw(reason))
+                    emitTransientMessage(UiText.Raw(extensionText(reason, _uiState.value.settings.language)))
                 }
                 return@launch
             }

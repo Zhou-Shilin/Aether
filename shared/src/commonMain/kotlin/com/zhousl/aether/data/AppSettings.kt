@@ -54,9 +54,14 @@ enum class AppLanguage(
     Persian(
         storageValue = "fa",
         languageTag = "fa",
+    ),
+    Russian(
+        storageValue = "ru",
+        languageTag = "ru",
     );
 
     companion object {
+        /** Restores a supported interface language, including Russian, or uses the platform default. */
         fun fromStorage(
             value: String?,
             defaultValue: AppLanguage = defaultAppLanguage(),
@@ -233,9 +238,11 @@ fun defaultAppLanguage(): AppLanguage {
     return appLanguageForTag(platformLanguageTag())
 }
 
+/** Maps language tags, including Russian regional tags, to the corresponding interface language. */
 fun appLanguageForTag(languageTag: String): AppLanguage = when {
     languageTag.startsWith("zh", ignoreCase = true) -> AppLanguage.SimplifiedChinese
     languageTag.startsWith("fa", ignoreCase = true) -> AppLanguage.Persian
+    languageTag.startsWith("ru", ignoreCase = true) -> AppLanguage.Russian
     else -> AppLanguage.English
 }
 

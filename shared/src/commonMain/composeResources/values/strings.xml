@@ -194,9 +194,11 @@
     <string name="language_english" translatable="false">English</string>
     <string name="language_simplified_chinese" translatable="false">简体中文</string>
     <string name="language_persian" translatable="false">فارسی</string>
+    <string name="language_russian" translatable="false">Русский</string>
     <string name="settings_language_english_interface">English interface</string>
     <string name="settings_language_simplified_chinese_interface">Simplified Chinese interface</string>
     <string name="settings_language_persian_interface">Persian interface</string>
+    <string name="settings_language_russian_interface">Russian interface</string>
     <string name="settings_theme">Theme</string>
     <string name="settings_theme_description">Choose the app appearance.</string>
     <string name="theme_system">System</string>
@@ -1051,4 +1053,34 @@
     <string name="file_manager_view_grid">Grid view</string>
     <string name="file_manager_view_list">List view</string>
     <string name="common_confirm">Confirm</string>
+    <string name="file_manager_parent_folder">Parent folder</string>
+    <string name="file_manager_search">Search</string>
+    <string name="file_manager_view_options">View options</string>
+    <string name="file_manager_sort_by">Sort by %1$s</string>
+    <string name="file_manager_search_folder">Search this folder</string>
+    <string name="file_manager_create">Create</string>
+    <string name="file_manager_import_files">Import files</string>
+    <string name="file_manager_import_folder">Import folder</string>
+    <string name="file_manager_no_matches">No matching files</string>
+    <string name="file_manager_download">Download</string>
+    <string name="file_manager_delete_named">Delete %1$s?</string>
+    <string name="file_manager_delete_folder_warning">The folder and all of its contents will be permanently deleted.</string>
+    <string name="file_manager_delete_item_warning">This item will be permanently deleted.</string>
+    <string name="file_manager_decode_image_failed">Unable to decode image</string>
+    <string name="file_manager_operation_failed">File operation failed</string>
+    <string name="file_manager_toggle_line_wrap">Toggle line wrapping</string>
+    <string name="file_manager_save">Save</string>
+    <string name="file_manager_sort_name">name</string>
+    <string name="file_manager_sort_date">date</string>
+    <string name="file_manager_sort_size">size</string>
+    <string name="file_manager_load_directory_failed">Unable to load directory.</string>
+    <string name="file_manager_import_selected_item_failed">Unable to import the selected item.</string>
+    <string name="file_manager_download_file_failed">Unable to download the file.</string>
+    <string name="file_manager_open_file_failed">Unable to open file.</string>
+    <string name="file_manager_save_file_failed">Unable to save file.</string>
+    <string name="file_manager_open_selected_item_failed">Unable to open the selected item.</string>
+    <string name="file_manager_open_download_location_failed">Unable to open the selected download location.</string>
+    <string name="file_manager_invalid_item_name">The selected item has an invalid name.</string>
+    <string name="file_manager_named_item_exists">An item named %1$s already exists.</string>
+    <string name="file_manager_read_named_item_failed">Unable to read %1$s.</string>
 </resources>

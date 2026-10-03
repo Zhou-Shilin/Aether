@@ -337,18 +337,22 @@ private val StatisticsNeutralChartColor = Color(0xFFDCE4FF)
 
 
 
+/** Returns the localized display name for each selectable Android interface language. */
 @Composable
 private fun settingsLanguageDisplayName(language: AppLanguage): String = when (language) {
     AppLanguage.English -> stringResource(R.string.language_english)
     AppLanguage.SimplifiedChinese -> stringResource(R.string.language_simplified_chinese)
     AppLanguage.Persian -> stringResource(R.string.language_persian)
+    AppLanguage.Russian -> stringResource(R.string.language_russian)
 }
 
+/** Returns the localized description of the selected interface language. */
 @Composable
 private fun settingsLanguageSubtitle(language: AppLanguage): String = when (language) {
     AppLanguage.English -> stringResource(R.string.settings_language_english_interface)
     AppLanguage.SimplifiedChinese -> stringResource(R.string.settings_language_simplified_chinese_interface)
     AppLanguage.Persian -> stringResource(R.string.settings_language_persian_interface)
+    AppLanguage.Russian -> stringResource(R.string.settings_language_russian_interface)
 }
 
 @Composable
@@ -1332,6 +1336,7 @@ fun SettingsScreen(
 // Hub
 // -----------------------------------------------------------------------------
 
+/** Displays Android settings categories and language-aware titles for registered extension pages. */
 @Composable
 private fun SettingsHub(
     generalSettingsSummary: String,
@@ -1433,8 +1438,8 @@ private fun SettingsHub(
                         if (index > 0) CardDivider()
                         SettingsNavRow(
                             icon = extensionIcon(settingPage.icon),
-                            title = settingPage.title,
-                            subtitle = settingPage.subtitle.ifBlank { settingPage.extensionName },
+                            title = localizedExtensionText(settingPage.title),
+                            subtitle = localizedExtensionText(settingPage.subtitle.ifBlank { settingPage.extensionName }),
                             onClick = { onOpenExtensionSettings(settingPage.id) },
                         )
                     }
@@ -3009,6 +3014,7 @@ private fun ReliabilityPage(
     }
 }
 
+/** Displays an extension settings page and its categories using the selected Android language. */
 @Composable
 private fun AetherExtensionSettingsCategoriesPage(
     page: com.zhousl.aether.data.AetherAppExtensionSettingsPage,
@@ -3018,7 +3024,7 @@ private fun AetherExtensionSettingsCategoriesPage(
     val controller = LocalAetherExtensionUiController.current
     val trailingIcon = settingsTrailingIcon(page.trailingIcon)
     SubPageScaffold(
-        title = page.title,
+        title = localizedExtensionText(page.title),
         onBack = onBack,
         trailingIcon = trailingIcon,
         onTrailingAction = {
@@ -3032,7 +3038,7 @@ private fun AetherExtensionSettingsCategoriesPage(
         },
     ) {
         if (page.subtitle.isNotBlank()) {
-            Text(page.subtitle, style = MaterialTheme.typography.bodySmall, color = AetherOnSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp))
+            Text(localizedExtensionText(page.subtitle), style = MaterialTheme.typography.bodySmall, color = AetherOnSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp))
             Spacer(Modifier.height(12.dp))
         }
         if (page.sections.isNotEmpty()) {
@@ -3044,8 +3050,8 @@ private fun AetherExtensionSettingsCategoriesPage(
             visibleCategories.forEachIndexed { index, category ->
                 SettingsNavRow(
                     icon = extensionIcon(category.icon),
-                    title = category.title,
-                    subtitle = category.subtitle,
+                    title = localizedExtensionText(category.title),
+                    subtitle = localizedExtensionText(category.subtitle),
                 ) { onCategorySelected(category.id) }
                 if (index < visibleCategories.lastIndex) CardDivider()
             }
@@ -3053,6 +3059,7 @@ private fun AetherExtensionSettingsCategoriesPage(
     }
 }
 
+/** Renders extension section headings and controls, translating display strings but preserving identifiers. */
 @Composable
 private fun AetherExtensionSettingsSections(
     sections: List<JSONObject>,
@@ -3061,8 +3068,8 @@ private fun AetherExtensionSettingsSections(
     onCategorySelected: (String) -> Unit = {},
 ) {
     sections.forEachIndexed { sectionIndex, section ->
-        val sectionTitle = section.optString("title")
-        val sectionDescription = section.optString("description")
+        val sectionTitle = localizedExtensionText(section.optString("title"))
+        val sectionDescription = localizedExtensionText(section.optString("description"))
         if (sectionIndex > 0) Spacer(Modifier.height(16.dp))
         if (sectionTitle.isNotBlank() || sectionDescription.isNotBlank()) {
             if (sectionTitle.isNotBlank()) {
@@ -3140,6 +3147,7 @@ private fun AetherExtensionSettingsSections(
     }
 }
 
+/** Renders a schema-defined Android setting with localized labels and unchanged option values and action arguments. */
 @Composable
 private fun AetherExtensionControlRow(
     setting: JSONObject,
@@ -3150,8 +3158,8 @@ private fun AetherExtensionControlRow(
     val uriHandler = LocalUriHandler.current
     val id = "${page.id}:${setting.optString("id")}"
     val type = setting.optString("type").ifBlank { "text" }
-    val label = setting.optString("label").ifBlank { setting.optString("title") }
-    val description = setting.optString("description").ifBlank { setting.optString("subtitle") }
+    val label = localizedExtensionText(setting.optString("label").ifBlank { setting.optString("title") })
+    val description = localizedExtensionText(setting.optString("description").ifBlank { setting.optString("subtitle") })
     val action = setting.optString("action").ifBlank {
         "settings:${page.localId}:${setting.optString("id")}"
     }
@@ -3194,7 +3202,7 @@ private fun AetherExtensionControlRow(
                                 selected = selected == value,
                                 onClick = { selected = value; update(value) },
                                 shape = SegmentedButtonDefaults.itemShape(optionIndex, options.length()),
-                            ) { Text(option.optString("label").ifBlank { value }) }
+                            ) { Text(localizedExtensionText(option.optString("label").ifBlank { value })) }
                         }
                     }
                 }
@@ -3204,6 +3212,7 @@ private fun AetherExtensionControlRow(
                     .firstOrNull { it.optString("value") == selected }
                     ?.optString("label")
                     .orEmpty()
+                    .let { localizedExtensionText(it) }
                 SelectionDropdownField(
                     label = label,
                     supportingText = description,
@@ -3213,8 +3222,8 @@ private fun AetherExtensionControlRow(
                         val value = option.optString("value")
                         SelectionOption(
                             key = value,
-                            title = option.optString("label").ifBlank { value },
-                            subtitle = option.optString("description"),
+                            title = localizedExtensionText(option.optString("label").ifBlank { value }),
+                            subtitle = localizedExtensionText(option.optString("description")),
                             selected = selected == value,
                             onClick = { selected = value; update(value) },
                         )
@@ -3565,6 +3574,7 @@ private fun AetherExtensionItemCard(
     }
 }
 
+/** Displays localized empty-state text and forwards its button action to the owning extension. */
 @Composable
 private fun AetherExtensionEmptyState(
     setting: JSONObject,
@@ -3572,9 +3582,9 @@ private fun AetherExtensionEmptyState(
     controller: AetherExtensionUiController?,
     onCategorySelected: (String) -> Unit,
 ) {
-    val title = setting.optString("title").ifBlank { setting.optString("label") }
-    val description = setting.optString("description").ifBlank { setting.optString("subtitle") }
-    val buttonLabel = setting.optString("buttonLabel").ifBlank { "Add" }
+    val title = localizedExtensionText(setting.optString("title").ifBlank { setting.optString("label") })
+    val description = localizedExtensionText(setting.optString("description").ifBlank { setting.optString("subtitle") })
+    val buttonLabel = localizedExtensionText(setting.optString("buttonLabel").ifBlank { "Add" })
     val action = setting.optString("action")
     val category = setting.optString("category")
     val args = setting.optJSONObject("args") ?: JSONObject()
@@ -3618,6 +3628,7 @@ private fun AetherExtensionEmptyState(
     }
 }
 
+/** Displays a selected extension category with localized headings and its original settings schema. */
 @Composable
 private fun AetherExtensionSettingsPage(
     page: com.zhousl.aether.data.AetherAppExtensionSettingsPage,
@@ -3631,7 +3642,7 @@ private fun AetherExtensionSettingsPage(
     val trailingCategory = category?.trailingCategory?.ifBlank { null } ?: page.trailingCategory
     val trailingArgs = category?.trailingArgs?.takeIf { it.length() > 0 } ?: page.trailingArgs
     SubPageScaffold(
-        title = category?.title ?: page.title,
+        title = localizedExtensionText(category?.title ?: page.title),
         onBack = onBack,
         trailingIcon = trailingIcon,
         onTrailingAction = {
@@ -3645,13 +3656,21 @@ private fun AetherExtensionSettingsPage(
         },
     ) {
         if (category != null && category.subtitle.isNotBlank()) {
-            Text(category.subtitle, style = MaterialTheme.typography.bodySmall, color = AetherOnSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp))
+            Text(localizedExtensionText(category.subtitle), style = MaterialTheme.typography.bodySmall, color = AetherOnSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp))
             Spacer(Modifier.height(12.dp))
         }
         AetherExtensionSettingsSections(category?.sections ?: page.sections, page, controller)
     }
 }
 
+/** Resolves known builtin extension text using the language provided by the Android theme. */
+@Composable
+private fun localizedExtensionText(value: String): String {
+    return extensionText(value, LocalAetherLanguage.current)
+}
+
+
+/** Resolves a schema icon name while allowing an extension to hide its trailing action. */
 private fun settingsTrailingIcon(name: String): ImageVector? {
     if (name.isBlank()) return null
     return when (name.lowercase()) {
