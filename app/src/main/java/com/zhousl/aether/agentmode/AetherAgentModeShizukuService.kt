@@ -177,7 +177,6 @@ class AetherAgentModeShizukuService @Keep constructor(
     }
 
     override fun launchPackage(packageName: String, displayId: Int, userId: Int) {
-        warnIfCallerUserDiffers(userId)
         try {
             launchPackageInUser(packageName, displayId, userId)
         } catch (throwable: Throwable) {
@@ -231,6 +230,12 @@ class AetherAgentModeShizukuService @Keep constructor(
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return PendingIntent.getActivity(context, intent.hashCode(), intent, flags)
+        }
+        // Before Android 9 the public overload stamps the *process* user, which is correct for the user
+        // this service process lives in (the owner user — the behaviour Agent Mode had before
+        // cross-user support). Any other user needs the hidden overload.
+        if (userId == agentModeUserIdFromUid(Process.myUid())) {
             return PendingIntent.getActivity(context, intent.hashCode(), intent, flags)
         }
         val userHandle = runCatching {
@@ -407,50 +412,37 @@ class AetherAgentModeShizukuService @Keep constructor(
             display.setSurface(reader.surface)
             try {
                 val image = awaitLatestImage(reader)
-                ParcelFileDescriptor.AutoCloseOutputStream(output).use { stream ->
-                    when {
-                        image != null -> {
-                            try {
-                                imageToJpegStream(
-                                    image = image,
-                                    output = stream,
-                                    maxEdge = boundedMaxEdge,
-                                    quality = boundedQuality,
-                                )
-                            } finally {
-                                image.close()
-                            }
-                        }
-
-                        displaysWithFailedLaunch.contains(displayId) -> {
-                            blankImageToJpegStream(
-                                width = reader.width,
-                                height = reader.height,
+                if (image == null) {
+                    val blankReason = when {
+                        displaysWithFailedLaunch.contains(displayId) -> AgentModeBlankReasonLaunchFailed
+                        !displaysWithLaunchedContent.contains(displayId) -> AgentModeBlankReasonNoLaunchedContent
+                        else -> null
+                    } ?: error("Timed out while capturing display $displayId.")
+                    ParcelFileDescriptor.AutoCloseOutputStream(output).use { stream ->
+                        blankImageToJpegStream(
+                            width = reader.width,
+                            height = reader.height,
+                            output = stream,
+                            maxEdge = boundedMaxEdge,
+                            quality = boundedQuality,
+                        )
+                    }
+                    status = agentModeCaptureStatus(
+                        source = AgentModeCaptureSourceBlank,
+                        blankReason = blankReason,
+                    )
+                } else {
+                    ParcelFileDescriptor.AutoCloseOutputStream(output).use { stream ->
+                        try {
+                            imageToJpegStream(
+                                image = image,
                                 output = stream,
                                 maxEdge = boundedMaxEdge,
                                 quality = boundedQuality,
                             )
-                            status = agentModeCaptureStatus(
-                                source = AgentModeCaptureSourceBlank,
-                                blankReason = AgentModeBlankReasonLaunchFailed,
-                            )
+                        } finally {
+                            image.close()
                         }
-
-                        !displaysWithLaunchedContent.contains(displayId) -> {
-                            blankImageToJpegStream(
-                                width = reader.width,
-                                height = reader.height,
-                                output = stream,
-                                maxEdge = boundedMaxEdge,
-                                quality = boundedQuality,
-                            )
-                            status = agentModeCaptureStatus(
-                                source = AgentModeCaptureSourceBlank,
-                                blankReason = AgentModeBlankReasonNoLaunchedContent,
-                            )
-                        }
-
-                        else -> error("Timed out while capturing display $displayId.")
                     }
                 }
             } finally {
@@ -588,7 +580,6 @@ class AetherAgentModeShizukuService @Keep constructor(
 
     @Suppress("DEPRECATION")
     override fun listInstalledAppsJson(userId: Int): String {
-        warnIfCallerUserDiffers(userId)
         val packageManager = contextForUser(userId).packageManager
         val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val launchables = packageManager.queryIntentActivities(
@@ -629,6 +620,7 @@ class AetherAgentModeShizukuService @Keep constructor(
     /** Builds (and caches) the context that acts on [userId] instead of on the service's user. */
     private fun contextForUser(userId: Int): Context {
         require(userId >= 0) { "Agent Mode received an invalid user id ($userId)." }
+        warnIfCallerUserDiffers(userId)
         return userContexts.computeIfAbsent(userId) { targetUserId ->
             createUserScopedContext(privilegedContext, targetUserId)
                 ?: error(
@@ -652,7 +644,7 @@ class AetherAgentModeShizukuService @Keep constructor(
         val userHandle = runCatching {
             UserHandle.getUserHandleForUid(userId * AgentModePerUserUidRange)
         }.getOrNull() ?: return null
-        runCatching {
+        val userContext = runCatching {
             Context::class.java
                 .getMethod(
                     "createPackageContextAsUser",
@@ -661,23 +653,21 @@ class AetherAgentModeShizukuService @Keep constructor(
                     UserHandle::class.java,
                 )
                 .invoke(baseContext, SystemPackageName, Context.CONTEXT_IGNORE_SECURITY, userHandle) as Context
-        }.getOrNull()?.let { userContext ->
-            Log.i(AgentModeLogTag, "Agent Mode user service scoped to user $userId")
-            return userContext
-        }
-        return runCatching {
+        }.getOrNull() ?: runCatching {
             Context::class.java
                 .getMethod("createContextAsUser", UserHandle::class.java, Int::class.javaPrimitiveType)
                 .invoke(baseContext, userHandle, 0) as Context
-        }.getOrNull()?.also {
-            Log.i(AgentModeLogTag, "Agent Mode user service scoped to user $userId")
-        }
+        }.getOrNull() ?: return null
+        Log.i(AgentModeLogTag, "Agent Mode user service scoped to user $userId")
+        return userContext
     }
 
     /**
      * The service binder lives in this process, so a call from Aether reports Aether's own uid as the
      * caller. A different user means the caller is not the app whose user we were asked to act on;
      * that is worth a log line, but the explicit [userId] still wins because it came from Aether.
+     *
+     * Called from [contextForUser] so every user-scoped call is guarded exactly once.
      */
     private fun warnIfCallerUserDiffers(userId: Int) {
         val callerUserId = runCatching {
