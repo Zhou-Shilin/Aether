@@ -6417,7 +6417,8 @@ internal fun AetherUiState.withFinalizedPausedSession(
 }
 
 private fun AetherUiState.isLocalRuntimeReadyForAgentMode(): Boolean =
-    developerTermuxReadyOverride ?: (
+    // The developer override only simulates Termux readiness; Alpine still counts, matching AetherApp's composer gate.
+    developerTermuxReadyOverride?.let { it || alpineSetupState.isReady } ?: (
         termuxSetupState.isReady ||
             alpineSetupState.isReady ||
             rootSetupState.isReady ||
