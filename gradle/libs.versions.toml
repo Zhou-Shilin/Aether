@@ -18,7 +18,6 @@ json = "20240303"
 jsoup = "1.18.1"
 flexmark = "0.64.8"
 shizuku = "13.1.5"
-androidAppProcess = "1.4.3"
 posthogAndroid = "3.43.1"
 posthogAndroidGradlePlugin = "1.1.0"
 soraEditor = "0.24.6"
@@ -61,7 +60,6 @@ jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 flexmark-html2md-converter = { group = "com.vladsch.flexmark", name = "flexmark-html2md-converter", version.ref = "flexmark" }
 shizuku-api = { group = "dev.rikka.shizuku", name = "api", version.ref = "shizuku" }
 shizuku-provider = { group = "dev.rikka.shizuku", name = "provider", version.ref = "shizuku" }
-android-app-process = { group = "io.github.iamr0s", name = "AndroidAppProcess", version.ref = "androidAppProcess" }
 posthog-android = { group = "com.posthog", name = "posthog-android", version.ref = "posthogAndroid" }
 sora-editor = { group = "io.github.rosemoe", name = "editor", version.ref = "soraEditor" }
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }

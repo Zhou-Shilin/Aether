@@ -19,6 +19,7 @@ import android.media.ImageReader
 import android.os.Binder
 import android.os.Build
 import android.os.Handler
+import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import android.os.Process
 import android.os.SystemClock
@@ -52,12 +53,15 @@ private const val ShellPackageName = "com.android.shell"
 private const val TextInputMethodKeyEvents = "key_events"
 private const val TextInputMethodClipboardPaste = "clipboard_paste"
 private const val SystemPackageName = "android"
+private const val RootUid = 0
 
+/**
+ * The privileged Agent Mode service. It runs in a separate shell (Shizuku) or root process started
+ * by [AgentModeServiceStarter], which passes a [context] for Aether in the launching Android user.
+ */
 class AetherAgentModeShizukuService @Keep constructor(
     private val context: Context,
 ) : IAetherAgentModeService.Stub() {
-    constructor() : this(resolveLegacyUserServiceContext())
-
     private val privilegedContext: Context by lazy { contextForCurrentProcess(context) }
     private val displayManager: DisplayManager by lazy {
         privilegedContext.getSystemService<DisplayManager>()!!
@@ -85,10 +89,10 @@ class AetherAgentModeShizukuService @Keep constructor(
     }
 
     /**
-     * This process runs as shell (Shizuku) or root, both in user 0, and the context Shizuku hands
-     * the constructor is bound to user 0 as well. Package queries, activity launches and the
-     * clipboard are per-user, so on a secondary user they must target the Android user that owns
-     * the calling Aether process, never the process's own user.
+     * This process runs as shell (Shizuku) or root, both in user 0, while [context] belongs to the
+     * Android user that launched it. Package queries, activity launches and the clipboard are
+     * per-user, so each call targets the Android user that owns the calling Aether process, never
+     * the process's own user nor the user [context] happens to be bound to.
      */
     private val userContexts = ConcurrentHashMap<UserHandle, Context>()
     private val clipboardManagers = ConcurrentHashMap<UserHandle, ClipboardManager>()
@@ -106,10 +110,7 @@ class AetherAgentModeShizukuService @Keep constructor(
     }
 
     private fun userContextFor(user: UserHandle): Context =
-        userContexts.computeIfAbsent(user) {
-            // privilegedContext is bound to this process's own user (see the constructor note).
-            if (user == Process.myUserHandle()) privilegedContext else createPackageContextAsUser(user)
-        }
+        userContexts.computeIfAbsent(user) { createPackageContextAsUser(it) }
 
     @SuppressLint("DiscouragedPrivateApi")
     private fun createPackageContextAsUser(user: UserHandle): Context {
@@ -219,6 +220,10 @@ class AetherAgentModeShizukuService @Keep constructor(
         displaysWithLaunchedContent.clear()
         displayLocks.clear()
         System.exit(0)
+    }
+
+    override fun linkClient(client: IBinder) {
+        client.linkToDeath({ destroy() }, 0)
     }
 
     override fun launchPackage(packageName: String, displayId: Int) {
@@ -601,7 +606,8 @@ class AetherAgentModeShizukuService @Keep constructor(
     private fun packageNameForCurrentProcess(defaultPackageName: String): String =
         when (Process.myUid()) {
             Process.SHELL_UID -> ShellPackageName
-            Process.SYSTEM_UID -> SystemPackageName
+            // Root owns no package; act as the platform, as the root service always has.
+            RootUid, Process.SYSTEM_UID -> SystemPackageName
             else -> defaultPackageName
         }
 
@@ -751,29 +757,6 @@ class AetherAgentModeShizukuService @Keep constructor(
         val prefixed = KeyEvent.keyCodeFromString("KEYCODE_${normalized.uppercase()}")
         if (prefixed != KeyEvent.KEYCODE_UNKNOWN) return prefixed
         error("Unsupported key code '$rawValue'.")
-    }
-
-    companion object {
-        private fun resolveLegacyUserServiceContext(): Context {
-            val activityThreadClass = Class.forName("android.app.ActivityThread")
-            val currentActivityThread = activityThreadClass
-                .getDeclaredMethod("currentActivityThread")
-                .apply { isAccessible = true }
-                .invoke(null)
-            val currentApplication = activityThreadClass
-                .getDeclaredMethod("currentApplication")
-                .apply { isAccessible = true }
-                .invoke(null) as? Context
-            if (currentApplication != null) return currentApplication
-            if (currentActivityThread != null) {
-                val systemContext = activityThreadClass
-                    .getDeclaredMethod("getSystemContext")
-                    .apply { isAccessible = true }
-                    .invoke(currentActivityThread) as? Context
-                if (systemContext != null) return systemContext
-            }
-            error("Unable to create an Android context for Shizuku Agent Mode service.")
-        }
     }
 }
 

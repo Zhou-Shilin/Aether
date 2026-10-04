@@ -1,9 +1,7 @@
 package com.zhousl.aether.data
 
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.ServiceConnection
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Point
@@ -14,17 +12,16 @@ import android.util.Base64
 import android.view.Display
 import android.view.Surface
 import androidx.core.content.getSystemService
-import com.rosan.app_process.AppProcess
-import com.zhousl.aether.agentmode.AetherAgentModeShizukuService
+import com.zhousl.aether.agentmode.AgentModeServiceHandle
+import com.zhousl.aether.agentmode.AgentModeServiceLauncher
 import com.zhousl.aether.agentmode.IAetherAgentModeService
 import com.zhousl.aether.termux.TermuxBashTool
 import java.io.File
 import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -33,7 +30,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
 import org.json.JSONObject
 import rikka.shizuku.Shizuku
@@ -49,9 +45,7 @@ private const val AgentModeCoordinateSpace = "normalized_0_1000"
 private const val AgentModeCaptureJpegQuality = 85
 private const val ShizukuPermissionRequestCode = 4201
 private const val RootAuthorizationProbeTimeoutMillis = 2_000L
-private const val ShizukuUserServiceBindTimeoutMillis = 20_000L
-private const val ShizukuUserServiceTag = "aether-agent-mode"
-private const val ShizukuUserServiceVersion = 3
+private const val AgentModeServiceStartTimeoutMillis = 20_000L
 
 private val ShizukuManagerPackages = listOf(
     "moe.shizuku.privileged.api",
@@ -172,10 +166,9 @@ class AgentModeController(
     private var displayOwnerMethod: AgentModeAuthorizationMethod? = null
     private var displayOwnerBinder: IBinder? = null
     private var shizukuService: IAetherAgentModeService? = null
-    private var shizukuServiceArgs: Shizuku.UserServiceArgs? = null
-    private var shizukuServiceConnection: ServiceConnection? = null
+    private var shizukuServiceHandle: AgentModeServiceHandle? = null
     private var rootService: IAetherAgentModeService? = null
-    private var rootProcess: AppProcess.Terminal? = null
+    private var rootServiceHandle: AgentModeServiceHandle? = null
     @Volatile
     private var previewSurface: Surface? = null
 
@@ -938,20 +931,23 @@ class AgentModeController(
             binder.isBinderAlive
 
     private fun clearShizukuService(displayStatus: String) {
+        val handle = shizukuServiceHandle
         shizukuService = null
-        shizukuServiceArgs = null
-        shizukuServiceConnection = null
+        shizukuServiceHandle = null
         if (displayOwnerMethod == AgentModeAuthorizationMethod.Shizuku) {
             releaseDisplay(displayStatus)
         }
+        handle?.destroy()
     }
 
     private fun clearRootService(displayStatus: String) {
+        val handle = rootServiceHandle
         rootService = null
-        rootProcess = null
+        rootServiceHandle = null
         if (displayOwnerMethod == AgentModeAuthorizationMethod.Root) {
             releaseDisplay(displayStatus)
         }
+        handle?.destroy()
     }
 
     private fun captureAgentModeFailed(
@@ -1059,22 +1055,29 @@ class AgentModeController(
             )
             error("No su binary was detected on this device.")
         }
-        val process = object : AppProcess.Terminal() {
-            override fun newTerminal(): List<String?> = listOf(suPath)
-        }
-        if (!process.init(context)) {
+        val handle = runCatching {
+            AgentModeServiceLauncher.launch(context, AgentModeServiceStartTimeoutMillis) { command ->
+                AgentModeServiceLauncher.startRootProcess(suPath, command)
+            }
+        }.getOrElse { throwable ->
+            if (throwable is CancellationException) throw throwable
+            diagnosticLogger.event(
+                category = "agent_mode",
+                event = "root_service_start_failed",
+                level = "warn",
+                details = mapOf("message" to throwable.message.orEmpty()),
+            )
             _authorizationState.value = AgentModeAuthorizationState(
                 issue = AgentModeAuthorizationIssue.RootPermissionDenied,
                 detail = "Root Agent Mode service failed to start. Check that su can be granted to Aether.",
             )
-            error("Root Agent Mode service failed to start. Check that su can be granted to Aether.")
+            error(
+                "Root Agent Mode service failed to start. Check that su can be granted to Aether. " +
+                    throwable.message.orEmpty()
+            )
         }
-        val binder = process.serviceBinder(
-            ComponentName(context, AetherAgentModeShizukuService::class.java),
-        )
-        val service = IAetherAgentModeService.Stub.asInterface(binder)
-            ?: error("Root Agent Mode service returned an invalid binder.")
-        rootProcess = process
+        val service = handle.service
+        rootServiceHandle = handle
         rootService = service
         _authorizationState.value = AgentModeAuthorizationState(
             issue = AgentModeAuthorizationIssue.Ready,
@@ -1098,95 +1101,52 @@ class AgentModeController(
         if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
             error("Aether does not have Shizuku permission. Grant it in Shizuku first.")
         }
-        val deferred = CompletableDeferred<IAetherAgentModeService>()
-        val args = Shizuku.UserServiceArgs(
-            ComponentName(context, AetherAgentModeShizukuService::class.java),
-        )
-            .processNameSuffix("agentmode")
-            .tag(ShizukuUserServiceTag)
-            .version(ShizukuUserServiceVersion)
-            .daemon(false)
-        val connection = object : ServiceConnection {
-            override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-                val bound = IAetherAgentModeService.Stub.asInterface(service)
-                if (shizukuServiceConnection !== this) return
-                shizukuService = bound
-                if (bound == null) {
-                    if (!deferred.isCompleted) {
-                        deferred.completeExceptionally(
-                            IllegalStateException("Shizuku Agent Mode service returned an invalid binder.")
-                        )
-                    }
-                } else if (!deferred.isCompleted) {
-                    deferred.complete(bound)
-                }
-            }
-
-            override fun onServiceDisconnected(name: ComponentName?) {
-                if (shizukuServiceConnection === this) {
-                    clearShizukuService("Shizuku Agent Mode service disconnected. Virtual display was reset.")
-                }
-            }
-        }
-        shizukuServiceArgs = args
-        shizukuServiceConnection = connection
         diagnosticLogger.event(
             category = "agent_mode",
-            event = "shizuku_service_bind_start",
-            details = mapOf(
-                "timeout_ms" to ShizukuUserServiceBindTimeoutMillis,
-                "tag" to ShizukuUserServiceTag,
-                "version" to ShizukuUserServiceVersion,
-            ),
+            event = "shizuku_service_start",
+            details = mapOf("timeout_ms" to AgentModeServiceStartTimeoutMillis),
         )
-        val bindStartMillis = System.currentTimeMillis()
-        runCatching {
-            Shizuku.bindUserService(args, connection)
-        }.onSuccess {
-            diagnosticLogger.event(
-                category = "agent_mode",
-                event = "shizuku_service_bind_dispatched",
-                details = mapOf(
-                    "duration_ms" to (System.currentTimeMillis() - bindStartMillis),
-                ),
+        val startMillis = System.currentTimeMillis()
+        val handle = try {
+            AgentModeServiceLauncher.launch(
+                context,
+                AgentModeServiceStartTimeoutMillis,
+                AgentModeServiceLauncher::startShizukuProcess,
             )
-        }.onFailure { throwable ->
-            if (shizukuServiceConnection === connection) {
-                shizukuService = null
-                shizukuServiceArgs = null
-                shizukuServiceConnection = null
-            }
-            throw throwable
-        }
-        return@withLock try {
-            withTimeout(ShizukuUserServiceBindTimeoutMillis) { deferred.await() }.also {
-                diagnosticLogger.event(
-                    category = "agent_mode",
-                    event = "shizuku_service_bound",
-                )
-            }
-        } catch (throwable: TimeoutCancellationException) {
-            if (shizukuServiceConnection === connection) {
-                shizukuService = null
-                shizukuServiceArgs = null
-                shizukuServiceConnection = null
-            }
-            runCatching { Shizuku.unbindUserService(args, connection, true) }
+        } catch (throwable: Throwable) {
+            if (throwable is CancellationException) throw throwable
             diagnosticLogger.event(
                 category = "agent_mode",
-                event = "shizuku_service_bind_timeout",
+                event = "shizuku_service_start_failed",
                 level = "warn",
                 details = mapOf(
-                    "timeout_ms" to ShizukuUserServiceBindTimeoutMillis,
+                    "duration_ms" to (System.currentTimeMillis() - startMillis),
+                    "message" to throwable.message.orEmpty(),
                     "shizuku_version" to runCatching { Shizuku.getVersion() }.getOrDefault(-1),
                     "shizuku_server_patch_version" to runCatching { Shizuku.getServerPatchVersion() }.getOrDefault(-1),
                 ),
             )
             error(
-                "Timed out starting Shizuku Agent Mode service after " +
-                    "$ShizukuUserServiceBindTimeoutMillis ms. Restart Shizuku or update Shizuku, then refresh Agent Mode status."
+                "Shizuku Agent Mode service failed to start: ${throwable.message.orEmpty()} " +
+                    "Restart Shizuku or update Shizuku, then refresh Agent Mode status."
             )
         }
+        diagnosticLogger.event(
+            category = "agent_mode",
+            event = "shizuku_service_started",
+            details = mapOf("duration_ms" to (System.currentTimeMillis() - startMillis)),
+        )
+        val service = handle.service
+        runCatching {
+            service.asBinder().linkToDeath({
+                if (shizukuServiceHandle === handle) {
+                    clearShizukuService("Shizuku Agent Mode service disconnected. Virtual display was reset.")
+                }
+            }, 0)
+        }
+        shizukuServiceHandle = handle
+        shizukuService = service
+        service
     }
 
     private suspend fun inspectAuthorization(settings: AppSettings): AgentModeAuthorizationState =

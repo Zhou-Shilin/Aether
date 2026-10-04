@@ -19,5 +19,7 @@ interface IAetherAgentModeService {
     String listDisplaysJson() = 13;
     String listInstalledAppsJson() = 14;
     String focusedWindowJson(int displayId) = 15;
+    // The service process exits when [client] dies, so it never outlives the Aether process.
+    void linkClient(IBinder client) = 16;
     void destroy() = 16777114;
 }

@@ -265,7 +265,6 @@ dependencies {
     implementation(libs.snakeyaml)
     implementation(libs.shizuku.api)
     implementation(libs.shizuku.provider)
-    implementation(libs.android.app.process)
     implementation(libs.posthog.android)
     implementation(libs.sora.editor)
 
