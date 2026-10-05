@@ -93,6 +93,7 @@ class SharedAppDataArchiveTest {
                                 totalTokens = 12,
                                 cachedInputTokens = 2,
                                 cacheWriteTokens = 3,
+                                outputDurationMillis = 4_000,
                             ),
                             createdAtMillis = 20,
                             completedAtMillis = 30,
@@ -148,6 +149,7 @@ class SharedAppDataArchiveTest {
         assertEquals(30L, decoded.sessions.single().messages.last().completedAtMillis)
         assertEquals(2L, decoded.sessions.single().messages.last().usage!!.cachedInputTokens)
         assertEquals(3L, decoded.sessions.single().messages.last().usage!!.cacheWriteTokens)
+        assertEquals(4_000L, decoded.sessions.single().messages.last().usage!!.outputDurationMillis)
         assertEquals(false, decoded.skillBundles.single().isEnabled)
         assertEquals("test", decoded.settings.alpineEnvironmentVariables.single().value)
         assertEquals("docs", decoded.mcpServers.single().jsonObject["id"]?.jsonPrimitive?.content)
@@ -172,6 +174,7 @@ class SharedAppDataArchiveTest {
         assertEquals("Agent", exportedMessage["author"]?.toString()?.trim('"'))
         assertTrue("usageStatistics" in exportedMessage)
         assertEquals("3", exportedMessage["usageStatistics"]!!.jsonObject["cacheWriteTokens"].toString())
+        assertEquals("4000", exportedMessage["usageStatistics"]!!.jsonObject["outputDurationMillis"].toString())
         assertFalse("fromUser" in exportedMessage)
         assertFalse("usage" in exportedMessage)
     }
@@ -561,6 +564,7 @@ class SharedAppDataArchiveTest {
         assertFalse(usage.reasoningTokensAvailable)
         assertFalse(usage.cachedInputTokensAvailable)
         assertFalse(usage.cacheWriteTokensAvailable)
+        assertFalse(usage.outputDurationMillisAvailable)
         assertEquals(3, usage.requestCount)
         assertEquals(0L, assistant.firstTokenLatencyMillis)
         assertEquals("{\"provider\":\"raw\"}", assistant.providerPayloadJson)
@@ -578,6 +582,7 @@ class SharedAppDataArchiveTest {
         assertFalse("reasoningTokens" in exportedUsage)
         assertFalse("cachedInputTokens" in exportedUsage)
         assertFalse("cacheWriteTokens" in exportedUsage)
+        assertFalse("outputDurationMillis" in exportedUsage)
         assertEquals("20", exportedUsage["firstTokenAtMillis"].toString())
         assertEquals(
             "{\"provider\":\"raw\"}",

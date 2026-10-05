@@ -76,12 +76,14 @@ data class SharedPiUsage(
     val reasoningTokens: Long = 0,
     val cachedInputTokens: Long = 0,
     val cacheWriteTokens: Long = 0,
+    val outputDurationMillis: Long = 0,
     val inputTokensAvailable: Boolean = true,
     val outputTokensAvailable: Boolean = true,
     val totalTokensAvailable: Boolean = true,
     val reasoningTokensAvailable: Boolean = true,
     val cachedInputTokensAvailable: Boolean = true,
     val cacheWriteTokensAvailable: Boolean = true,
+    val outputDurationMillisAvailable: Boolean = true,
     val requestCount: Int = 1,
 )
 
@@ -374,12 +376,15 @@ class SharedPiChatClient(
                 reasoningTokens = usage.long("reasoning_tokens"),
                 cachedInputTokens = usage.long("cached_input_tokens"),
                 cacheWriteTokens = usage.long("cache_write_tokens"),
+                outputDurationMillis = usage.long("output_duration_ms"),
                 inputTokensAvailable = "input_tokens" in usage,
                 outputTokensAvailable = "output_tokens" in usage,
                 totalTokensAvailable = "total_tokens" in usage,
                 reasoningTokensAvailable = "reasoning_tokens" in usage,
                 cachedInputTokensAvailable = "cached_input_tokens" in usage,
                 cacheWriteTokensAvailable = "cache_write_tokens" in usage,
+                outputDurationMillisAvailable = "output_duration_ms" in usage,
+                requestCount = usage.int("request_count").coerceAtLeast(1),
             ),
             usageAvailable = usage.isNotEmpty(),
             providerPayloadJson = toSharedProviderPayloadJson(),
@@ -597,8 +602,9 @@ private fun JsonObject.toSharedProviderPayloadJson(): String = buildJsonObject {
                     "reasoning_tokens",
                     "cached_input_tokens",
                     "cache_write_tokens",
+                    "output_duration_ms",
                 ).forEach { key -> usage[key]?.let { put(key, it) } }
-                put("request_count", 1)
+                put("request_count", usage.int("request_count").coerceAtLeast(1))
             })
         }
 }.toString()

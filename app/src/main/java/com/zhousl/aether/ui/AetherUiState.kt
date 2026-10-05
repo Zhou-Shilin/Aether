@@ -112,6 +112,7 @@ data class ChatUsageStatistics(
     val reasoningTokens: Long? = null,
     val cachedInputTokens: Long? = null,
     val cacheWriteTokens: Long? = null,
+    val outputDurationMillis: Long? = null,
     val requestCount: Int = 1,
     val tokenUsageSource: String = "unavailable",
     val startedAtMillis: Long = 0L,
@@ -126,6 +127,10 @@ data class ChatUsageStatistics(
     val outputTokensPerSecond: Double?
         get() {
             val output = outputTokens ?: return null
+            val outputDuration = outputDurationMillis?.takeIf { it > 0L }
+            if (outputDuration != null) {
+                return output * 1_000.0 / outputDuration
+            }
             val outputStartedAt = firstTokenAtMillis ?: startedAtMillis.takeIf { it > 0L } ?: return null
             if (completedAtMillis <= outputStartedAt) return null
             val seconds = (completedAtMillis - outputStartedAt) / 1000.0

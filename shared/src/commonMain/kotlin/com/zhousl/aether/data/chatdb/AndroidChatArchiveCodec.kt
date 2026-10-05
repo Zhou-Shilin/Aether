@@ -233,6 +233,7 @@ private fun PersistedChatMessage.toAndroidUsageJson(usage: PersistedChatUsage): 
     if (usage.reasoningTokensAvailable) put("reasoningTokens", usage.reasoningTokens)
     if (usage.cachedInputTokensAvailable) put("cachedInputTokens", usage.cachedInputTokens)
     if (usage.cacheWriteTokensAvailable) put("cacheWriteTokens", usage.cacheWriteTokens)
+    if (usage.outputDurationMillisAvailable) put("outputDurationMillis", usage.outputDurationMillis)
     put("requestCount", usage.requestCount.coerceAtLeast(1))
     put("tokenUsageSource", tokenUsageSource)
     if (createdAtMillis > 0L) put("startedAtMillis", createdAtMillis)
@@ -505,12 +506,14 @@ private fun JsonObject.toPersistedChatUsage(): PersistedChatUsage = PersistedCha
     reasoningTokens = long("reasoningTokens") ?: 0L,
     cachedInputTokens = long("cachedInputTokens") ?: 0L,
     cacheWriteTokens = long("cacheWriteTokens") ?: 0L,
+    outputDurationMillis = long("outputDurationMillis") ?: 0L,
     inputTokensAvailable = "inputTokens" in this,
     outputTokensAvailable = "outputTokens" in this,
     totalTokensAvailable = "totalTokens" in this,
     reasoningTokensAvailable = "reasoningTokens" in this,
     cachedInputTokensAvailable = "cachedInputTokens" in this,
     cacheWriteTokensAvailable = "cacheWriteTokens" in this,
+    outputDurationMillisAvailable = "outputDurationMillis" in this,
     requestCount = (long("requestCount") ?: 1L).coerceAtLeast(1L).toInt(),
 )
 

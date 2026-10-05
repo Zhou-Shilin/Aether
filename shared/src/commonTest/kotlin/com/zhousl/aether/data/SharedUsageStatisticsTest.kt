@@ -197,6 +197,40 @@ class SharedUsageStatisticsTest {
         assertEquals(emptyList(), report.recentSpeedSamples)
     }
 
+    @Test
+    fun prefersRecordedOutputDurationForSpeedSamples() {
+        val day = SharedStatisticsDate("2026-01-02", "1/2", "2")
+        val report = buildSharedUsageStatisticsReport(
+            sessions = listOf(
+                session(
+                    id = "recorded-generation-time",
+                    messages = listOf(
+                        message(
+                            id = "assistant",
+                            fromUser = false,
+                            timestamp = 1_000,
+                            completedAt = 10_000,
+                            usage = PersistedChatUsage(
+                                inputTokens = 10,
+                                outputTokens = 100,
+                                totalTokens = 110,
+                                outputDurationMillis = 2_000,
+                            ),
+                            duration = 9_000,
+                            latency = 100,
+                        ),
+                    ),
+                ),
+            ),
+            nowMillis = 20_000,
+            recentDates = listOf(day),
+            resolveDate = { day },
+        )
+
+        assertEquals(50.0, report.averageOutputTokensPerSecond!!, 0.0000001)
+        assertEquals(50.0, report.recentSpeedSamples.single().tokensPerSecond, 0.0000001)
+    }
+
     private fun session(id: String, messages: List<PersistedChatMessage>) = PersistedChatSession(
         id = id,
         title = id,

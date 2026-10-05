@@ -1193,7 +1193,13 @@ export default function (pi: ExtensionAPI) {
       frame.payload.name === "extension_echo",
   );
   assert.equal(toolEnd.payload.output_json, "extension:hello:started=true");
-  assert.equal((await run).assistant_text, "extension finished");
+  const completion = await run;
+  assert.equal(completion.assistant_text, "extension finished");
+  // The turn total must sum every request: the tool call round trip plus the
+  // final answer.
+  assert.equal(completion.usage.request_count, 2);
+  assert.ok(completion.usage.total_tokens > 0);
+  assert.ok(completion.usage.output_duration_ms >= 0);
 
   const listed = await client.request("extension-list", "list_extensions", {
     session_id: "session-extension",

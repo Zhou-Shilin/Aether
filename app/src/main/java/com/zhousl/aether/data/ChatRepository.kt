@@ -1256,6 +1256,7 @@ private fun parseUsageStatistics(json: JSONObject?): ChatUsageStatistics? {
         reasoningTokens = json.optionalLong("reasoningTokens"),
         cachedInputTokens = json.optionalLong("cachedInputTokens"),
         cacheWriteTokens = json.optionalLong("cacheWriteTokens"),
+        outputDurationMillis = json.optionalLong("outputDurationMillis"),
         requestCount = json.optInt("requestCount", 1).coerceAtLeast(1),
         tokenUsageSource = json.optString("tokenUsageSource").ifBlank { "unavailable" },
         startedAtMillis = json.optLong("startedAtMillis"),
@@ -1271,6 +1272,7 @@ private fun ChatUsageStatistics.toJson(): JSONObject = JSONObject().apply {
     reasoningTokens?.let { put("reasoningTokens", it) }
     cachedInputTokens?.let { put("cachedInputTokens", it) }
     cacheWriteTokens?.let { put("cacheWriteTokens", it) }
+    outputDurationMillis?.let { put("outputDurationMillis", it) }
     put("requestCount", requestCount)
     put("tokenUsageSource", tokenUsageSource)
     if (startedAtMillis > 0L) put("startedAtMillis", startedAtMillis)

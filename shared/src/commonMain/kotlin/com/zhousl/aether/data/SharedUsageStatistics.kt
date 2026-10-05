@@ -95,13 +95,14 @@ fun buildSharedUsageStatisticsReport(
         val usage = turn.message.usage ?: return@mapNotNull null
         if (!usage.outputTokensAvailable) return@mapNotNull null
         val outputTokens = usage.outputTokens
+        val recordedDuration = usage.outputDurationMillis
+            .takeIf { usage.outputDurationMillisAvailable && it > 0L }
         val completedAt = turn.message.completedAtMillis?.takeIf { it > 0L }
-            ?: return@mapNotNull null
         val outputStartedAt = turn.message.firstTokenLatencyMillis?.let { latency ->
             turn.message.createdAtMillis + latency.coerceAtLeast(0L)
         } ?: turn.message.createdAtMillis.takeIf { it > 0L }
-            ?: return@mapNotNull null
-        val outputDuration = completedAt - outputStartedAt
+        val outputDuration = recordedDuration
+            ?: if (completedAt != null && outputStartedAt != null) completedAt - outputStartedAt else 0L
         if (outputTokens <= 0L || outputDuration <= 0L) return@mapNotNull null
         val date = resolveDate(turn.timestampMillis)
         SharedSpeedSample(
