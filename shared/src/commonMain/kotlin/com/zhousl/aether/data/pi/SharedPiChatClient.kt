@@ -75,11 +75,13 @@ data class SharedPiUsage(
     val totalTokens: Long = 0,
     val reasoningTokens: Long = 0,
     val cachedInputTokens: Long = 0,
+    val cacheWriteTokens: Long = 0,
     val inputTokensAvailable: Boolean = true,
     val outputTokensAvailable: Boolean = true,
     val totalTokensAvailable: Boolean = true,
     val reasoningTokensAvailable: Boolean = true,
     val cachedInputTokensAvailable: Boolean = true,
+    val cacheWriteTokensAvailable: Boolean = true,
     val requestCount: Int = 1,
 )
 
@@ -371,11 +373,13 @@ class SharedPiChatClient(
                 totalTokens = usage.long("total_tokens"),
                 reasoningTokens = usage.long("reasoning_tokens"),
                 cachedInputTokens = usage.long("cached_input_tokens"),
+                cacheWriteTokens = usage.long("cache_write_tokens"),
                 inputTokensAvailable = "input_tokens" in usage,
                 outputTokensAvailable = "output_tokens" in usage,
                 totalTokensAvailable = "total_tokens" in usage,
                 reasoningTokensAvailable = "reasoning_tokens" in usage,
                 cachedInputTokensAvailable = "cached_input_tokens" in usage,
+                cacheWriteTokensAvailable = "cache_write_tokens" in usage,
             ),
             usageAvailable = usage.isNotEmpty(),
             providerPayloadJson = toSharedProviderPayloadJson(),
@@ -592,6 +596,7 @@ private fun JsonObject.toSharedProviderPayloadJson(): String = buildJsonObject {
                     "total_tokens",
                     "reasoning_tokens",
                     "cached_input_tokens",
+                    "cache_write_tokens",
                 ).forEach { key -> usage[key]?.let { put(key, it) } }
                 put("request_count", 1)
             })

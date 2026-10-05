@@ -69,6 +69,7 @@ internal fun iosTurnAnalyticsProperties(
         put("total_tokens", total)
         usage?.takeIf { it.reasoningTokensAvailable }?.let { put("reasoning_tokens", it.reasoningTokens) }
         usage?.takeIf { it.cachedInputTokensAvailable }?.let { put("cached_input_tokens", it.cachedInputTokens) }
+        usage?.takeIf { it.cacheWriteTokensAvailable }?.let { put("cache_write_tokens", it.cacheWriteTokens) }
         put("average_tokens_per_input_message", if (inputMessageCount > 0) total.toDouble() / inputMessageCount else 0.0)
         put("average_input_tokens_per_input_message", if (inputMessageCount > 0) input.toDouble() / inputMessageCount else 0.0)
         put("average_tokens_per_user_message", if (userMessageCount > 0) total.toDouble() / userMessageCount else 0.0)

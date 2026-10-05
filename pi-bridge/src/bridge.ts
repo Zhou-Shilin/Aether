@@ -1545,6 +1545,7 @@ function usagePayload(usage: Usage | undefined): JsonObject {
     total_tokens: usage.totalTokens,
     reasoning_tokens: usage.reasoning,
     cached_input_tokens: usage.cacheRead,
+    cache_write_tokens: usage.cacheWrite,
   };
 }
 

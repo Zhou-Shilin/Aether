@@ -32,6 +32,7 @@ data class SharedUsageStatisticsReport(
     val outputTokens: Long = 0,
     val reasoningTokens: Long = 0,
     val cachedInputTokens: Long = 0,
+    val cacheWriteTokens: Long = 0,
     val sessionCount: Int = 0,
     val messageCount: Int = 0,
     val turnCount: Int = 0,
@@ -119,6 +120,7 @@ fun buildSharedUsageStatisticsReport(
         outputTokens = usages.sumOf { it.outputTokens },
         reasoningTokens = usages.sumOf { it.reasoningTokens },
         cachedInputTokens = usages.sumOf { it.cachedInputTokens },
+        cacheWriteTokens = usages.sumOf { it.cacheWriteTokens },
         sessionCount = sessions.count { session ->
             session.messages.any { message -> message.usage != null }
         },

@@ -5058,6 +5058,7 @@ class AetherViewModel(
             put("total_tokens", totalTokens)
             usage?.reasoningTokens?.let { put("reasoning_tokens", it) }
             usage?.cachedInputTokens?.let { put("cached_input_tokens", it) }
+            usage?.cacheWriteTokens?.let { put("cache_write_tokens", it) }
             put(
                 "average_tokens_per_input_message",
                 if (inputMessageCount > 0) totalTokens.toDouble() / inputMessageCount else 0.0,

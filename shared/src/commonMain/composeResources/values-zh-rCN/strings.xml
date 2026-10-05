@@ -1033,7 +1033,9 @@
     <string name="settings_app_data_export_filename">aether-data.json</string>
     <string name="settings_author_name">Zhou-Shilin</string>
     <string name="statistics_average_turn">平均单轮</string>
-    <string name="statistics_cached_input">缓存输入</string>
+    <string name="statistics_cached_input">缓存读取</string>
+    <string name="statistics_cache_write">缓存写入</string>
+    <string name="statistics_cache_tokens">缓存 token</string>
     <string name="statistics_token_share_value">%1$s · %2$d%%</string>
     <string name="runtime_setup_message">让我们准备 Aether 本地工具使用的 Alpine 工作空间。</string>
     <string name="runtime_setup_ready_message">Alpine、Node 22 与本地工作空间已就绪。</string>

@@ -232,6 +232,7 @@ fun PiCompletionResult.toProviderPayloadJson(): String = JSONObject().apply {
                 tokenUsage.totalTokens?.let { put("total_tokens", it) }
                 tokenUsage.reasoningTokens?.let { put("reasoning_tokens", it) }
                 tokenUsage.cachedInputTokens?.let { put("cached_input_tokens", it) }
+                tokenUsage.cacheWriteTokens?.let { put("cache_write_tokens", it) }
                 put("request_count", tokenUsage.requestCount)
             },
         )
@@ -266,13 +267,15 @@ private fun JSONObject.toLlmTokenUsage(): LlmTokenUsage? {
         totalTokens = optPositiveLong("total_tokens"),
         reasoningTokens = optPositiveLong("reasoning_tokens"),
         cachedInputTokens = optPositiveLong("cached_input_tokens"),
+        cacheWriteTokens = optPositiveLong("cache_write_tokens"),
     ).withMissingTotalResolved()
     return usage.takeIf {
         it.inputTokens != null ||
             it.outputTokens != null ||
             it.totalTokens != null ||
             it.reasoningTokens != null ||
-            it.cachedInputTokens != null
+            it.cachedInputTokens != null ||
+            it.cacheWriteTokens != null
     }
 }
 

@@ -2197,6 +2197,10 @@ private struct NativeStatisticsView: View {
                 tokenLine(model.text("Output", "输出"), value: long("outputTokens"), color: .green)
                 tokenLine(model.text("Reasoning", "推理"), value: long("reasoningTokens"), color: .orange)
             }
+            Section(model.text("Cache tokens", "缓存 token")) {
+                LabeledContent(model.text("Cached read", "缓存读取"), value: optionalTokens("cachedInputTokens"))
+                LabeledContent(model.text("Cached write", "缓存写入"), value: optionalTokens("cacheWriteTokens"))
+            }
             Section(model.text("History", "历史")) {
                 LabeledContent(model.text("Peak day", "峰值日期"), value: peakDay)
                 LabeledContent(model.text("Largest turn", "最大单轮"), value: optionalTokens("largestTurnTokens"))

@@ -111,6 +111,7 @@ data class ChatUsageStatistics(
     val totalTokens: Long? = null,
     val reasoningTokens: Long? = null,
     val cachedInputTokens: Long? = null,
+    val cacheWriteTokens: Long? = null,
     val requestCount: Int = 1,
     val tokenUsageSource: String = "unavailable",
     val startedAtMillis: Long = 0L,

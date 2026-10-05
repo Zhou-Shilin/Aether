@@ -1465,6 +1465,7 @@ class SessionExecutionManager(
             totalTokens = tokenUsage?.withMissingTotalResolved()?.totalTokens,
             reasoningTokens = tokenUsage?.reasoningTokens,
             cachedInputTokens = tokenUsage?.cachedInputTokens,
+            cacheWriteTokens = tokenUsage?.cacheWriteTokens,
             requestCount = tokenUsage?.requestCount ?: 1,
             tokenUsageSource = tokenUsageSource,
             startedAtMillis = turnStartedAtMillis ?: 0L,

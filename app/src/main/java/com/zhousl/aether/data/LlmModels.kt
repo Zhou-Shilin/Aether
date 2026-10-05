@@ -8,6 +8,7 @@ data class LlmTokenUsage(
     val totalTokens: Long? = null,
     val reasoningTokens: Long? = null,
     val cachedInputTokens: Long? = null,
+    val cacheWriteTokens: Long? = null,
     val requestCount: Int = 1,
 ) {
     operator fun plus(other: LlmTokenUsage): LlmTokenUsage = LlmTokenUsage(
@@ -16,6 +17,7 @@ data class LlmTokenUsage(
         totalTokens = sumNullable(totalTokens, other.totalTokens),
         reasoningTokens = sumNullable(reasoningTokens, other.reasoningTokens),
         cachedInputTokens = sumNullable(cachedInputTokens, other.cachedInputTokens),
+        cacheWriteTokens = sumNullable(cacheWriteTokens, other.cacheWriteTokens),
         requestCount = requestCount + other.requestCount,
     )
 

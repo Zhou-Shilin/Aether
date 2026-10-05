@@ -1705,6 +1705,29 @@ private fun StatisticsSettingsPage(
         Spacer(Modifier.height(16.dp))
 
         SettingsCardGroup {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.statistics_cache_tokens),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = AetherOnSurface,
+                )
+                HistoryPeakRow(
+                    label = stringResource(R.string.statistics_cached_input),
+                    value = formatSettingsTokenCount(report.cachedInputTokens),
+                )
+                HistoryPeakRow(
+                    label = stringResource(R.string.statistics_cache_write),
+                    value = formatSettingsTokenCount(report.cacheWriteTokens),
+                )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        SettingsCardGroup {
             StatisticsChartSection(
                 title = stringResource(R.string.statistics_speed),
                 subtitle = stringResource(R.string.statistics_speed_subtitle),
@@ -2130,6 +2153,8 @@ private fun buildUsageStatisticsReport(
         inputTokens = stats.sumOf { it.inputTokens ?: 0L },
         outputTokens = stats.sumOf { it.outputTokens ?: 0L },
         reasoningTokens = stats.sumOf { it.reasoningTokens ?: 0L },
+        cachedInputTokens = stats.sumOf { it.cachedInputTokens ?: 0L },
+        cacheWriteTokens = stats.sumOf { it.cacheWriteTokens ?: 0L },
         sessionCount = usageStatisticsSnapshots.map { it.sessionId }.distinct().size,
         turnCount = stats.size,
         dailyTokenUsage = daily,
@@ -2162,6 +2187,8 @@ private data class UsageStatisticsReport(
     val inputTokens: Long,
     val outputTokens: Long,
     val reasoningTokens: Long,
+    val cachedInputTokens: Long,
+    val cacheWriteTokens: Long,
     val sessionCount: Int,
     val turnCount: Int,
     val dailyTokenUsage: List<DailyTokenUsage>,

@@ -1035,7 +1035,9 @@
     <string name="settings_app_data_export_filename">aether-data.json</string>
     <string name="settings_author_name">Zhou-Shilin</string>
     <string name="statistics_average_turn">Average turn</string>
-    <string name="statistics_cached_input">Cached input</string>
+    <string name="statistics_cached_input">Cached read</string>
+    <string name="statistics_cache_write">Cached write</string>
+    <string name="statistics_cache_tokens">Cache tokens</string>
     <string name="statistics_token_share_value">%1$s · %2$d%%</string>
     <string name="runtime_setup_message">Let&apos;s prepare the Alpine workspace used by Aether&apos;s local tools.</string>
     <string name="runtime_setup_ready_message">Alpine, Node 22, and the local workspace are ready.</string>
