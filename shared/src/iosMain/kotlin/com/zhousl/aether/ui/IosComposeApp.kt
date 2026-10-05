@@ -535,6 +535,10 @@ internal fun estimateSharedRequestTokenUsage(messages: List<SharedChatMessage>):
     return SharedPiUsage(
         inputTokens = inputTokens,
         totalTokens = inputTokens,
+        // Estimates cannot know provider-reported cache tokens; keep them
+        // unavailable so the UI shows "unavailable" like Android instead of 0.
+        cachedInputTokensAvailable = false,
+        cacheWriteTokensAvailable = false,
     )
 }
 
@@ -6010,11 +6014,14 @@ private fun SharedChatScreen(
                                         thoughtDurationMillis = message.thoughtDurationMillis.takeIf { it > 0 },
                                         outputTokensPerSecond = message.usage
                                             ?.takeIf { usage ->
-                                                usage.outputTokensAvailable && usage.outputTokens > 0 &&
-                                                    message.responseDurationMillis > 0
+                                                usage.outputTokensAvailable && usage.outputTokens > 0
                                             }
-                                            ?.outputTokens
-                                            ?.let { it * 1_000.0 / message.responseDurationMillis },
+                                            ?.let { usage ->
+                                                val duration = usage.outputDurationMillis
+                                                    .takeIf { usage.outputDurationMillisAvailable && it > 0L }
+                                                    ?: message.responseDurationMillis.takeIf { it > 0L }
+                                                duration?.let { usage.outputTokens * 1_000.0 / it }
+                                            },
                                         firstTokenLatencyMillis = message.firstTokenLatencyMillis,
                                         tokenUsageSource = message.tokenUsageSource,
                                     ),
@@ -8376,11 +8383,15 @@ private fun SharedChatMessage.toPersistedMessage(): PersistedChatMessage =
                 totalTokens = usage.totalTokens,
                 reasoningTokens = usage.reasoningTokens,
                 cachedInputTokens = usage.cachedInputTokens,
+                cacheWriteTokens = usage.cacheWriteTokens,
+                outputDurationMillis = usage.outputDurationMillis,
                 inputTokensAvailable = usage.inputTokensAvailable,
                 outputTokensAvailable = usage.outputTokensAvailable,
                 totalTokensAvailable = usage.totalTokensAvailable,
                 reasoningTokensAvailable = usage.reasoningTokensAvailable,
                 cachedInputTokensAvailable = usage.cachedInputTokensAvailable,
+                cacheWriteTokensAvailable = usage.cacheWriteTokensAvailable,
+                outputDurationMillisAvailable = usage.outputDurationMillisAvailable,
                 requestCount = usage.requestCount,
             )
         },
@@ -8582,11 +8593,15 @@ internal fun PersistedChatMessage.toSharedChatMessage(): SharedChatMessage {
             totalTokens = usage.totalTokens,
             reasoningTokens = usage.reasoningTokens,
             cachedInputTokens = usage.cachedInputTokens,
+            cacheWriteTokens = usage.cacheWriteTokens,
+            outputDurationMillis = usage.outputDurationMillis,
             inputTokensAvailable = usage.inputTokensAvailable,
             outputTokensAvailable = usage.outputTokensAvailable,
             totalTokensAvailable = usage.totalTokensAvailable,
             reasoningTokensAvailable = usage.reasoningTokensAvailable,
             cachedInputTokensAvailable = usage.cachedInputTokensAvailable,
+            cacheWriteTokensAvailable = usage.cacheWriteTokensAvailable,
+            outputDurationMillisAvailable = usage.outputDurationMillisAvailable,
             requestCount = usage.requestCount,
         )
     },
@@ -8948,6 +8963,7 @@ internal fun buildNativeSettingsSnapshot(
         put("outputTokens", statistics.outputTokens)
         put("reasoningTokens", statistics.reasoningTokens)
         put("cachedInputTokens", statistics.cachedInputTokens)
+        put("cacheWriteTokens", statistics.cacheWriteTokens)
         put("sessionCount", statistics.sessionCount)
         put("messageCount", statistics.messageCount)
         put("turnCount", statistics.turnCount)

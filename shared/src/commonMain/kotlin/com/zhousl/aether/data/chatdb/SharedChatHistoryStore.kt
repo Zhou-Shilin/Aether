@@ -87,11 +87,15 @@ data class PersistedChatUsage(
     val totalTokens: Long = 0,
     val reasoningTokens: Long = 0,
     val cachedInputTokens: Long = 0,
+    val cacheWriteTokens: Long = 0,
+    val outputDurationMillis: Long = 0,
     val inputTokensAvailable: Boolean = true,
     val outputTokensAvailable: Boolean = true,
     val totalTokensAvailable: Boolean = true,
     val reasoningTokensAvailable: Boolean = true,
     val cachedInputTokensAvailable: Boolean = true,
+    val cacheWriteTokensAvailable: Boolean = true,
+    val outputDurationMillisAvailable: Boolean = true,
     val requestCount: Int = 1,
 )
 
@@ -603,12 +607,20 @@ private fun JsonObject.toPersistedChatMessage(
             totalTokens = usage.long("totalTokens"),
             reasoningTokens = usage.long("reasoningTokens"),
             cachedInputTokens = usage.long("cachedInputTokens"),
+            cacheWriteTokens = usage.long("cacheWriteTokens"),
+            outputDurationMillis = usage.long("outputDurationMillis"),
             inputTokensAvailable = usage["inputTokensAvailable"]?.jsonPrimitive?.booleanOrNull ?: true,
             outputTokensAvailable = usage["outputTokensAvailable"]?.jsonPrimitive?.booleanOrNull ?: true,
             totalTokensAvailable = usage["totalTokensAvailable"]?.jsonPrimitive?.booleanOrNull ?: true,
             reasoningTokensAvailable = usage["reasoningTokensAvailable"]?.jsonPrimitive?.booleanOrNull ?: true,
             cachedInputTokensAvailable = usage["cachedInputTokensAvailable"]
                 ?.jsonPrimitive?.booleanOrNull ?: true,
+            // Records written before these fields existed carry neither the value nor its
+            // flag, so an absent key stays unavailable instead of reporting an explicit zero.
+            cacheWriteTokensAvailable = usage["cacheWriteTokensAvailable"]
+                ?.jsonPrimitive?.booleanOrNull ?: ("cacheWriteTokens" in usage),
+            outputDurationMillisAvailable = usage["outputDurationMillisAvailable"]
+                ?.jsonPrimitive?.booleanOrNull ?: ("outputDurationMillis" in usage),
             requestCount = usage["requestCount"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
                 ?.coerceAtLeast(1) ?: 1,
         )
@@ -686,11 +698,15 @@ private fun PersistedChatMessage.toJsonObject(): JsonObject = buildJsonObject {
             put("totalTokens", stats.totalTokens)
             put("reasoningTokens", stats.reasoningTokens)
             put("cachedInputTokens", stats.cachedInputTokens)
+            put("cacheWriteTokens", stats.cacheWriteTokens)
+            put("outputDurationMillis", stats.outputDurationMillis)
             put("inputTokensAvailable", stats.inputTokensAvailable)
             put("outputTokensAvailable", stats.outputTokensAvailable)
             put("totalTokensAvailable", stats.totalTokensAvailable)
             put("reasoningTokensAvailable", stats.reasoningTokensAvailable)
             put("cachedInputTokensAvailable", stats.cachedInputTokensAvailable)
+            put("cacheWriteTokensAvailable", stats.cacheWriteTokensAvailable)
+            put("outputDurationMillisAvailable", stats.outputDurationMillisAvailable)
             put("requestCount", stats.requestCount)
         })
     }

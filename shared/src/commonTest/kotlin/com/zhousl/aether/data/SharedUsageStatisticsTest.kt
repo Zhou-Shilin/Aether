@@ -18,7 +18,7 @@ class SharedUsageStatisticsTest {
                         "a1",
                         fromUser = false,
                         timestamp = 1_000,
-                        usage = PersistedChatUsage(10, 20, 32, 2, 3),
+                        usage = PersistedChatUsage(10, 20, 32, 2, 3, cacheWriteTokens = 4),
                         duration = 2_000,
                         latency = 400,
                         completedAt = 3_400,
@@ -33,7 +33,7 @@ class SharedUsageStatisticsTest {
                         "a2",
                         fromUser = false,
                         timestamp = 5_000,
-                        usage = PersistedChatUsage(30, 40, 75, 5, 7),
+                        usage = PersistedChatUsage(30, 40, 75, 5, 7, cacheWriteTokens = 6),
                         duration = 4_000,
                         latency = 600,
                         completedAt = 9_600,
@@ -63,6 +63,7 @@ class SharedUsageStatisticsTest {
         assertEquals(60, report.outputTokens)
         assertEquals(7, report.reasoningTokens)
         assertEquals(10, report.cachedInputTokens)
+        assertEquals(10, report.cacheWriteTokens)
         assertEquals(75, report.largestTurnTokens)
         assertEquals(53, report.averageTurnTokens)
         assertEquals(10.0, report.averageOutputTokensPerSecond!!, 0.0000001)
@@ -194,6 +195,40 @@ class SharedUsageStatisticsTest {
         assertEquals(1, report.turnCount)
         assertEquals(listOf(30L, 0L), report.recentDailyTokenUsage.map { it.tokens })
         assertEquals(emptyList(), report.recentSpeedSamples)
+    }
+
+    @Test
+    fun prefersRecordedOutputDurationForSpeedSamples() {
+        val day = SharedStatisticsDate("2026-01-02", "1/2", "2")
+        val report = buildSharedUsageStatisticsReport(
+            sessions = listOf(
+                session(
+                    id = "recorded-generation-time",
+                    messages = listOf(
+                        message(
+                            id = "assistant",
+                            fromUser = false,
+                            timestamp = 1_000,
+                            completedAt = 10_000,
+                            usage = PersistedChatUsage(
+                                inputTokens = 10,
+                                outputTokens = 100,
+                                totalTokens = 110,
+                                outputDurationMillis = 2_000,
+                            ),
+                            duration = 9_000,
+                            latency = 100,
+                        ),
+                    ),
+                ),
+            ),
+            nowMillis = 20_000,
+            recentDates = listOf(day),
+            resolveDate = { day },
+        )
+
+        assertEquals(50.0, report.averageOutputTokensPerSecond!!, 0.0000001)
+        assertEquals(50.0, report.recentSpeedSamples.single().tokensPerSecond, 0.0000001)
     }
 
     private fun session(id: String, messages: List<PersistedChatMessage>) = PersistedChatSession(

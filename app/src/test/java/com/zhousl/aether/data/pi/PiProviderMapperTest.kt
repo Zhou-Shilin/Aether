@@ -251,7 +251,14 @@ class PiProviderMapperTest {
         val payload = PiCompletionResult(
             assistantText = "done",
             assistantMessage = assistantMessage,
-            usage = LlmTokenUsage(inputTokens = 3, outputTokens = 2, totalTokens = 5),
+            usage = LlmTokenUsage(
+                inputTokens = 3,
+                outputTokens = 2,
+                totalTokens = 5,
+                cachedInputTokens = 1,
+                cacheWriteTokens = 4,
+                outputDurationMillis = 2_500,
+            ),
             provider = "openai",
             model = "gpt-5.4",
             responseId = "resp-1",
@@ -263,6 +270,40 @@ class PiProviderMapperTest {
         assertEquals("openai", wrapped.getString("provider"))
         assertEquals("resp-1", wrapped.getString("responseId"))
         assertEquals(5L, wrapped.getJSONObject("usage").getLong("total_tokens"))
+        assertEquals(4L, wrapped.getJSONObject("usage").getLong("cache_write_tokens"))
+        assertEquals(2_500L, wrapped.getJSONObject("usage").getLong("output_duration_ms"))
+    }
+
+    @Test
+    fun piUsageKeepsCacheReadAndWriteTokens() {
+        val usage = JSONObject()
+            .put(
+                "usage",
+                JSONObject()
+                    .put("input_tokens", 10)
+                    .put("output_tokens", 4)
+                    .put("total_tokens", 14)
+                    .put("cached_input_tokens", 6)
+                    .put("cache_write_tokens", 2)
+                    .put("output_duration_ms", 2_500)
+                    .put("request_count", 3),
+            )
+            .toPiCompletionResult()
+            .usage!!
+
+        assertEquals(6L, usage.cachedInputTokens)
+        assertEquals(2L, usage.cacheWriteTokens)
+        assertEquals(2_500L, usage.outputDurationMillis)
+        assertEquals(3, usage.requestCount)
+
+        val replayed = JSONObject(
+            PiCompletionResult(assistantText = "", usage = usage).toProviderPayloadJson(),
+        )
+            .getJSONObject("usage")
+        assertEquals(6L, replayed.getLong("cached_input_tokens"))
+        assertEquals(2L, replayed.getLong("cache_write_tokens"))
+        assertEquals(2_500L, replayed.getLong("output_duration_ms"))
+        assertEquals(3, replayed.getInt("request_count"))
     }
 
     @Test

@@ -1193,7 +1193,13 @@ export default function (pi: ExtensionAPI) {
       frame.payload.name === "extension_echo",
   );
   assert.equal(toolEnd.payload.output_json, "extension:hello:started=true");
-  assert.equal((await run).assistant_text, "extension finished");
+  const completion = await run;
+  assert.equal(completion.assistant_text, "extension finished");
+  // The turn total must sum every request: the tool call round trip plus the
+  // final answer.
+  assert.equal(completion.usage.request_count, 2);
+  assert.ok(completion.usage.total_tokens > 0);
+  assert.ok(completion.usage.output_duration_ms >= 0);
 
   const listed = await client.request("extension-list", "list_extensions", {
     session_id: "session-extension",
@@ -1636,6 +1642,13 @@ test("accepts steer and follow-up messages on a live persistent harness", async 
     15_000,
   );
   assert.equal(followUp.assistant_text.includes("working response"), true);
+  // A deferred injected message continues the same turn, so the follow-up totals
+  // must still include the usage reported by the preceding run_turn.
+  assert.ok(
+    followUp.usage.request_count > steeredResult.usage.request_count,
+    JSON.stringify(followUp.usage),
+  );
+  assert.ok(followUp.usage.total_tokens > steeredResult.usage.total_tokens);
 });
 
 test("aborts an active harness by session id", async () => {

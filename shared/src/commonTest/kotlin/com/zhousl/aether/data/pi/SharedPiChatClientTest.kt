@@ -133,10 +133,19 @@ class SharedPiChatClientTest {
         assertEquals(18, result.usage.totalTokens)
         assertFalse(result.usage.reasoningTokensAvailable)
         assertTrue(result.usageAvailable)
+        assertEquals(5, result.usage.cachedInputTokens)
+        assertEquals(3, result.usage.cacheWriteTokens)
+        assertEquals(2_500, result.usage.outputDurationMillis)
+        assertTrue(result.usage.outputDurationMillisAvailable)
+        assertEquals(3, result.usage.requestCount)
         val providerPayload = Json.parseToJsonElement(result.providerPayloadJson).jsonObject
         assertEquals("assistant", providerPayload["piAssistantMessage"]!!.jsonObject["role"]!!.jsonPrimitive.content)
         assertEquals("response-1", providerPayload["responseId"]!!.jsonPrimitive.content)
-        assertEquals(1, providerPayload["usage"]!!.jsonObject["request_count"]!!.jsonPrimitive.content.toInt())
+        assertEquals(3, providerPayload["usage"]!!.jsonObject["request_count"]!!.jsonPrimitive.content.toInt())
+        assertEquals(
+            2_500,
+            providerPayload["usage"]!!.jsonObject["output_duration_ms"]!!.jsonPrimitive.content.toInt(),
+        )
         bridge.close()
     }
 
@@ -529,6 +538,10 @@ private class ChatProtocolProcess(
                     put("input_tokens", 7)
                     put("output_tokens", 11)
                     put("total_tokens", 18)
+                    put("cached_input_tokens", 5)
+                    put("cache_write_tokens", 3)
+                    put("output_duration_ms", 2_500)
+                    put("request_count", 3)
                     reasoningTokens?.let { put("reasoning_tokens", it) }
                 })
             }

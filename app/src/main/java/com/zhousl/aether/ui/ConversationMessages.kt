@@ -3414,6 +3414,16 @@ private fun MessageStatisticsPopup(
                     ?: stringResource(R.string.statistics_unavailable),
             )
             MessageStatisticRow(
+                label = stringResource(R.string.statistics_cached_input),
+                value = usageStatistics?.cachedInputTokens?.let(::formatTokenCount)
+                    ?: stringResource(R.string.statistics_unavailable),
+            )
+            MessageStatisticRow(
+                label = stringResource(R.string.statistics_cache_write),
+                value = usageStatistics?.cacheWriteTokens?.let(::formatTokenCount)
+                    ?: stringResource(R.string.statistics_unavailable),
+            )
+            MessageStatisticRow(
                 label = stringResource(R.string.statistics_output_rate),
                 value = usageStatistics?.outputTokensPerSecond?.let(::formatTokenRate)
                     ?: stringResource(R.string.statistics_unavailable),

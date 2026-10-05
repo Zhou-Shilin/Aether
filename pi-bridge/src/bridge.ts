@@ -221,8 +221,25 @@ interface AgentSessionState {
   currentRequestId: string;
   turnStartedAtMillis?: number;
   firstAssistantEventAtMillis?: number;
+  turnUsage: TurnUsageTotals;
+  outputStartedAtMillis?: number;
+  outputDurationMillis: number;
   toolArgsById: Map<string, unknown>;
   lastAccessedAt: number;
+}
+
+// Pi reports usage per API call; one Aether turn can issue several calls
+// (tool loops, auto retries, follow-ups), so the bridge accumulates them and
+// hands the app a per-turn total.
+interface TurnUsageTotals {
+  inputTokens: number;
+  outputTokens: number;
+  reasoningTokens: number;
+  reasoningReported: boolean;
+  cachedInputTokens: number;
+  cacheWriteTokens: number;
+  totalTokens: number;
+  requestCount: number;
 }
 
 interface CompatibilityFallbackState {
@@ -1545,6 +1562,7 @@ function usagePayload(usage: Usage | undefined): JsonObject {
     total_tokens: usage.totalTokens,
     reasoning_tokens: usage.reasoning,
     cached_input_tokens: usage.cacheRead,
+    cache_write_tokens: usage.cacheWrite,
   };
 }
 
@@ -2440,6 +2458,77 @@ function setActiveSessionTools(state: AgentSessionState): void {
   state.session.setActiveToolsByName([...activeNativeToolNames(state.runtime), ...nonNative]);
 }
 
+function emptyTurnUsage(): TurnUsageTotals {
+  return {
+    inputTokens: 0,
+    outputTokens: 0,
+    reasoningTokens: 0,
+    reasoningReported: false,
+    cachedInputTokens: 0,
+    cacheWriteTokens: 0,
+    totalTokens: 0,
+    requestCount: 0,
+  };
+}
+
+function resetTurnUsage(state: AgentSessionState): void {
+  state.turnUsage = emptyTurnUsage();
+  state.outputStartedAtMillis = undefined;
+  state.outputDurationMillis = 0;
+}
+
+function trackTurnUsage(state: AgentSessionState, event: AgentSessionEvent): void {
+  if (event.type === "message_update" && event.message.role === "assistant") {
+    if (state.outputStartedAtMillis === undefined) {
+      state.outputStartedAtMillis = Date.now();
+    }
+    return;
+  }
+  if (event.type === "message_end" && event.message.role === "assistant") {
+    const startedAt = state.outputStartedAtMillis;
+    if (startedAt !== undefined) {
+      state.outputDurationMillis += Math.max(0, Date.now() - startedAt);
+      state.outputStartedAtMillis = undefined;
+    }
+    const usage = (event.message as unknown as { usage?: Usage }).usage;
+    if (usage) {
+      const input = usage.input ?? 0;
+      const output = usage.output ?? 0;
+      state.turnUsage.inputTokens += input;
+      state.turnUsage.outputTokens += output;
+      if (usage.reasoning !== undefined) {
+        state.turnUsage.reasoningReported = true;
+        state.turnUsage.reasoningTokens += usage.reasoning;
+      }
+      state.turnUsage.cachedInputTokens += usage.cacheRead ?? 0;
+      state.turnUsage.cacheWriteTokens += usage.cacheWrite ?? 0;
+      state.turnUsage.totalTokens += usage.totalTokens ?? input + output;
+      state.turnUsage.requestCount += 1;
+    }
+    return;
+  }
+  if (event.type === "auto_retry_start") {
+    // The retried attempt produced no usable output; drop its generation window.
+    state.outputStartedAtMillis = undefined;
+  }
+}
+
+function turnUsagePayload(state: AgentSessionState): JsonObject {
+  const totals = state.turnUsage;
+  if (totals.requestCount === 0) return {};
+  const payload: JsonObject = {
+    input_tokens: totals.inputTokens,
+    output_tokens: totals.outputTokens,
+    total_tokens: totals.totalTokens,
+    cached_input_tokens: totals.cachedInputTokens,
+    cache_write_tokens: totals.cacheWriteTokens,
+    request_count: totals.requestCount,
+    output_duration_ms: state.outputDurationMillis,
+  };
+  if (totals.reasoningReported) payload.reasoning_tokens = totals.reasoningTokens;
+  return payload;
+}
+
 function emitAgentSessionEvent(state: AgentSessionState, event: AgentSessionEvent): void {
   const requestId = state.currentRequestId;
   if (!requestId) {
@@ -2633,6 +2722,8 @@ async function createNativeAgentSession(
     pendingReload: false,
     pendingRecreate: false,
     currentRequestId: "",
+    turnUsage: emptyTurnUsage(),
+    outputDurationMillis: 0,
     toolArgsById: new Map<string, unknown>(),
     lastAccessedAt: Date.now(),
   } satisfies AgentSessionState;
@@ -2655,7 +2746,10 @@ async function createNativeAgentSession(
     customTools,
   });
   state.session = created.session;
-  state.session.subscribe((event) => emitAgentSessionEvent(state, event));
+  state.session.subscribe((event) => {
+    trackTurnUsage(state, event);
+    emitAgentSessionEvent(state, event);
+  });
   await state.session.bindExtensions({
     uiContext: extensionUiContext(),
     mode: "rpc",
@@ -2922,9 +3016,11 @@ async function runNativeAgentPrompt(
   state: AgentSessionState,
   text: string,
   images: ImageContent[],
+  resetUsage = true,
 ): Promise<AssistantMessage> {
   state.currentRequestId = id;
   state.lastAccessedAt = Date.now();
+  if (resetUsage) resetTurnUsage(state);
   activeAborters.set(id, () => state.session.abort());
   activeAetherOperationRequestIds.add(id);
   try {
@@ -2958,6 +3054,7 @@ async function runNativeAgentTurn(id: string, payload: JsonObject): Promise<Json
   const message = await runNativeAgentPrompt(id, state, prompt.text, prompt.images);
   return {
     ...assistantPayload(message),
+    usage: turnUsagePayload(state),
     ...(await credentialPayload(state.credentialStore)),
     session_id: state.session.sessionId,
     session_file: state.session.sessionFile ?? "",
@@ -2989,12 +3086,16 @@ async function followUpNativeAgentSession(id: string, payload: JsonObject): Prom
     if (!message) throw new Error(`Pi session ${state.sessionId} has no assistant response.`);
     return {
       ...assistantPayload(message),
+      usage: turnUsagePayload(state),
       developer_role_unsupported_detected:
         state.compatibilityFallbackState.developerRoleUnsupportedDetected,
     };
   }
+  // An injected message delivered to an idle session continues the turn that was
+  // already reported, so its usage keeps accumulating instead of restarting.
   return {
-    ...assistantPayload(await runNativeAgentPrompt(id, state, prompt.text, prompt.images)),
+    ...assistantPayload(await runNativeAgentPrompt(id, state, prompt.text, prompt.images, false)),
+    usage: turnUsagePayload(state),
     developer_role_unsupported_detected:
       state.compatibilityFallbackState.developerRoleUnsupportedDetected,
   };

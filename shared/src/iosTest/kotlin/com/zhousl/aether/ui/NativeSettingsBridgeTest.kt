@@ -311,6 +311,8 @@ class NativeSettingsBridgeTest {
         val statistics = com.zhousl.aether.data.SharedUsageStatisticsReport(
             totalTokens = 100,
             averageTurnTokens = 50,
+            cachedInputTokens = 7,
+            cacheWriteTokens = 42,
             allDailyTokenUsage = listOf(
                 com.zhousl.aether.data.SharedDailyTokenUsage("2026-08-23", "Aug 23", "23", 100)
             ),
@@ -331,6 +333,8 @@ class NativeSettingsBridgeTest {
         ).jsonObject
 
         assertEquals("50", snapshot["statistics"]!!.jsonObject["averageTurnTokens"]!!.jsonPrimitive.content)
+        assertEquals("7", snapshot["statistics"]!!.jsonObject["cachedInputTokens"]!!.jsonPrimitive.content)
+        assertEquals("42", snapshot["statistics"]!!.jsonObject["cacheWriteTokens"]!!.jsonPrimitive.content)
         assertEquals(1, snapshot["statistics"]!!.jsonObject["allDailyTokenUsage"]!!.jsonArray.size)
         assertEquals(1, snapshot["statistics"]!!.jsonObject["recentSpeedSamples"]!!.jsonArray.size)
         assertTrue(snapshot["alpine"]!!.jsonObject["ready"]!!.jsonPrimitive.content.toBoolean())

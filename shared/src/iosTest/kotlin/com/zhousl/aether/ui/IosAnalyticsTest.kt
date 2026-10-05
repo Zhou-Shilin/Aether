@@ -65,6 +65,41 @@ class IosAnalyticsTest {
     }
 
     @Test
+    fun cacheTokenPropertiesAreReportedOnlyWhenAvailable() {
+        val message = SharedChatMessage(
+            text = "cached", fromUser = false,
+            usage = SharedPiUsage(
+                inputTokens = 10,
+                outputTokens = 5,
+                totalTokens = 15,
+                cachedInputTokens = 7,
+                cacheWriteTokens = 3,
+            ),
+            tokenUsageSource = "api",
+        )
+        val properties = iosTurnAnalyticsProperties(message, "success", 100, 1, 1)
+        assertEquals(7L, properties["cached_input_tokens"])
+        assertEquals(3L, properties["cache_write_tokens"])
+
+        val unavailable = iosTurnAnalyticsProperties(
+            SharedChatMessage(
+                text = "no cache",
+                fromUser = false,
+                usage = SharedPiUsage(
+                    cachedInputTokensAvailable = false,
+                    cacheWriteTokensAvailable = false,
+                ),
+            ),
+            "success",
+            100,
+            1,
+            1,
+        )
+        assertFalse("cached_input_tokens" in unavailable)
+        assertFalse("cache_write_tokens" in unavailable)
+    }
+
+    @Test
     fun missingUsageAndEmptyInputRemainFinite() {
         val properties = iosTurnAnalyticsProperties(null, "neutral", -1, 0, 0)
         assertEquals(false, properties["has_token_usage"])

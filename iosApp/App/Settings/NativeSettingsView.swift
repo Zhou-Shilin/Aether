@@ -31,6 +31,9 @@ private let nativeSettingsPersianTranslations: [String: String] = [
     "Back up or restore settings, providers, skills, and conversations.": "از تنظیمات، ارائه‌دهندگان، مهارت‌ها و گفتگوها پشتیبان بگیرید یا آن‌ها را بازیابی کنید.",
     "Base URL": "نشانی پایه",
     "Browser login": "ورود با مرورگر",
+    "Cache tokens": "توکن‌های کش",
+    "Cached read": "خواندن از کش",
+    "Cached write": "نوشتن در کش",
     "Cancel": "لغو",
     "Check your connection and try again.": "اتصال خود را بررسی کرده و دوباره تلاش کنید.",
     "Choose Folder": "انتخاب پوشه",
@@ -2196,6 +2199,10 @@ private struct NativeStatisticsView: View {
                 tokenLine(model.text("Input", "输入"), value: long("inputTokens"), color: .blue)
                 tokenLine(model.text("Output", "输出"), value: long("outputTokens"), color: .green)
                 tokenLine(model.text("Reasoning", "推理"), value: long("reasoningTokens"), color: .orange)
+            }
+            Section(model.text("Cache tokens", "缓存 token")) {
+                LabeledContent(model.text("Cached read", "缓存读取"), value: optionalTokens("cachedInputTokens"))
+                LabeledContent(model.text("Cached write", "缓存写入"), value: optionalTokens("cacheWriteTokens"))
             }
             Section(model.text("History", "历史")) {
                 LabeledContent(model.text("Peak day", "峰值日期"), value: peakDay)
