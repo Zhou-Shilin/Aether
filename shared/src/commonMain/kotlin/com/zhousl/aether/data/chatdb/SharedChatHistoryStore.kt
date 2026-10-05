@@ -615,10 +615,12 @@ private fun JsonObject.toPersistedChatMessage(
             reasoningTokensAvailable = usage["reasoningTokensAvailable"]?.jsonPrimitive?.booleanOrNull ?: true,
             cachedInputTokensAvailable = usage["cachedInputTokensAvailable"]
                 ?.jsonPrimitive?.booleanOrNull ?: true,
+            // Records written before these fields existed carry neither the value nor its
+            // flag, so an absent key stays unavailable instead of reporting an explicit zero.
             cacheWriteTokensAvailable = usage["cacheWriteTokensAvailable"]
-                ?.jsonPrimitive?.booleanOrNull ?: true,
+                ?.jsonPrimitive?.booleanOrNull ?: ("cacheWriteTokens" in usage),
             outputDurationMillisAvailable = usage["outputDurationMillisAvailable"]
-                ?.jsonPrimitive?.booleanOrNull ?: true,
+                ?.jsonPrimitive?.booleanOrNull ?: ("outputDurationMillis" in usage),
             requestCount = usage["requestCount"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
                 ?.coerceAtLeast(1) ?: 1,
         )

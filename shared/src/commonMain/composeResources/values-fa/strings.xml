@@ -303,6 +303,9 @@
     <string name="statistics_largest_turn">بزرگترین چرخش</string>
     <string name="statistics_recorded_turns">نوبت های ثبت شده</string>
     <string name="statistics_token_mix">ترکیب توکن</string>
+    <string name="statistics_cached_input">خواندن از کش</string>
+    <string name="statistics_cache_write">نوشتن در کش</string>
+    <string name="statistics_cache_tokens">توکن‌های کش</string>
     <string name="statistics_speed">سرعت</string>
     <string name="statistics_speed_subtitle">نمونه های سرعت خروجی اخیر</string>
     <string name="statistics_no_speed_samples">هنوز هیچ نمونه سرعتی وجود ندارد</string>

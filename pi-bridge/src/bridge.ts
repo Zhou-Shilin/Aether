@@ -3016,10 +3016,11 @@ async function runNativeAgentPrompt(
   state: AgentSessionState,
   text: string,
   images: ImageContent[],
+  resetUsage = true,
 ): Promise<AssistantMessage> {
   state.currentRequestId = id;
   state.lastAccessedAt = Date.now();
-  resetTurnUsage(state);
+  if (resetUsage) resetTurnUsage(state);
   activeAborters.set(id, () => state.session.abort());
   activeAetherOperationRequestIds.add(id);
   try {
@@ -3090,8 +3091,10 @@ async function followUpNativeAgentSession(id: string, payload: JsonObject): Prom
         state.compatibilityFallbackState.developerRoleUnsupportedDetected,
     };
   }
+  // An injected message delivered to an idle session continues the turn that was
+  // already reported, so its usage keeps accumulating instead of restarting.
   return {
-    ...assistantPayload(await runNativeAgentPrompt(id, state, prompt.text, prompt.images)),
+    ...assistantPayload(await runNativeAgentPrompt(id, state, prompt.text, prompt.images, false)),
     usage: turnUsagePayload(state),
     developer_role_unsupported_detected:
       state.compatibilityFallbackState.developerRoleUnsupportedDetected,

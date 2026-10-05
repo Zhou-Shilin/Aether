@@ -1642,6 +1642,13 @@ test("accepts steer and follow-up messages on a live persistent harness", async 
     15_000,
   );
   assert.equal(followUp.assistant_text.includes("working response"), true);
+  // A deferred injected message continues the same turn, so the follow-up totals
+  // must still include the usage reported by the preceding run_turn.
+  assert.ok(
+    followUp.usage.request_count > steeredResult.usage.request_count,
+    JSON.stringify(followUp.usage),
+  );
+  assert.ok(followUp.usage.total_tokens > steeredResult.usage.total_tokens);
 });
 
 test("aborts an active harness by session id", async () => {
