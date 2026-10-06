@@ -1,0 +1,32 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="shared_extensions_security_warning">Пакеты расширений запускаются как доверенный код сценария с широким доступом к агенту, узлу приложения, локальной среде выполнения и рабочей области.</string>
+    <string name="shared_extensions_runtime_summary">Пакеты: %1$d · Скрипты: %2$d · Расширения интерфейса Aether: %3$d</string>
+    <string name="shared_extensions_runtime_enabled">Включено средой выполнения скрипта</string>
+    <string name="shared_extensions_script_runtime_unavailable">Расширения скриптов недоступны на этой платформе.</string>
+    <string name="shared_extensions_manual_install">Установите исходный код npm.</string>
+    <string name="shared_extensions_npm_source_hint">npm:имя-пакета</string>
+    <string name="shared_extensions_import_file">Импортируйте JavaScript, TypeScript или zip.</string>
+    <string name="shared_extensions_refresh_description">Обновить расширения</string>
+    <string name="shared_extensions_import_description">Импортировать расширение</string>
+    <string name="shared_extensions_imported">Импортировано</string>
+    <string name="shared_extensions_installed_path">Установленный путь</string>
+    <string name="shared_extensions_script_resources">Расширения Pi: %1$d · Расширения интерфейса Aether: %2$d · Навыки: %3$d · Промпты: %4$d · Темы: %5$d</string>
+    <string name="shared_extensions_loaded_entries">%1$d загружено записей</string>
+    <string name="shared_extensions_pi_entries_label">Расширения Pi</string>
+    <string name="shared_extensions_aether_entries_label">Расширения пользовательского интерфейса Aether</string>
+    <string name="shared_extensions_skills_label">Навыки</string>
+    <string name="shared_extensions_prompts_label">Промпты</string>
+    <string name="shared_extensions_themes_label">Темы</string>
+    <string name="shared_extensions_loaded_entries_label">Загруженные записи пользовательского интерфейса Aether</string>
+    <string name="shared_extensions_runtime_error_count">Ошибки выполнения скрипта %1$d</string>
+    <string name="shared_extensions_remove_title">Удалить расширение?</string>
+    <string name="shared_extensions_remove_body">%1$s будет удален из локальной среды выполнения. Это невозможно отменить.</string>
+    <string name="shared_extensions_invalid_import">Выберите файл с расширением JavaScript, TypeScript или zip.</string>
+    <string name="shared_extensions_import_too_large">Размер выбранного расширения превышает 32 МБ.</string>
+    <string name="shared_extensions_zip_unsafe">Архив расширения содержит небезопасный путь.</string>
+    <string name="shared_extensions_zip_invalid">Архив должен содержать пакет расширения скрипта или индексный файл JavaScript/TypeScript.</string>
+    <string name="shared_extensions_platform_compatibility">Похоже, этому пакету требуется настольная операционная система или архитектура процессора, недоступная в текущей среде выполнения Aether.</string>
+    <string name="shared_extensions_operation_in_progress">Применение изменений расширения…</string>
+    <string name="shared_extensions_refresh_complete">Расширения обновлены.</string>
+</resources>

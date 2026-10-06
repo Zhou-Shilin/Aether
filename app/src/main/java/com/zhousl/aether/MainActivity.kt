@@ -16,9 +16,11 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.RequestPermission(),
     ) { }
 
+    /** Configures version-aware keyboard adjustment before Compose starts consuming IME insets. */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        window.setSoftInputMode(chatSoftInputMode(Build.VERSION.SDK_INT, window.attributes.softInputMode))
         setContent {
             AetherApp(onNotificationPermissionRequested = ::maybeRequestNotificationPermission)
         }

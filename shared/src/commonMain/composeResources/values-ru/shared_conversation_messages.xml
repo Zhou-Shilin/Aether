@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="shared_chat_thought_process">Мыслительный процесс</string>
+    <string name="shared_chat_previous_response">Предыдущий ответ</string>
+    <string name="shared_chat_next_response">Следующий ответ</string>
+    <string name="shared_statistics_cached">Кэш</string>
+    <string name="shared_statistics_tokens_per_second">%1$s токенов/с</string>
+    <string name="shared_tool_web_search">Интернет</string>
+</resources>
