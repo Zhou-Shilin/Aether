@@ -280,6 +280,10 @@ class SharedChatHistoryStore(
     suspend fun loadAll(): List<PersistedChatSession> =
         dao.getSessions().mapNotNull { session -> load(session.id) }
 
+    /** Session ids and titles in display order, without decoding any message. */
+    suspend fun loadSessionTitles(): List<Pair<String, String>> =
+        dao.getSessions().map { session -> session.id to session.title }
+
     suspend fun load(sessionId: String): PersistedChatSession? {
         val session = dao.getSession(sessionId) ?: return null
         val messages = dao.getMessagesForSession(session.id).mapNotNull { entity ->
@@ -306,6 +310,49 @@ class SharedChatHistoryStore(
             chromeEnabled = session.chromeEnabled,
             selectedModelKey = session.selectedModelKey,
         )
+    }
+
+    /**
+     * Writes a fixed template session (e.g. a showcase demo) only when its stored messages differ.
+     * Rewriting unchanged templates on every launch re-encodes and re-inserts every message, which
+     * is seconds of work for templates that embed images. Returns true when the session was new.
+     */
+    suspend fun seedTemplateSession(
+        sessionId: String,
+        messages: List<PersistedChatMessage>,
+        title: String,
+        defaultSelectedModelKey: String,
+    ): Boolean {
+        val stored = dao.getSession(sessionId)
+        val selectedModelKey = stored?.selectedModelKey?.takeIf(String::isNotBlank) ?: defaultSelectedModelKey
+        // Compare a fingerprint (id, text, JSON length) instead of the JSON bodies: reading
+        // image-heavy message bodies back is as slow as rewriting them.
+        val unchanged = stored != null && dao.getMessageSummariesForSession(sessionId).let { summaries ->
+            summaries.size == messages.size && summaries.zip(messages).all { (summary, message) ->
+                summary.id == message.id &&
+                    summary.text == message.text &&
+                    summary.messageJsonLength == message.toJsonObject().toString().sqliteCharLength()
+            }
+        }
+        if (unchanged) {
+            // Keep the previous launch's ordering semantics: seeded templates move to the top.
+            writeMutex.withLock {
+                dao.upsertSession(
+                    stored.copy(
+                        title = title.trim(),
+                        hasCustomTitle = true,
+                        selectedModelKey = selectedModelKey,
+                        sortOrder = -platformSortOrder(),
+                    )
+                )
+            }
+        } else {
+            save(
+                sessionId, messages, titleOverride = title, hasCustomTitle = true,
+                selectedModelKey = selectedModelKey,
+            )
+        }
+        return stored == null
     }
 
     suspend fun rename(sessionId: String, title: String) {
@@ -808,6 +855,15 @@ fun serializePersistedChatSession(session: PersistedChatSession): String {
         put("session", session.toAndroidChatSessionJson())
     }
     return PersistedChatSessionExportJson.encodeToString(JsonObject.serializer(), root)
+}
+
+/** SQLite `length()` counts Unicode code points; Kotlin counts UTF-16 units. */
+private fun String.sqliteCharLength(): Int {
+    var surrogatePairs = 0
+    for (index in 0 until length - 1) {
+        if (this[index].isHighSurrogate() && this[index + 1].isLowSurrogate()) surrogatePairs++
+    }
+    return length - surrogatePairs
 }
 
 private fun platformSortOrder(): Long = platformCurrentTimeMillis()

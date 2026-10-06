@@ -1448,16 +1448,19 @@ fun IosComposeApp(
                 }
             }
             if (showcaseEnabled) {
-                showcaseCatalog = com.zhousl.aether.data.ShowcaseCatalog.load(android = false)
+                showcaseCatalog = withContext(Dispatchers.Default) {
+                    com.zhousl.aether.data.ShowcaseCatalog.load(android = false)
+                }
                 val previousCurrentSessionId = historyStore?.loadCurrentSessionId()
-                var added = false
-                for (demo in showcaseCatalog) {
-                    val existing = historyStore?.load(demo.id)
-                    if (existing == null) added = true
-                    historyStore?.save(
-                        demo.id, demo.messages, titleOverride = demo.title, hasCustomTitle = true,
-                        selectedModelKey = existing?.selectedModelKey?.takeIf(String::isNotBlank) ?: demo.selectedModelKey,
-                    )
+                val added = withContext(Dispatchers.Default) {
+                    showcaseCatalog.map { demo ->
+                        historyStore?.seedTemplateSession(
+                            sessionId = demo.id,
+                            messages = demo.messages,
+                            title = demo.title,
+                            defaultSelectedModelKey = demo.selectedModelKey,
+                        ) ?: false
+                    }.any { it }
                 }
                 historyStore?.setCurrentSession(
                     if (added) showcaseCatalog.first().id
@@ -1466,22 +1469,21 @@ fun IosComposeApp(
                 providerConfigs.addAll(com.zhousl.aether.data.ShowcaseCatalog.providers().filter { demo -> providerConfigs.none { it.id == demo.id } })
                 route = SharedRoute.Chat
             }
-            val persistedSessions = historyStore?.loadAll().orEmpty()
+            // Only the current session gates the first frame. Decoding every message of every
+            // session here used to keep the startup placeholder on screen for seconds with a
+            // large history; the remaining sessions are restored in the background below.
             sessionStates.clear()
             sessions.clear()
-            persistedSessions.forEach { persisted ->
-                val state = persisted.toSharedSessionUiState()
+            val persistedCurrentSessionId = historyStore?.loadCurrentSessionId()
+            val persistedCurrent = if (persistedCurrentSessionId == SharedDraftSessionId) {
+                null
+            } else {
+                withContext(Dispatchers.Default) { historyStore?.loadCurrent() }
+            }
+            val restored = persistedCurrent?.toSharedSessionUiState()?.also { state ->
                 sessionStates[state.id] = state
                 sessions += SharedConversationSummary(state.id, state.title)
-            }
-            val persistedCurrentSessionId = historyStore?.loadCurrentSessionId()
-            val restored = if (persistedCurrentSessionId == SharedDraftSessionId) {
-                initialSession
-            } else {
-                historyStore?.loadCurrent()?.let { sessionStates[it.id] }
-                    ?: sessionStates.values.firstOrNull()
-                    ?: initialSession
-            }
+            } ?: initialSession
             restored.selectedModelKey = resolveSharedConversationModelKey(
                 selectedModelKey = if (com.zhousl.aether.data.ShowcaseCatalog.isSession(restored.id)) restored.selectedModelKey else "",
                 defaultChatModelKey = sharedAppSettings.defaultChatModelKey,
@@ -1489,12 +1491,39 @@ fun IosComposeApp(
             )
             currentSession = restored
             sessionId = restored.id
-            if (!restored.isDraft) persistSession(restored)
-            historyStore?.load(restored.id)?.let { persisted ->
-                chromeEnabled = persisted.chromeEnabled && capabilities.alpineChrome
-                chromeManager.enabled = chromeEnabled
-            }
+            chromeEnabled = (persistedCurrent?.chromeEnabled ?: false) && capabilities.alpineChrome
+            chromeManager.enabled = chromeEnabled
             startupResolved = true
+            // Re-saving rewrites every message of the session, so keep it off the startup path.
+            if (!restored.isDraft) persistSession(restored)
+            // Titles come straight from the session table, so the sidebar is complete right away;
+            // message decoding for the other sessions continues below.
+            val storedTitles = historyStore?.loadSessionTitles().orEmpty()
+            val storedIds = storedTitles.mapTo(mutableSetOf()) { it.first }
+            // Keep sessions created while history was loading; otherwise follow the stored order.
+            val createdMeanwhile = sessions.filter { it.id !in storedIds }
+            val summariesById = sessions.associateBy(SharedConversationSummary::id)
+            sessions.clear()
+            sessions += createdMeanwhile
+            sessions += storedTitles.map { (id, title) ->
+                summariesById[id] ?: SharedConversationSummary(id, title)
+            }
+            val remainingSessions = withContext(Dispatchers.Default) {
+                historyStore?.loadAll().orEmpty()
+            }
+            remainingSessions.forEach { persisted ->
+                // Skip sessions deleted (or already opened on demand) while history was loading.
+                if (persisted.id !in sessionStates && sessions.any { it.id == persisted.id }) {
+                    sessionStates[persisted.id] = persisted.toSharedSessionUiState().also { state ->
+                        // A rename made while this session was still loading wins.
+                        val listedTitle = sessions.first { it.id == persisted.id }.title
+                        if (listedTitle != state.title) {
+                            state.title = listedTitle
+                            state.hasCustomTitle = true
+                        }
+                    }
+                }
+            }
         }
 
         LaunchedEffect(route) {
@@ -3911,7 +3940,21 @@ fun IosComposeApp(
                     onSessionSelected = { selectedId ->
                         if (selectedId != sessionId) {
                             showStarterPromptHint = false
-                            sessionStates[selectedId]?.let(::showSession)
+                            val loaded = sessionStates[selectedId]
+                            if (loaded != null) {
+                                showSession(loaded)
+                            } else {
+                                // Listed but not decoded yet: background restore is still running.
+                                appScope.launch {
+                                    val persisted = withContext(Dispatchers.Default) {
+                                        historyStore?.load(selectedId)
+                                    } ?: return@launch
+                                    if (sessions.none { it.id == selectedId }) return@launch
+                                    val state = sessionStates[selectedId]
+                                        ?: persisted.toSharedSessionUiState().also { sessionStates[selectedId] = it }
+                                    showSession(state)
+                                }
+                            }
                         }
                     },
                     onRenameSession = { selectedId, title ->
