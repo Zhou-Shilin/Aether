@@ -16,6 +16,25 @@ import kotlinx.serialization.json.put
 
 class SharedConversationMessagesTest {
     @Test
+    fun retryFourthTurnKeepsOnlyAncestorsAndPreservesBothBranches() {
+        val original = (1..5).flatMap { turn ->
+            listOf(
+                SharedChatMessage(id = "u$turn", text = "user $turn", fromUser = true),
+                SharedChatMessage(id = "a$turn", text = "answer $turn", fromUser = false, responseGroupId = "u$turn"),
+            )
+        }
+        val plan = buildSharedAssistantRetryPlan(original, "a4")!!
+        val replacement = plan.userMessage.copy(id = "u4-retry")
+        val branched = createEditedSharedMessageBranch(original, plan.userMessage.id, replacement)!!
+        assertEquals(listOf("u1", "a1", "u2", "a2", "u3", "a3", "u4-retry"), branched.map { it.id })
+        assertEquals("a3", plan.piBranchMessageId)
+        val completed = branched + SharedChatMessage(id = "a4-retry", text = "new answer", fromUser = false)
+        val restored = switchSharedUserMessageBranch(completed, "u4-retry", 0)!!
+        assertEquals(original.map { it.id }, restored.map { it.id })
+        assertEquals(completed.map { it.id }, switchSharedUserMessageBranch(restored, "u4", 1)!!.map { it.id })
+    }
+
+    @Test
     fun finalReasoningFallbackPrecedesAlreadyStreamedAnswer() {
         val message = SharedChatMessage(text = "", fromUser = false)
             .appendAssistantTextDelta("Answer")

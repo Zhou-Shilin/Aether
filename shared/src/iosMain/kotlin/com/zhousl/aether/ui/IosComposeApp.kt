@@ -3788,14 +3788,24 @@ fun IosComposeApp(
                         if (currentSession.isWorking) return@SharedChatScreen
                         val plan = buildSharedAssistantRetryPlan(messages, messageId)
                             ?: return@SharedChatScreen
+                        val replacement = plan.userMessage.copy(
+                            id = platformRandomUuid(),
+                            createdAtMillis = platformCurrentTimeMillis(),
+                            userBranches = emptyList(),
+                            selectedUserBranchIndex = 0,
+                            branchIndex = 0,
+                            branchCount = 1,
+                        )
+                        val branched = createEditedSharedMessageBranch(messages, plan.userMessage.id, replacement)
+                            ?: return@SharedChatScreen
                         currentSession.editingMessageId = ""
                         currentSession.input = ""
                         messages.clear()
-                        messages.addAll(plan.retainedMessages)
+                        messages.addAll(branched)
                         startChatTurn(
-                            rawValue = plan.userMessage.text,
-                            attachments = plan.userMessage.attachments,
-                            retryResponseGroupId = plan.userMessage.id,
+                            rawValue = replacement.text,
+                            attachments = replacement.attachments,
+                            retryResponseGroupId = replacement.id,
                             piBranchMessageId = plan.piBranchMessageId,
                             resetPiBranchWhenMissing = true,
                         )

@@ -2908,6 +2908,9 @@ async function navigateNativeAgentSession(id: string, payload: JsonObject): Prom
   const entryId = asString(payload.entry_id).trim();
   if (!entryId && asBoolean(payload.reset, false)) {
     state.session.sessionManager.resetLeaf();
+    // Moving the JSONL leaf alone leaves the Agent's in-memory transcript on
+    // the abandoned branch. Rebuild it before retrying/editing the first turn.
+    state.session.agent.state.messages = state.session.sessionManager.buildSessionProjection().messages;
     return { ...nativeSessionPayload(state), navigation: { reset: true } };
   }
   if (!entryId) throw new Error("entry_id is required for Pi session navigation.");

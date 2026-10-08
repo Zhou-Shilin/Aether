@@ -909,6 +909,7 @@ final class AetherRuntimeHost: NSObject, NativeRuntimeHost, UIDocumentPickerDele
 
     func exportGuestFile(
         path: String,
+        openWithOtherApp: Bool = false,
         completion: @escaping (Result<Void, Error>) -> Void
     ) {
         operations.async { [self] in
@@ -938,6 +939,20 @@ final class AetherRuntimeHost: NSObject, NativeRuntimeHost, UIDocumentPickerDele
                     guard let presenter = topViewController() else {
                         try? FileManager.default.removeItem(at: directory)
                         completion(.failure(RuntimeHostError.operationFailed("Unable to open the file exporter.")))
+                        return
+                    }
+                    if openWithOtherApp {
+                        let controller = UIActivityViewController(activityItems: [source], applicationActivities: nil)
+                        controller.completionWithItemsHandler = { _, _, _, error in
+                            try? FileManager.default.removeItem(at: directory)
+                            if let error { completion(.failure(error)) }
+                            else { completion(.success(())) }
+                        }
+                        if let popover = controller.popoverPresentationController {
+                            popover.sourceView = presenter.view
+                            popover.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.maxY - 1, width: 1, height: 1)
+                        }
+                        presenter.present(controller, animated: true)
                         return
                     }
                     guestFileExportCompletion = completion

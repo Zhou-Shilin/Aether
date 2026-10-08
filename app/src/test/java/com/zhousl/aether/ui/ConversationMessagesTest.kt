@@ -7,6 +7,24 @@ import org.junit.Test
 
 class ConversationMessagesTest {
     @Test
+    fun retryFourthTurnSendsOnlyItsAncestorsAndRestoresOriginalTail() {
+        val original = (1..5).flatMap { turn ->
+            listOf(
+                ChatMessage(id = "u$turn", author = MessageAuthor.User, text = "user $turn"),
+                ChatMessage(id = "a$turn", author = MessageAuthor.Agent, text = "answer $turn"),
+            )
+        }
+        val retry = original[6].copy(id = "u4-retry")
+        val branched = createEditedMessageBranch(original, "u4", retry)!!
+        assertEquals(listOf("u1", "a1", "u2", "a2", "u3", "a3", "u4-retry"), branched.map { it.id })
+        assertEquals("a3", branched.piBranchMessageIdBeforeLastUser())
+        val completed = branched + ChatMessage(id = "a4-retry", author = MessageAuthor.Agent, text = "new answer")
+        val restored = switchMessageBranch(completed, "u4-retry", -1)!!
+        assertEquals(original.map { it.id }, restored.map { it.id })
+        assertEquals(completed.map { it.id }, switchMessageBranch(restored, "u4", 1)!!.map { it.id })
+    }
+
+    @Test
     fun bashHighlightingPreservesLongQuotedCommands() {
         val command = "sh -c \"" + "echo test; ".repeat(30_000) + "\""
         assertEquals("$ $command", highlightBashCommand(command).text)

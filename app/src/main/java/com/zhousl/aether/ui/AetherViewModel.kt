@@ -2265,81 +2265,17 @@ class AetherViewModel(
         messageId: String,
     ) {
         if (sessionExecutionManager.isSessionRunning(sessionId)) return
-
-        val snapshot = _uiState.value
-        var request: SessionTurnRequest? = null
-        var updatedSessionForPersistence: ChatSession? = null
-        var piBranchMessageId: String? = null
-
-        _uiState.update { current ->
-            val sessionIndex = current.sessions.indexOfFirst { it.id == sessionId }
-            if (sessionIndex < 0) return@update current
-
-            val session = current.sessions[sessionIndex]
-            val messageIndex = session.messages.indexOfFirst {
-                it.id == messageId && it.author == MessageAuthor.Agent
-            }
-            if (messageIndex < 0) return@update current
-
-            val trimFromIndex = session.messages.resolveConversationTrimIndex(messageIndex)
-            val trimmedMessages = session.messages.take(trimFromIndex)
-            if (trimmedMessages.lastOrNull()?.author != MessageAuthor.User) {
-                return@update current
-            }
-            piBranchMessageId = trimmedMessages.piBranchMessageIdBeforeLastUser()
-
-            request = SessionTurnRequest(
-                sessionId = sessionId,
-                settings = resolveModelSettings(
-                    baseSettings = snapshot.settings,
-                    providerConfigs = snapshot.providerConfigs,
-                    preferredModelKey = session.selectedModelKey,
-                    fallbackModelKey = resolveDefaultChatModelKey(snapshot.settings, snapshot.providerConfigs),
-                ),
-                requestMessages = trimmedMessages,
-                selectedSkillIds = session.selectedSkillIds,
-                activeSkills = session.activeSkills,
-                activeMcpServerIds = session.activeMcpServerIds,
-                agentModeEnabled = session.agentModeEnabled,
-                chromeEnabled = session.chromeEnabled,
-                providerConfigs = snapshot.providerConfigs,
-            )
-            val updatedSessions = current.sessions.toMutableList().apply {
-                removeAt(sessionIndex)
-                val updatedSession = session.withMessages(trimmedMessages)
-                updatedSessionForPersistence = updatedSession
-                add(0, updatedSession)
-            }
-
-            current.copy(
-                sessions = updatedSessions,
-                currentSessionId = sessionId,
-                currentScreen = AppScreen.Chat,
-                draftInput = "",
-                draftAttachments = emptyList(),
-                draftWorkspaceId = null,
-                editingSessionId = null,
-                editingMessageId = null,
-            )
+        val session = _uiState.value.sessions.firstOrNull { it.id == sessionId } ?: return
+        val assistantIndex = session.messages.indexOfFirst {
+            it.id == messageId && it.author == MessageAuthor.Agent
         }
-
-        val turnRequest = request ?: return
-        updatedSessionForPersistence?.let { session ->
-            persistSessionSnapshot(
-                session = session,
-                currentSessionId = sessionId,
-                moveToFront = true,
-            )
-        }
-        viewModelScope.launch {
-            navigatePiBranch(
-                sessionId = sessionId,
-                aetherMessageId = piBranchMessageId,
-                settings = turnRequest.settings,
-                resetWhenMissing = true,
-            )
-            sessionExecutionManager.startTurn(turnRequest)
-        }
+        if (assistantIndex < 0) return
+        val trimIndex = session.messages.resolveConversationTrimIndex(assistantIndex)
+        val user = session.messages.take(trimIndex).lastOrNull()
+            ?.takeIf { it.author == MessageAuthor.User } ?: return
+        // Retry forks at the user node, preserving the original reply and its
+        // descendants for the existing branch arrows.
+        retryUserMessage(sessionId, user.id)
     }
 
     fun retryUserMessage(

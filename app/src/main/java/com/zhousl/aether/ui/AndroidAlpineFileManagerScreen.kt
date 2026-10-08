@@ -2,7 +2,6 @@ package com.zhousl.aether.ui
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
@@ -117,7 +116,7 @@ internal fun AndroidAlpineFileManagerScreen(
     var draftName by remember { mutableStateOf("") }
     var editorFile by remember { mutableStateOf<AndroidAlpineFileEntry?>(null) }
     var editorContent by remember { mutableStateOf("") }
-    var imagePreview by remember { mutableStateOf<ByteArray?>(null) }
+    var filePreview by remember { mutableStateOf<AlpineFilePreview?>(null) }
     var pendingDownload by remember { mutableStateOf<AndroidAlpineFileEntry?>(null) }
 
     fun refresh() {
@@ -193,20 +192,42 @@ internal fun AndroidAlpineFileManagerScreen(
             return
         }
         scope.launch {
-            runCatching { runtime.fileSystem.read(entry.path, 8L * 1024 * 1024) }
-                .onSuccess { bytes ->
-                    if (entry.name.substringAfterLast('.', "").lowercase() in androidImageExtensions) {
-                        imagePreview = bytes
-                    } else {
-                        editorContent = bytes.decodeToString()
-                        editorFile = entry
+            loading = true
+            runCatching {
+                val prefix = runtime.fileSystem.readPrefix(entry.path, 4096)
+                val kind = alpinePreviewKind(entry.name, prefix)
+                val text = if (kind == AlpinePreviewKind.Text && entry.size <= 8L * 1024 * 1024) {
+                    val bytes = runtime.fileSystem.read(entry.path, 8L * 1024 * 1024)
+                    runCatching { bytes.decodeToString(throwOnInvalidSequence = true) }.getOrNull()
+                } else null
+                if (text != null) {
+                    editorContent = text
+                    editorFile = entry
+                } else {
+                    require(entry.size <= 128L * 1024 * 1024) { "File is too large to preview (maximum 128 MB)." }
+                    val directory = java.io.File(context.cacheDir, "assistant-local-open/alpine-preview-${java.util.UUID.randomUUID()}")
+                    val file = java.io.File(directory, entry.name)
+                    try {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            check(directory.mkdirs()) { "Unable to prepare preview." }
+                            file.outputStream().use { runtime.exportFile(entry.path, it) }
+                        }
+                        filePreview = AlpineFilePreview(entry.name, file, if (kind == AlpinePreviewKind.Text) AlpinePreviewKind.External else kind)
+                    } catch (failure: Throwable) {
+                        directory.deleteRecursively()
+                        throw failure
                     }
                 }
-                .onFailure { error = it.message ?: "Unable to open file." }
+            }.onFailure { error = it.message ?: "Unable to open file." }
+            loading = false
         }
     }
 
     fun navigateBack(): Boolean {
+        if (filePreview != null) {
+            filePreview = null
+            return true
+        }
         if (editorFile != null) {
             editorFile = null
             return true
@@ -221,6 +242,11 @@ internal fun AndroidAlpineFileManagerScreen(
 
     BackHandler { if (!navigateBack()) onBack() }
     LaunchedEffect(path) { refresh() }
+
+    filePreview?.let { preview ->
+        AlpineFilePreviewScreen(preview, onBack = { filePreview = null })
+        return
+    }
 
     if (editorFile != null) {
         SoraEditorScreen(
@@ -378,6 +404,34 @@ internal fun AndroidAlpineFileManagerScreen(
                         onClick = { open(entry) },
                         leadingIcon = { Icon(if (entry.isDirectory) Icons.Rounded.Folder else Icons.Rounded.Description, null) },
                     )
+                    if (!entry.isDirectory) {
+                        DropdownMenuItem(
+                            text = { Text("Open with another app") },
+                            onClick = {
+                                selected = null
+                                scope.launch {
+                                    loading = true
+                                    val directory = java.io.File(context.cacheDir, "assistant-local-open/alpine-open-${java.util.UUID.randomUUID()}")
+                                    runCatching {
+                                        val file = java.io.File(directory, entry.name)
+                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                            directory.parentFile?.listFiles()?.filter {
+                                                it.name.startsWith("alpine-open-") && System.currentTimeMillis() - it.lastModified() > 86_400_000
+                                            }?.forEach { it.deleteRecursively() }
+                                            check(directory.mkdirs()) { "Unable to prepare file." }
+                                            file.outputStream().use { runtime.exportFile(entry.path, it) }
+                                        }
+                                        openAlpineFileWithOtherApp(context, file)
+                                    }.onFailure {
+                                        directory.deleteRecursively()
+                                        error = it.message ?: "Unable to open file."
+                                    }
+                                    loading = false
+                                }
+                            },
+                            leadingIcon = { Icon(Icons.Rounded.Description, null) },
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text("Rename") },
                         onClick = { draftName = entry.name; dialog = AndroidFileDialog.Rename },
@@ -460,16 +514,6 @@ internal fun AndroidAlpineFileManagerScreen(
             },
             dismissButton = { TextButton(onClick = { dialog = AndroidFileDialog.None; selected = null }) { Text("Cancel") } },
         )
-    }
-
-    imagePreview?.let { bytes ->
-        Dialog(onDismissRequest = { imagePreview = null }) {
-            val bitmap = remember(bytes) { BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }
-            androidx.compose.material3.Surface(shape = RoundedCornerShape(8.dp), color = AetherSurface) {
-                if (bitmap == null) Text("Unable to decode image", modifier = Modifier.padding(24.dp))
-                else Image(bitmap, null, Modifier.fillMaxWidth().padding(12.dp), contentScale = ContentScale.Fit)
-            }
-        }
     }
 
     error?.let { message ->
@@ -572,7 +616,6 @@ private fun SoraEditorScreen(
     }
 }
 
-private val androidImageExtensions = setOf("png", "jpg", "jpeg", "gif", "webp", "bmp")
 
 private suspend fun importAndroidDocument(
     context: Context,

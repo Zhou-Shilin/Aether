@@ -1480,6 +1480,61 @@ test("rehydrates a persisted AgentSession before navigation", async (t) => {
   assert.equal(navigation.session_leaf_id, first.session_leaf_id);
 });
 
+test("retry and edit navigate the API transcript and preserve abandoned branches", async (t) => {
+  const workspace = await mkdtemp(join(tmpdir(), "aether-retry-tree-"));
+  t.after(() => rm(workspace, { recursive: true, force: true }));
+  const requests = [];
+  const server = createServer((request, response) => {
+    const chunks = [];
+    request.on("data", (chunk) => chunks.push(chunk));
+    request.on("end", () => {
+      requests.push(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      writeSuccessfulChatCompletion(response, `answer-${requests.length}`, "branch-model");
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const config = {
+    provider_type: "openai_compatible", provider_config_id: "branch-test",
+    pi_provider_id: "aether-branch-test", pi_api: "openai-completions",
+    model_id: "branch-model", base_url: `http://127.0.0.1:${server.address().port}/v1`,
+    api_key: "test-key", reasoning: false, max_retries: 0,
+  };
+  const client = new BridgeClient();
+  const payload = (messages) => ({
+    ...turnPayload(`retry-tree-${workspace.split("/").at(-1)}`, messages, config), workspace_directory: workspace,
+  });
+  const replies = [];
+  for (let turn = 1; turn <= 5; turn++) {
+    replies.push(await client.request(`original-${turn}`, "run_turn", payload([userMessage(`user-${turn}`)])));
+  }
+  const transcript = () => requests.at(-1).messages
+    .filter((message) => message.role === "user" || message.role === "assistant")
+    .map((message) => [message.role, typeof message.content === "string"
+      ? message.content : message.content.map((part) => part.text ?? "").join("")]);
+  await client.request("retry-fourth-branch", "navigate_session", {
+    ...payload([]), entry_id: replies[2].session_leaf_id,
+  });
+  await client.request("retry-fourth", "run_turn", payload([userMessage("user-4")]));
+  assert.deepEqual(transcript(), [
+    ["user", "user-1"], ["assistant", "answer-1"],
+    ["user", "user-2"], ["assistant", "answer-2"],
+    ["user", "user-3"], ["assistant", "answer-3"], ["user", "user-4"],
+  ]);
+  await client.request("restore-original-branch", "navigate_session", {
+    ...payload([]), entry_id: replies[4].session_leaf_id,
+  });
+  await client.request("continue-original", "run_turn", payload([userMessage("user-6")]));
+  assert.ok(transcript().some(([role, text]) => role === "assistant" && text === "answer-5"));
+  assert.ok(!transcript().some(([, text]) => text === "answer-6"));
+  await client.request("retry-first-branch", "navigate_session", { ...payload([]), reset: true });
+  await client.request("retry-first", "run_turn", payload([userMessage("user-1")]));
+  assert.deepEqual(transcript(), [["user", "user-1"]]);
+  await client.request("edit-first-branch", "navigate_session", { ...payload([]), reset: true });
+  await client.request("edit-first", "run_turn", payload([userMessage("edited first")]));
+  assert.deepEqual(transcript(), [["user", "edited first"]]);
+});
+
 test("imports validated Pi JSONL into a relocated session file", async (t) => {
   const home = await mkdtemp(join(tmpdir(), "aether-jsonl-import-"));
   t.after(() => rm(home, { recursive: true, force: true }));

@@ -2,6 +2,7 @@ import Runestone
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
+import QuickLook
 
 struct AlpineFileEntry: Identifiable, Hashable {
     var id: String { path }
@@ -147,10 +148,10 @@ private final class AlpineDirectoryModel: ObservableObject {
         }
     }
 
-    func download(_ entry: AlpineFileEntry) {
+    func download(_ entry: AlpineFileEntry, openWithOtherApp: Bool = false) {
         guard !entry.isDirectory, !isExporting else { return }
         isExporting = true
-        host.exportGuestFile(path: entry.path) { [weak self] result in
+        host.exportGuestFile(path: entry.path, openWithOtherApp: openWithOtherApp) { [weak self] result in
             guard let self else { return }
             self.isExporting = false
             if case let .failure(error) = result {
@@ -225,6 +226,23 @@ private struct AlpineDirectoryView: View {
                         AlpineFileRow(entry: entry)
                     }
                     .contextMenu {
+                        NavigationLink {
+                            if entry.isDirectory {
+                                AlpineDirectoryView(host: model.host, path: entry.path)
+                            } else {
+                                AlpineFileView(host: model.host, entry: entry)
+                            }
+                        } label: {
+                            Label("Open", systemImage: entry.isDirectory ? "folder" : "doc")
+                        }
+                        if !entry.isDirectory {
+                            Button {
+                                model.download(entry, openWithOtherApp: true)
+                            } label: {
+                                Label("Open with Another App", systemImage: "square.and.arrow.up")
+                            }
+                            .disabled(model.isExporting)
+                        }
                         Button {
                             renamedEntry = entry
                             draftName = entry.name
@@ -408,15 +426,31 @@ private struct AlpineFileRow: View {
     }
 }
 
+private func shouldPreviewAlpineFile(name: String, data: Data) -> Bool {
+    let extensionName = URL(fileURLWithPath: name).pathExtension.lowercased()
+    let type = UTType(filenameExtension: extensionName)
+    let isPDF = extensionName == "pdf" || data.prefix(1024).range(of: Data("%PDF-".utf8)) != nil
+    let documentExtensions: Set<String> = ["doc", "docx", "xls", "xlsx", "ppt", "pptx", "rtf", "odt", "ods", "odp", "pages", "numbers", "key", "usdz"]
+    return isPDF || type?.conforms(to: .image) == true || type?.conforms(to: .audio) == true ||
+        type?.conforms(to: .movie) == true || documentExtensions.contains(extensionName)
+}
+
 @MainActor
 private final class AlpineFileModel: ObservableObject {
     @Published var data: Data?
+    @Published var previewURL: URL?
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var isSaving = false
+    @Published var isOpeningExternally = false
 
     let host: AetherRuntimeHost
     let entry: AlpineFileEntry
+    private var previewDirectory: URL?
+    var allowsTextEditing: Bool {
+        guard let data else { return false }
+        return data.count <= 8 * 1024 * 1024 && !shouldPreviewAlpineFile(name: entry.name, data: data)
+    }
 
     init(host: AetherRuntimeHost, entry: AlpineFileEntry) {
         self.host = host
@@ -425,14 +459,50 @@ private final class AlpineFileModel: ObservableObject {
 
     func load() {
         isLoading = true
-        host.readGuestFile(path: entry.path) { [weak self] result in
+        host.readGuestFile(path: entry.path, maximumBytes: 128 * 1024 * 1024) { [weak self] result in
             guard let self else { return }
-            self.isLoading = false
             switch result {
-            case let .success(data): self.data = data
-            case let .failure(error): self.errorMessage = error.localizedDescription
+            case let .success(data):
+                let name = self.entry.name
+                Task { [weak self] in
+                    let staged = await Task.detached(priority: .userInitiated) { () -> (URL, URL)? in
+                        let extensionName = URL(fileURLWithPath: name).pathExtension.lowercased()
+                        let isPDF = data.prefix(1024).range(of: Data("%PDF-".utf8)) != nil
+                        guard shouldPreviewAlpineFile(name: name, data: data) else { return nil }
+                        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("alpine-preview-\(UUID().uuidString)", isDirectory: true)
+                        let filename = isPDF && extensionName != "pdf" ? name + ".pdf" : name
+                        let url = directory.appendingPathComponent(filename)
+                        do {
+                            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                            try data.write(to: url, options: .atomic)
+                            return (directory, url)
+                        } catch {
+                            try? FileManager.default.removeItem(at: directory)
+                            return nil
+                        }
+                    }.value
+                    guard let self else {
+                        if let staged { try? FileManager.default.removeItem(at: staged.0) }
+                        return
+                    }
+                    if let staged {
+                        self.previewDirectory = staged.0
+                        if QLPreviewController.canPreview(staged.1 as NSURL) {
+                            self.previewURL = staged.1
+                        }
+                    }
+                    self.data = data
+                    self.isLoading = false
+                }
+            case let .failure(error):
+                self.isLoading = false
+                self.errorMessage = error.localizedDescription
             }
         }
+    }
+
+    deinit {
+        if let previewDirectory { try? FileManager.default.removeItem(at: previewDirectory) }
     }
 
     func save(text: String, completion: @escaping (Bool) -> Void) {
@@ -449,6 +519,15 @@ private final class AlpineFileModel: ObservableObject {
             }
         }
     }
+
+    func openWithOtherApp() {
+        guard !isOpeningExternally else { return }
+        isOpeningExternally = true
+        host.exportGuestFile(path: entry.path, openWithOtherApp: true) { [weak self] result in
+            self?.isOpeningExternally = false
+            if case let .failure(error) = result { self?.errorMessage = error.localizedDescription }
+        }
+    }
 }
 
 private struct AlpineFileView: View {
@@ -462,6 +541,8 @@ private struct AlpineFileView: View {
         Group {
             if model.isLoading || model.data == nil && model.errorMessage == nil {
                 ProgressView()
+            } else if let url = model.previewURL {
+                AlpineQuickLookPreview(url: url)
             } else if let data = model.data, let image = UIImage(data: data) {
                 ScrollView([.horizontal, .vertical]) {
                     Image(uiImage: image)
@@ -470,18 +551,28 @@ private struct AlpineFileView: View {
                         .padding()
                 }
                 .background(Color(uiColor: .systemBackground))
-            } else if let data = model.data, let text = String(data: data, encoding: .utf8) {
+            } else if let data = model.data, !data.contains(0),
+                      model.allowsTextEditing, let text = String(data: data, encoding: .utf8) {
                 RunestoneEditorScreen(model: model, initialText: text)
             } else {
                 ContentUnavailableView(
                     "Preview Unavailable",
                     systemImage: "doc.questionmark",
-                    description: Text("This file is not UTF-8 text or a supported image.")
+                    description: Text("This format cannot be previewed on this device. You can download it from the file menu.")
                 )
             }
         }
         .navigationTitle(model.entry.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { model.openWithOtherApp() } label: {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .accessibilityLabel("Open with Another App")
+                .disabled(model.isOpeningExternally)
+            }
+        }
         .task { if model.data == nil { model.load() } }
         .alert("Unable to Open File", isPresented: Binding(
             get: { model.errorMessage != nil },
@@ -490,6 +581,34 @@ private struct AlpineFileView: View {
             Button("OK") { model.errorMessage = nil }
         } message: {
             Text(model.errorMessage ?? "Unknown error")
+        }
+    }
+}
+
+private struct AlpineQuickLookPreview: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeCoordinator() -> Coordinator { Coordinator(url: url) }
+
+    func makeUIViewController(context: Context) -> QLPreviewController {
+        let controller = QLPreviewController()
+        controller.dataSource = context.coordinator
+        return controller
+    }
+
+    func updateUIViewController(_ controller: QLPreviewController, context: Context) {
+        if context.coordinator.url != url {
+            context.coordinator.url = url
+            controller.reloadData()
+        }
+    }
+
+    final class Coordinator: NSObject, QLPreviewControllerDataSource {
+        var url: URL
+        init(url: URL) { self.url = url }
+        func numberOfPreviewItems(in controller: QLPreviewController) -> Int { 1 }
+        func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
+            url as NSURL
         }
     }
 }
