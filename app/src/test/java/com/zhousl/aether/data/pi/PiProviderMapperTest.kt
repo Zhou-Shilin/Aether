@@ -16,6 +16,16 @@ import org.junit.Test
 
 class PiProviderMapperTest {
     @Test
+    fun serviceTierIsTrimmedAndBlankIsOmitted() {
+        assertFalse(AppSettings().toPiModelConfig().toJson().has("service_tier"))
+        assertFalse(AppSettings(serviceTier = "  ").toPiModelConfig().toJson().has("service_tier"))
+        for (tier in listOf("fast", "ultrafast", "priority")) {
+            val config = AppSettings(serviceTier = " $tier ").toPiModelConfig().toJson()
+            assertEquals(tier, config.getString("service_tier"))
+        }
+    }
+
+    @Test
     fun builtInOpenAiMapsDirectlyToPiCatalog() {
         val config = AppSettings(
             providerConfigId = "openai-config",

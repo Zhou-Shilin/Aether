@@ -25,6 +25,7 @@ import com.zhousl.aether.ui.MessageAuthor
 import com.zhousl.aether.ui.ReasoningSummaryChunk
 import com.zhousl.aether.ui.ReasoningTrace
 import com.zhousl.aether.ui.sanitizedForReasoningOff
+import com.zhousl.aether.ui.withAssistantFinalTextFallback
 import com.zhousl.aether.ui.syncActiveBranches
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -165,17 +166,6 @@ private data class AssistantResponseIdentity(
     fun messageIdFor(blockId: String): String = "$messageIdPrefix-$blockId"
 }
 
-private data class ProviderRequestCheckpoint(
-    val pendingToolInvocations: List<ChatToolInvocation>,
-    val pendingResponseBlocks: List<AssistantResponseBlock>,
-    val pendingAssistantText: String,
-    val phoneUseCommentary: AssistantResponseBlock.Text?,
-    val activeReasoningBlockId: String?,
-    val activeDirectReasoningSummaryChunkId: String?,
-    val reasoningFirstSummarySubmitted: Boolean,
-    val reasoningLastSubmittedCharIndex: Int,
-    val reasoningLastTimedSummaryAtMillis: Long,
-)
 
 class SessionExecutionManager(
     private val application: Application,
@@ -670,7 +660,6 @@ class SessionExecutionManager(
                 alpineWorkspaceDirectory
             }
             val reasoningTraceToolRoutingEnabled = request.settings.supportsVisibleReasoningTrace()
-            var providerRequestCheckpoint: ProviderRequestCheckpoint? = null
             val emitToolEvent: suspend (AgentToolEvent) -> Unit = { event ->
                 if (!handle.pauseRequested) {
                     handleToolEvent(
@@ -733,7 +722,6 @@ class SessionExecutionManager(
                 onToolProgress = emitToolEvent,
                 onAssistantReasoningDelta = { delta ->
                     if (handle.pauseRequested) return@runTurn
-                    if (request.settings.reasoningEffort == "off") return@runTurn
                     if (delta.isEmpty()) return@runTurn
                     handle.finishDirectReasoningSummaryChunk()
                     appendReasoningDelta(
@@ -743,7 +731,6 @@ class SessionExecutionManager(
                 },
                 onAssistantReasoningSummaryDelta = { delta ->
                     if (handle.pauseRequested) return@runTurn
-                    if (request.settings.reasoningEffort == "off") return@runTurn
                     if (delta.isEmpty()) return@runTurn
                     appendDirectReasoningSummaryDelta(
                         handle = handle,
@@ -785,26 +772,11 @@ class SessionExecutionManager(
                         }
                     }
                 },
-                onAssistantRequestStarted = {
-                    if (!handle.pauseRequested) {
-                        val current = _executionStates.value[handle.sessionId]
-                            ?: SessionExecutionState(sessionId = handle.sessionId)
-                        providerRequestCheckpoint = handle.providerRequestCheckpoint(current)
-                    }
-                },
                 onAssistantResponseReset = {
                     if (!handle.pauseRequested) {
-                        providerRequestCheckpoint?.let { checkpoint ->
-                            handle.restoreProviderRequestCheckpoint(checkpoint)
-                            updateExecutionState(handle.sessionId) { current ->
-                                current.copy(
-                                    pendingToolInvocations = checkpoint.pendingToolInvocations,
-                                    pendingResponseBlocks = checkpoint.pendingResponseBlocks,
-                                    pendingAssistantText = checkpoint.pendingAssistantText,
-                                    phoneUseCommentary = checkpoint.phoneUseCommentary,
-                                )
-                            }
-                        }
+                        // A retry starts a new visible attempt; never roll back text already shown.
+                        handle.finishDirectReasoningSummaryChunk()
+                        completeActiveReasoning(handle, ReasoningCompletionTrigger.BodyStarted)
                     }
                 },
                 onStreamingStatus = { status ->
@@ -888,11 +860,11 @@ class SessionExecutionManager(
                         totalTokens = (estimatedTokenUsage.totalTokens ?: 0L) + estimatedOutputTokens,
                     )
                     val responseBlocks = currentAssistantResponseBlocks(handle.sessionId).let { blocks ->
-                        if (request.settings.reasoningEffort == "off") {
-                            blocks.sanitizedForReasoningOff()
-                        } else {
-                            blocks
-                        }
+                        // "off" controls the provider request, not retention of emitted reasoning.
+                        if (request.settings.reasoningEffort == "off" && blocks.none {
+                                it is AssistantResponseBlock.Reasoning &&
+                                    (it.trace.rawText.isNotBlank() || it.trace.chunks.isNotEmpty())
+                            }) blocks.sanitizedForReasoningOff() else blocks
                     }
                     val visibleThoughtDurationMillis = thoughtDurationMillis.takeIf {
                         request.settings.reasoningEffort != "off"
@@ -933,11 +905,11 @@ class SessionExecutionManager(
                 },
                 onFailure = { throwable ->
                     val responseBlocks = currentAssistantResponseBlocks(handle.sessionId).let { blocks ->
-                        if (request.settings.reasoningEffort == "off") {
-                            blocks.sanitizedForReasoningOff()
-                        } else {
-                            blocks
-                        }
+                        // "off" controls the provider request, not retention of emitted reasoning.
+                        if (request.settings.reasoningEffort == "off" && blocks.none {
+                                it is AssistantResponseBlock.Reasoning &&
+                                    (it.trace.rawText.isNotBlank() || it.trace.chunks.isNotEmpty())
+                            }) blocks.sanitizedForReasoningOff() else blocks
                     }
                     val visibleThoughtDurationMillis = thoughtDurationMillis.takeIf {
                         request.settings.reasoningEffort != "off"
@@ -2720,18 +2692,8 @@ class SessionExecutionManager(
     ): List<AssistantResponseBlock> {
         if (finalText.isBlank()) return normalizeAssistantResponseBlocks(blocks)
         val normalized = normalizeAssistantResponseBlocks(blocks)
-        val lastTextIndex = normalized.indexOfLast { it is AssistantResponseBlock.Text }
-        if (lastTextIndex < 0) {
-            return normalized + AssistantResponseBlock.Text(
-                id = newBlockId(),
-                text = finalText,
-            )
-        }
-        val lastTextBlock = normalized[lastTextIndex] as AssistantResponseBlock.Text
-        if (lastTextBlock.text == finalText) return normalized
-        return normalized.toMutableList().apply {
-            set(lastTextIndex, lastTextBlock.copy(text = finalText))
-        }
+        // The final provider payload is a fallback, never a replacement for visible output.
+        return normalized.withAssistantFinalTextFallback(finalText, newBlockId)
     }
 
     private fun normalizeAssistantResponseBlocks(
@@ -3077,31 +3039,6 @@ class SessionExecutionManager(
             reasoningFirstSummarySubmitted = false
             reasoningLastSubmittedCharIndex = 0
             reasoningLastTimedSummaryAtMillis = 0L
-        }
-
-        fun providerRequestCheckpoint(state: SessionExecutionState): ProviderRequestCheckpoint =
-            synchronized(lock) {
-                ProviderRequestCheckpoint(
-                    pendingToolInvocations = state.pendingToolInvocations,
-                    pendingResponseBlocks = state.pendingResponseBlocks,
-                    pendingAssistantText = state.pendingAssistantText,
-                    phoneUseCommentary = state.phoneUseCommentary,
-                    activeReasoningBlockId = activeReasoningBlockId,
-                    activeDirectReasoningSummaryChunkId = activeDirectReasoningSummaryChunkId,
-                    reasoningFirstSummarySubmitted = reasoningFirstSummarySubmitted,
-                    reasoningLastSubmittedCharIndex = reasoningLastSubmittedCharIndex,
-                    reasoningLastTimedSummaryAtMillis = reasoningLastTimedSummaryAtMillis,
-                )
-            }
-
-        fun restoreProviderRequestCheckpoint(checkpoint: ProviderRequestCheckpoint) {
-            synchronized(lock) {
-                activeReasoningBlockId = checkpoint.activeReasoningBlockId
-                activeDirectReasoningSummaryChunkId = checkpoint.activeDirectReasoningSummaryChunkId
-                reasoningFirstSummarySubmitted = checkpoint.reasoningFirstSummarySubmitted
-                reasoningLastSubmittedCharIndex = checkpoint.reasoningLastSubmittedCharIndex
-                reasoningLastTimedSummaryAtMillis = checkpoint.reasoningLastTimedSummaryAtMillis
-            }
         }
 
         fun retainedMessagesSnapshot(): List<ChatMessage> = synchronized(lock) {

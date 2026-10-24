@@ -2290,6 +2290,48 @@ test("uses system immediately when the provider is already marked", async (t) =>
   assert.equal(receivedRole, "system");
 });
 
+test("service tier reaches Chat Completions bodies and is omitted when blank", async (t) => {
+  const bodies = [];
+  const server = createServer((request, response) => {
+    const chunks = [];
+    request.on("data", chunk => chunks.push(chunk));
+    request.on("end", () => {
+      bodies.push(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      writeSuccessfulChatCompletion(response, "TIER_OK", "tier-model");
+    });
+  });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const client = new BridgeClient();
+  for (const tier of [undefined, "  ", " fast ", "ultrafast", "priority"]) {
+    const result = await client.request(`tier-${tier}`, "complete_once", {
+      model_config: {
+        provider_type: "openai_compatible", provider_config_id: "tier-test",
+        pi_provider_id: "aether-tier", pi_api: "openai-completions",
+        model_id: "tier-model", base_url: `http://127.0.0.1:${server.address().port}/v1`,
+        api_key: "test", service_tier: tier, compatibility_mode: true, max_retries: 0,
+      },
+      messages: [userMessage("hello")],
+    });
+    assert.equal(result.assistant_text, "TIER_OK", JSON.stringify(result));
+    assert.equal(bodies.at(-1).service_tier, tier?.trim() || undefined);
+    if (!tier?.trim()) assert.equal(Object.hasOwn(bodies.at(-1), "service_tier"), false);
+  }
+  const sessionDirectory = await mkdtemp(join(tmpdir(), "aether-service-tier-"));
+  t.after(() => rm(sessionDirectory, { recursive: true, force: true }));
+  await client.request("tier-agent", "run_turn", {
+    ...turnPayload("tier-session", [userMessage("hello")], {
+      provider_type: "openai_compatible", provider_config_id: "tier-test",
+      pi_provider_id: "aether-tier", pi_api: "openai-completions",
+      model_id: "tier-model", base_url: `http://127.0.0.1:${server.address().port}/v1`,
+      api_key: "test", service_tier: "ultrafast", max_retries: 0,
+    }),
+    workspace_directory: sessionDirectory,
+    session_directory: sessionDirectory,
+  });
+  assert.equal(bodies.at(-1).service_tier, "ultrafast");
+});
+
 test("compatibility mode sends system and developer instructions as user messages", async (t) => {
   let receivedRoles = [];
   const server = createServer((request, response) => {
@@ -2711,6 +2753,7 @@ test("accepts arbitrary manual model IDs for a built-in provider", async (t) => 
     model_config: {
       provider_type: "builtin",
       provider_config_id: "custom-openai-native",
+      service_tier: "ultrafast",
       pi_provider_id: "openai",
       pi_api: "builtin",
       model_id: "sfsefehfjksdnf",
@@ -2732,6 +2775,7 @@ test("accepts arbitrary manual model IDs for a built-in provider", async (t) => 
   assert.equal(receivedRequest.customHeader, "present");
   assert.equal(receivedRequest.body.model, "sfsefehfjksdnf");
   assert.equal(receivedRequest.body.reasoning.effort, "high");
+  assert.equal(receivedRequest.body.service_tier, "ultrafast");
 });
 
 test("omits explicit cache mode for custom OpenAI Responses endpoints", async (t) => {

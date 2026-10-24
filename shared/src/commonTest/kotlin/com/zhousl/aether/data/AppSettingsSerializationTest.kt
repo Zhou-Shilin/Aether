@@ -1,9 +1,26 @@
 package com.zhousl.aether.data
 
+import kotlinx.serialization.json.JsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class AppSettingsSerializationTest {
+    @Test
+    fun providerServiceTierSurvivesStorageAndModelSelection() {
+        val provider = LlmProviderConfig(
+            id = "tier-provider", providerId = "custom", name = "Custom",
+            piProviderId = "openai-compatible", apiKey = "test",
+            baseUrl = "https://example.com/v1", modelId = "test-model",
+            serviceTier = "ultrafast",
+        )
+        val restored = parseProviderConfigs("[${provider.toJsonObject()}]").single()
+        assertEquals("ultrafast", restored.serviceTier)
+        val option = listOf(restored).availableModelOptions().single()
+        assertEquals("ultrafast", AppSettings().withModelOption(option).serviceTier)
+        val legacy = JsonObject(provider.toJsonObject().filterKeys { it != "serviceTier" })
+        assertEquals("", parseProviderConfigs("[$legacy]").single().serviceTier)
+    }
+
     @Test
     fun phoneUseDefaultsToAccessibilityAndPreservesExplicitVirtualDisplayChoices() {
         assertEquals(AgentModeAuthorizationMethod.Accessibility, AppSettings().agentModeAuthorizationMethod)
@@ -49,6 +66,7 @@ class AppSettingsSerializationTest {
             oauthCredentialJson = "{\"access\":\"token\"}",
             providerEnvironmentVariables = listOf(PiProviderEnvironmentVariable("REGION", "test")),
             customHeaders = listOf(LlmCustomHeader("X-Test", "value")),
+            serviceTier = "ultrafast",
             reasoningEffort = "high",
             systemPrompt = "shared prompt",
             keepTasksRunningInBackground = false,

@@ -1006,6 +1006,7 @@ struct NativeProviderDraft {
     var environment: [NativeProviderPair]
     var baseURL: String
     var modelIDs: String
+    var serviceTier: String
     var userAgent: String
     var headers: [NativeProviderPair]
     var compatibilityMode: Bool
@@ -1077,6 +1078,7 @@ private struct NativeProviderEditor: View {
             environment: Self.pairs(provider?["providerEnvironmentVariables"]),
             baseURL: provider?["baseUrl"] as? String ?? model.string(defaultDefinition, "defaultBaseUrl", fallback: "https://api.openai.com/v1"),
             modelIDs: modelIDs.joined(separator: "\n"),
+            serviceTier: provider?["serviceTier"] as? String ?? "",
             userAgent: provider?["userAgent"] as? String ?? "Aether/1.0",
             headers: Self.pairs(provider?["customHeaders"]),
             compatibilityMode: provider?["compatibilityMode"] as? Bool ?? false,
@@ -1153,6 +1155,10 @@ private struct NativeProviderEditor: View {
             Section(model.text("Connection", "连接")) {
                 TextField(model.text("Base URL", "基础 URL"), text: $draft.baseURL)
                     .textInputAutocapitalization(.never).keyboardType(.URL)
+                TextField(model.text("Service tier (e.g. fast / ultrafast)", "速度档位（如 fast / ultrafast）"), text: $draft.serviceTier)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                Text(model.text("Leave blank to use the provider default.", "留空使用提供商默认档位。"))
+                    .font(.caption).foregroundStyle(.secondary)
                 TextField(model.text("User agent", "User Agent"), text: $draft.userAgent)
                 pairEditor(model.text("Custom headers", "自定义请求头"), pairs: $draft.headers)
                 pairEditor(model.text("Environment variables", "环境变量"), pairs: $draft.environment)
@@ -1322,6 +1328,10 @@ private struct NativeProviderEditor: View {
                     if !providerIDError.isEmpty { Text(providerIDError).font(.caption).foregroundStyle(.red) }
                     TextField(model.text("Base URL", "基础 URL"), text: $draft.baseURL)
                         .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
+                    TextField(model.text("Service tier (e.g. fast / ultrafast)", "速度档位（如 fast / ultrafast）"), text: $draft.serviceTier)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    Text(model.text("Leave blank to use the provider default.", "留空使用提供商默认档位。"))
+                        .font(.caption).foregroundStyle(.secondary)
                     TextField(model.text("User agent", "User Agent"), text: $draft.userAgent)
                     pairEditor(model.text("Environment variables", "环境变量"), pairs: $draft.environment)
                     pairEditor(model.text("Custom headers", "自定义请求头"), pairs: $draft.headers)
@@ -1672,7 +1682,7 @@ private struct NativeProviderEditor: View {
         draft.modelIDs = ""
         draft.authMethod = model.bool(item, "supportsInteractiveApiKey") ? "api_key" : model.bool(item, "supportsOAuth") ? "oauth" : "ambient"
         draft.apiKey = ""; draft.oauthCredentialJson = ""; draft.compatibilityMode = false; draft.cachedModels = []; draft.enabledModels = Set(manualModels)
-        draft.environment = []; draft.headers = []; draft.userAgent = "Aether/1.0"
+        draft.serviceTier = ""; draft.environment = []; draft.headers = []; draft.userAgent = "Aether/1.0"
     }
 
     private func fetchModels() {
@@ -1729,6 +1739,7 @@ private struct NativeProviderEditor: View {
         return ["id": draft.id, "providerId": draft.providerId.trimmingCharacters(in: .whitespacesAndNewlines), "name": draft.name.trimmingCharacters(in: .whitespacesAndNewlines),
          "piProviderId": draft.piProviderId, "authMethod": draft.authMethod, "apiKey": draft.apiKey.trimmingCharacters(in: .whitespacesAndNewlines), "oauthCredentialJson": draft.oauthCredentialJson,
          "providerEnvironmentVariables": draft.environment.filter { !$0.name.isEmpty }.map { ["name": $0.name, "value": $0.value] }, "baseUrl": draft.baseURL,
+         "serviceTier": draft.serviceTier.trimmingCharacters(in: .whitespacesAndNewlines),
          "modelId": primaryModel, "manualModelIds": manualModels, "userAgent": draft.userAgent,
          "customHeaders": draft.headers.filter { !$0.name.isEmpty }.map { ["name": $0.name, "value": $0.value] },
          "compatibilityMode": draft.piProviderId == "openai-compatible" && draft.compatibilityMode, "cachedModels": draft.cachedModels,

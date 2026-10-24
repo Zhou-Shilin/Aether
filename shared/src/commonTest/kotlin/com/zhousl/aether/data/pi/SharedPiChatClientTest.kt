@@ -36,6 +36,15 @@ import kotlinx.serialization.json.put
 @OptIn(ExperimentalCoroutinesApi::class)
 class SharedPiChatClientTest {
     @Test
+    fun serviceTierIsTrimmedAndBlankIsOmitted() {
+        assertFalse("service_tier" in testProvider().toSharedPiModelConfig())
+        for (tier in listOf("fast", "ultrafast", "priority")) {
+            val config = testProvider().copy(serviceTier = " $tier ").toSharedPiModelConfig()
+            assertEquals(tier, config["service_tier"]!!.jsonPrimitive.content)
+        }
+    }
+
+    @Test
     fun modelConfigUsesReliabilityTimeoutAndAndroidBounds() {
         assertEquals("30000", testProvider().toSharedPiModelConfig(1)["timeout_ms"].toString())
         assertEquals("90000", testProvider().toSharedPiModelConfig(90_000)["timeout_ms"].toString())

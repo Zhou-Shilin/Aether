@@ -1997,7 +1997,6 @@ fun IosComposeApp(
             var analyticsUserCount = 0
             var responseStartedAt = 0L
             val reasoningTracker = SharedReasoningTurnTracker()
-            var providerRequestCheckpoint: SharedChatMessage? = null
             var completedPiTurnResult: SharedPiTurnResult? = null
             target.messages += SharedChatMessage(
                 id = assistantId,
@@ -2134,7 +2133,6 @@ fun IosComposeApp(
                             target.streamingStatus = ""
                         },
                         onAssistantReasoningDelta = { delta ->
-                            if (reasoningEffort == "off") return@runTurn
                             backgroundLeases[target.id]?.update("Reasoning")
                             reasoningTracker.finishDirectSummaryChunk()
                             val now = platformCurrentTimeMillis()
@@ -2153,7 +2151,6 @@ fun IosComposeApp(
                             )
                         },
                         onAssistantReasoningSummaryDelta = { delta ->
-                            if (reasoningEffort == "off") return@runTurn
                             backgroundLeases[target.id]?.update("Reasoning")
                             val now = platformCurrentTimeMillis()
                             target.messages.updateMessage(assistantId) { current ->
@@ -2167,18 +2164,18 @@ fun IosComposeApp(
                                 )
                             }
                         },
-                        onAssistantRequestStarted = {
-                            providerRequestCheckpoint = target.messages.lastOrNull { it.id == assistantId }
-                        },
                         onAssistantResponseReset = {
-                            providerRequestCheckpoint?.let { checkpoint ->
-                                target.messages.updateMessage(assistantId) {
-                                    checkpoint.copy(
-                                        isStreaming = true,
-                                        status = SharedInitialStreamingStatusText,
-                                        statusDetail = SharedInitialStreamingStatusDetail,
-                                    )
-                                }
+                            // Keep the failed attempt in the conversation and persisted response blocks.
+                            reasoningTracker.finishDirectSummaryChunk()
+                            enqueueReasoningSummary(
+                                target = target,
+                                assistantId = assistantId,
+                                tracker = reasoningTracker,
+                                forceRemaining = true,
+                                fallbackConfig = config,
+                            )
+                            target.messages.updateMessage(assistantId) { current ->
+                                current.completeAssistantReasoning(platformCurrentTimeMillis())
                             }
                         },
                         onToolEvent = { event ->
@@ -2301,7 +2298,7 @@ fun IosComposeApp(
                         val completedAt = platformCurrentTimeMillis()
                         val resolvedUsage = if (result.usageAvailable) result.usage else estimatedUsage
                         target.messages.updateMessage(assistantId) { current ->
-                            if (reasoningEffort == "off") current else current.withAssistantResultFallback(result)
+                            current.withAssistantResultFallback(result)
                         }
                         enqueueReasoningSummary(
                             target = target,
@@ -2317,7 +2314,12 @@ fun IosComposeApp(
                             } else {
                                 completed.withAssistantTextResultFallback(result)
                             }
-                            val visibleFinalized = if (reasoningEffort == "off") {
+                            val hasEmittedReasoning = finalized.reasoningText.isNotBlank() ||
+                                finalized.responseBlocks.any {
+                                    it is SharedAssistantResponseBlock.Reasoning &&
+                                        (it.trace.rawText.isNotBlank() || it.trace.chunks.isNotEmpty())
+                                }
+                            val visibleFinalized = if (reasoningEffort == "off" && !hasEmittedReasoning) {
                                 finalized.withoutSharedAssistantReasoning()
                             } else {
                                 finalized
@@ -2328,11 +2330,7 @@ fun IosComposeApp(
                                     it is SharedAssistantResponseBlock.ToolGroup
                             }
                             visibleFinalized.copy(
-                                reasoningText = if (reasoningEffort == "off") {
-                                    ""
-                                } else {
-                                    current.reasoningText.ifBlank { result.reasoningText }
-                                },
+                                reasoningText = current.reasoningText.ifBlank { result.reasoningText },
                                 isError = false,
                                 isStreaming = false,
                                 status = "",
@@ -2343,7 +2341,7 @@ fun IosComposeApp(
                                 providerId = result.provider.ifBlank { config.id },
                                 modelId = result.model.ifBlank { config.modelId },
                                 providerPayloadJson = result.providerPayloadJson,
-                                thoughtDurationMillis = if (reasoningEffort == "off") {
+                                thoughtDurationMillis = if (reasoningEffort == "off" && !hasEmittedReasoning) {
                                     0L
                                 } else if (hasAgentWork) {
                                     ((responseStartedAt.takeIf { it > 0L } ?: completedAt) - turnStartedAt)
@@ -8226,11 +8224,9 @@ internal fun SharedChatMessage.withAssistantResultFallback(
 }
 
 internal fun SharedChatMessage.withoutSharedAssistantReasoning(): SharedChatMessage {
-    val finalText = responseBlocks.filterIsInstance<SharedAssistantResponseBlock.Text>()
-        .lastOrNull { it.text.isNotBlank() }
     val workBlocks = responseBlocks.flatMap { block ->
         when (block) {
-            is SharedAssistantResponseBlock.Text -> emptyList()
+            is SharedAssistantResponseBlock.Text -> listOf(block)
             is SharedAssistantResponseBlock.Reasoning -> block.trace.toolInvocations
                 .takeIf { it.isNotEmpty() }
                 ?.let { tools ->
@@ -8242,9 +8238,10 @@ internal fun SharedChatMessage.withoutSharedAssistantReasoning(): SharedChatMess
         }
     }
     return copy(
-        text = finalText?.text ?: text,
+        text = workBlocks.filterIsInstance<SharedAssistantResponseBlock.Text>()
+            .joinToString("") { it.text }.ifBlank { text },
         reasoningText = "",
-        responseBlocks = workBlocks + listOfNotNull(finalText),
+        responseBlocks = workBlocks,
     )
 }
 
@@ -8281,7 +8278,8 @@ internal fun SharedChatMessage.withAssistantTextResultFallback(
     val finalText = result.assistantText.ifBlank {
         "The model finished without returning any assistant text."
     }
-    return if (text.isBlank()) appendAssistantTextDelta(finalText) else this
+    return if (responseBlocks.lastOrNull() is SharedAssistantResponseBlock.Text) this
+    else appendAssistantTextDelta(finalText)
 }
 
 internal fun SharedChatMessage.withSharedSteerInstruction(): SharedChatMessage = copy(

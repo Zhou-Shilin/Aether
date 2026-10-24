@@ -137,6 +137,7 @@ class SettingsRepository(
             modelId = preferences[MODEL_ID] ?: defaults.modelId,
             userAgent = normalizeLlmUserAgent(preferences[USER_AGENT]),
             customHeaders = parseCustomHeaders(preferences[CUSTOM_HEADERS].orEmpty()),
+            serviceTier = preferences[SERVICE_TIER].orEmpty(),
             compatibilityMode = preferences[COMPATIBILITY_MODE] ?: false,
             developerRoleUnsupported = preferences[DEVELOPER_ROLE_UNSUPPORTED] ?: false,
             reasoningEffort = normalizeReasoningEffort(preferences[REASONING_EFFORT]),
@@ -440,6 +441,7 @@ class SettingsRepository(
                 prefs[MODEL_ID] = fallbackOption.modelId
                 prefs[USER_AGENT] = normalizeLlmUserAgent(fallbackOption.userAgent)
                 prefs[CUSTOM_HEADERS] = serializeCustomHeaders(fallbackOption.customHeaders)
+                prefs[SERVICE_TIER] = fallbackOption.serviceTier
                 prefs[COMPATIBILITY_MODE] = fallbackOption.compatibilityMode
                 prefs[DEVELOPER_ROLE_UNSUPPORTED] = fallbackOption.developerRoleUnsupported
             }
@@ -463,6 +465,7 @@ class SettingsRepository(
             it[MODEL_ID] = settings.modelId
             it[USER_AGENT] = normalizeLlmUserAgent(settings.userAgent)
             it[CUSTOM_HEADERS] = serializeCustomHeaders(settings.customHeaders)
+            it[SERVICE_TIER] = settings.serviceTier
             it[COMPATIBILITY_MODE] = settings.compatibilityMode
             it[DEVELOPER_ROLE_UNSUPPORTED] = settings.developerRoleUnsupported
             it[REASONING_EFFORT] = normalizeReasoningEffort(settings.reasoningEffort)
@@ -602,6 +605,7 @@ class SettingsRepository(
             it[MODEL_ID] = settings.modelId
             it[USER_AGENT] = normalizeLlmUserAgent(settings.userAgent)
             it[CUSTOM_HEADERS] = serializeCustomHeaders(settings.customHeaders)
+            it[SERVICE_TIER] = settings.serviceTier
             it[COMPATIBILITY_MODE] = settings.compatibilityMode
             it[DEVELOPER_ROLE_UNSUPPORTED] = settings.developerRoleUnsupported
             it[REASONING_EFFORT] = normalizeReasoningEffort(settings.reasoningEffort)
@@ -672,6 +676,7 @@ class SettingsRepository(
         val MODEL_ID = stringPreferencesKey("model_id")
         val USER_AGENT = stringPreferencesKey("user_agent")
         val CUSTOM_HEADERS = stringPreferencesKey("custom_headers")
+        val SERVICE_TIER = stringPreferencesKey("service_tier")
         val COMPATIBILITY_MODE = booleanPreferencesKey("compatibility_mode")
         val DEVELOPER_ROLE_UNSUPPORTED = booleanPreferencesKey("developer_role_unsupported")
         val REASONING_EFFORT = stringPreferencesKey("reasoning_effort")

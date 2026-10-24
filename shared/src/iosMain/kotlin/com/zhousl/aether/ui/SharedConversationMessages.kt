@@ -2024,12 +2024,13 @@ private fun SharedReasoningStatus(
     onOpenLink: (String) -> Unit,
 ) {
     var sheetVisible by remember(trace.id) { mutableStateOf(false) }
+    var showRawReasoning by remember(trace.id) { mutableStateOf(false) }
     val interactionSource = remember(trace.id) { MutableInteractionSource() }
-    val latestDetail = remember(trace.latestStatusText, trace.chunks) {
+    val latestDetail = remember(trace.latestStatusText, trace.chunks, trace.rawText) {
         trace.latestStatusText.ifBlank {
             trace.chunks.lastOrNull { it.detail.isNotBlank() || it.title.isNotBlank() }
                 ?.let { chunk -> chunk.detail.ifBlank { chunk.title } }
-                .orEmpty()
+                .orEmpty().ifBlank { trace.rawText.trim().takeLast(180) }
         }
     }
     val completed = trace.completedAtMillis != null
@@ -2086,10 +2087,16 @@ private fun SharedReasoningStatus(
                     .padding(start = 24.dp, top = 10.dp, end = 24.dp, bottom = 30.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
+                if (trace.rawText.isNotBlank()) {
+                    androidx.compose.material3.TextButton(onClick = { showRawReasoning = !showRawReasoning }) {
+                        Text(stringResource(Res.string.chat_raw_reasoning))
+                    }
+                }
+                if (showRawReasoning || !trace.hasTimelineContent) {
+                    SharedRawReasoningPanel(trace.rawText)
+                }
                 if (trace.hasTimelineContent || trace.completedAtMillis != null) {
                     SharedReasoningTimeline(trace, onOpenLink)
-                } else {
-                    SharedRawReasoningPanel(trace.rawText)
                 }
             }
         }
@@ -2144,8 +2151,7 @@ private fun SharedRawReasoningPanel(rawText: String) {
         )
         SelectionContainer {
             Text(
-                text = rawText.ifBlank { stringResource(Res.string.chat_waiting_for_reasoning) }
-                    .let { if (it.length <= 12_000) it else it.take(12_000).trimEnd() + "\n..." },
+                text = rawText.ifBlank { stringResource(Res.string.chat_waiting_for_reasoning) },
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
                     .background(AetherSurfaceHigh).padding(14.dp),
                 color = AetherOnSurfaceVariant,
@@ -3037,7 +3043,7 @@ private fun SharedGenerationStatusCard(
             ) + fadeOut(tween(160, easing = FastOutLinearInEasing)),
         ) {
             SharedToolCodeBlock(
-                label = stringResource(Res.string.common_error),
+                label = text,
                 content = remember(detail) { highlightSharedToolResult(detail) },
                 maxHeight = 220,
             )

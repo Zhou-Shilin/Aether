@@ -1910,11 +1910,11 @@ fun ReasoningTraceStatus(
     onOpenLink: (String) -> Unit = {},
 ) {
     var sheetVisible by remember(trace.id) { mutableStateOf(false) }
-    val latestDetail = remember(trace.latestStatusText, trace.chunks) {
+    val latestDetail = remember(trace.latestStatusText, trace.chunks, trace.rawText) {
         trace.latestStatusText.ifBlank {
             trace.chunks.lastOrNull { it.detail.isNotBlank() || it.title.isNotBlank() }
             ?.let { chunk -> chunk.detail.ifBlank { chunk.title } }
-            .orEmpty()
+            .orEmpty().ifBlank { trace.rawText.trim().takeLast(180) }
         }
     }
     val completed = trace.completedAtMillis != null
@@ -2005,6 +2005,7 @@ private fun ReasoningTraceSheetContent(
     trace: ReasoningTrace,
     onOpenLink: (String) -> Unit,
 ) {
+    var showRawReasoning by remember(trace.id) { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -2013,13 +2014,19 @@ private fun ReasoningTraceSheetContent(
             .padding(start = 24.dp, top = 10.dp, end = 24.dp, bottom = 30.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        if (trace.rawText.isNotBlank()) {
+            androidx.compose.material3.TextButton(onClick = { showRawReasoning = !showRawReasoning }) {
+                Text(stringResource(R.string.chat_raw_reasoning))
+            }
+        }
+        if (showRawReasoning || !trace.hasTimelineContent) {
+            RawReasoningPanel(rawText = trace.rawText)
+        }
         if (trace.hasTimelineContent || trace.completedAtMillis != null) {
             ReasoningTimeline(
                 trace = trace,
                 onOpenLink = onOpenLink,
             )
-        } else {
-            RawReasoningPanel(rawText = trace.rawText)
         }
     }
 }
@@ -2030,9 +2037,7 @@ private fun RawReasoningPanel(
 ) {
     val waitingForReasoning = stringResource(R.string.chat_waiting_for_reasoning)
     val displayText = remember(rawText, waitingForReasoning) {
-        rawText.ifBlank { waitingForReasoning }.let { text ->
-            if (text.length <= 12_000) text else text.take(12_000).trimEnd() + "\n..."
-        }
+        rawText.ifBlank { waitingForReasoning }
     }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -2526,7 +2531,7 @@ fun ReconnectingStatusCard(
             ),
         ) {
             SyntaxHighlightedCodeBlock(
-                label = stringResource(R.string.common_error),
+                label = text,
                 content = remember(detail) { highlightToolResult(detail) },
             )
         }

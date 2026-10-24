@@ -5973,6 +5973,7 @@ class AetherViewModel(
         )
         put("baseUrl", baseUrl)
         put("modelId", modelId)
+        put("serviceTier", serviceTier.trim())
         put("userAgent", normalizeLlmUserAgent(userAgent))
         put("customHeaders", customHeaders.toJsonArray())
         put("reasoningEffort", reasoningEffort)
@@ -6072,6 +6073,7 @@ class AetherViewModel(
             baseUrl = importedBaseUrl,
             modelId = json.optString("modelId", defaults.modelId),
             userAgent = normalizeLlmUserAgent(json.optString("userAgent", defaults.userAgent)),
+            serviceTier = json.optString("serviceTier").trim(),
             customHeaders = parseCustomHeaders(json.optJSONArray("customHeaders")),
             reasoningEffort = normalizeReasoningEffort(
                 json.optString("reasoningEffort", defaults.reasoningEffort),

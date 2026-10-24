@@ -8,7 +8,7 @@ import org.junit.Test
 
 class ConversationUiTest {
     @Test
-    fun reasoningOffKeepsToolsAndOnlyTheFinalTextBlock() {
+    fun reasoningOffKeepsToolsAndAllVisibleTextBlocks() {
         val tools = listOf(
             ChatToolInvocation(
                 id = "call-1",
@@ -27,11 +27,24 @@ class ConversationUiTest {
 
         assertEquals(
             listOf(
+                AssistantResponseBlock.Text("draft", "Intermediate answer"),
                 AssistantResponseBlock.ToolGroup("reasoning", tools),
                 AssistantResponseBlock.Text("final", "Final answer"),
             ),
             blocks.sanitizedForReasoningOff(),
         )
+    }
+
+    @Test
+    fun retryFinalPayloadRetainsEarlierAttemptAndStatus() {
+        val firstAttempt = listOf(
+            AssistantResponseBlock.Text("first", "Long partial answer"),
+            AssistantResponseBlock.Status("retry", "Reconnected 1/3", "stream dropped"),
+        )
+        val completed = firstAttempt.withAssistantFinalTextFallback("Recovered answer") { "second" }
+        assertEquals(firstAttempt + AssistantResponseBlock.Text("second", "Recovered answer"), completed)
+        assertEquals(completed, completed.withAssistantFinalTextFallback("Different final payload") { "third" })
+        assertEquals(completed, completed.sanitizedForReasoningOff())
     }
 
     @Test

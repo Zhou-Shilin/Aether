@@ -1090,4 +1090,5 @@
     <string name="settings_extension_phase_reloading">正在重新加载扩展…</string>
     <string name="settings_extension_phase_refreshing">正在刷新已安装扩展…</string>
     <string name="settings_extension_operation_elapsed">已用时 %1$d 秒。较大的软件包可能需要几分钟。</string>
+    <string name="provider_form_service_tier">速度档位（service_tier；留空使用默认，如 fast / ultrafast）</string>
 </resources>

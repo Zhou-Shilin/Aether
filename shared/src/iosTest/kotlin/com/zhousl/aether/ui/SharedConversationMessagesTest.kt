@@ -95,7 +95,7 @@ class SharedConversationMessagesTest {
     }
 
     @Test
-    fun disabledReasoningKeepsToolsAndOnlyTheFinalTextBlock() {
+    fun disabledReasoningKeepsToolsAndAllVisibleTextBlocks() {
         val tool = SharedChatToolInvocation("call", "bash", "Run command")
         val message = SharedChatMessage(text = "", fromUser = false)
             .appendAssistantTextDelta("Intermediate answer")
@@ -115,15 +115,49 @@ class SharedConversationMessagesTest {
             )
             .withoutSharedAssistantReasoning()
 
-        assertEquals("Final answer", message.text)
+        assertEquals("Intermediate answerFinal answer", message.text)
         assertEquals("", message.reasoningText)
         assertEquals(
             listOf(
+                SharedAssistantResponseBlock.Text("draft", "Intermediate answer"),
                 SharedAssistantResponseBlock.ToolGroup("reasoning", listOf(tool)),
                 SharedAssistantResponseBlock.Text("final", "Final answer"),
             ),
             message.responseBlocks,
         )
+    }
+
+    @Test
+    fun autoRetryRetainsBothAttemptsAndReasoningWhenFinalized() {
+        val firstReasoning = "First attempt reasoning".repeat(1_000)
+        val message = SharedChatMessage(text = "", fromUser = false)
+            .appendAssistantReasoningDelta(firstReasoning, 100L)
+            .appendAssistantTextDelta("First partial answer")
+            .withStreamingStatus("Reconnecting... 1/3", "stream dropped")
+            .completePendingReconnect()
+            .appendAssistantReasoningDelta("Second reasoning", 200L)
+            .appendAssistantTextDelta("Second answer")
+            .withAssistantTextResultFallback(SharedPiTurnResult(assistantText = "Second answer"))
+        assertEquals(listOf("First partial answer", "Second answer"),
+            message.responseBlocks.filterIsInstance<SharedAssistantResponseBlock.Text>().map { it.text })
+        assertEquals(firstReasoning,
+            message.responseBlocks.filterIsInstance<SharedAssistantResponseBlock.Reasoning>().first().trace.rawText)
+        val restored = listOf(message).toPersistedMessages().single().toSharedChatMessage()
+        assertEquals(message.responseBlocks, restored.responseBlocks)
+        assertEquals(listOf("First partial answer", "Second answer"),
+            message.withoutSharedAssistantReasoning().responseBlocks
+                .filterIsInstance<SharedAssistantResponseBlock.Text>().map { it.text })
+    }
+
+    @Test
+    fun retryFinalPayloadWithoutDeltasDoesNotOverwriteEarlierAttempt() {
+        val message = SharedChatMessage(text = "", fromUser = false)
+            .appendAssistantTextDelta("First partial answer")
+            .withStreamingStatus("Reconnecting... 1/3", "stream dropped")
+            .completePendingReconnect()
+            .withAssistantTextResultFallback(SharedPiTurnResult(assistantText = "Recovered answer"))
+        assertEquals(listOf("First partial answer", "Recovered answer"),
+            message.responseBlocks.filterIsInstance<SharedAssistantResponseBlock.Text>().map { it.text })
     }
 
     @Test

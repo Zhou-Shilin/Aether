@@ -306,6 +306,7 @@ private fun AppSettings.toAndroidAppSettingsJson(): JsonObject = buildJsonObject
     })
     put("baseUrl", baseUrl)
     put("modelId", modelId)
+    put("serviceTier", serviceTier.trim())
     put("userAgent", normalizeLlmUserAgent(userAgent))
     put("customHeaders", buildJsonArray {
         customHeaders.forEach { header ->
@@ -388,6 +389,7 @@ private fun parseAndroidAppSettings(value: JsonObject): AppSettings {
         baseUrl = importedBaseUrl,
         modelId = value.stringValueOrDefault("modelId", defaults.modelId),
         userAgent = normalizeLlmUserAgent(value.stringValueOrDefault("userAgent", defaults.userAgent)),
+        serviceTier = value.stringValue("serviceTier").trim(),
         customHeaders = parseCustomHeaders(value["customHeaders"] as? JsonArray),
         reasoningEffort = normalizeReasoningEffort(
             value.stringValueOrDefault("reasoningEffort", defaults.reasoningEffort),

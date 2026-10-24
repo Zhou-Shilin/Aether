@@ -1092,4 +1092,5 @@
     <string name="settings_extension_phase_reloading">Reloading extensions…</string>
     <string name="settings_extension_phase_refreshing">Refreshing installed extensions…</string>
     <string name="settings_extension_operation_elapsed">Elapsed: %1$d s. Large packages may take several minutes.</string>
+    <string name="provider_form_service_tier">Service tier (service_tier; blank = provider default, e.g. fast / ultrafast)</string>
 </resources>
