@@ -39,6 +39,7 @@ import com.zhousl.aether.data.AppSettings
 import com.zhousl.aether.data.LocalRuntimeId
 import com.zhousl.aether.data.PackageProfileState
 import com.zhousl.aether.runtime.MultiplatformLocalRuntime
+import com.zhousl.aether.runtime.PiNodeRuntimeSetup
 import com.zhousl.aether.runtime.RuntimeProcessSignal
 import com.zhousl.aether.runtime.RuntimeProcessSpec
 import com.zhousl.aether.shared.resources.Res
@@ -264,7 +265,7 @@ internal class NativeAlpineSettingsController(
 ) {
     val profiles = listOf(
         NativeAlpineProfile("python", "python3 py3-pip py3-virtualenv", "python3 --version && pip3 --version && virtualenv --version"),
-        NativeAlpineProfile("node", "nodejs npm", "node --version && npm --version"),
+        NativeAlpineProfile("node", "nodejs npm", PiNodeRuntimeSetup.verificationCommand),
         NativeAlpineProfile("git_search", "git ripgrep", "git --version && rg --version"),
         NativeAlpineProfile("ssh", "openssh-client", "ssh -V"),
     )
@@ -384,7 +385,11 @@ internal class NativeAlpineSettingsController(
                     val process = runtime.startProcess(
                         RuntimeProcessSpec(
                             executable = "/bin/sh",
-                            arguments = listOf("-lc", "apk add --no-cache --no-chown ${profile.packages}"),
+                            arguments = listOf(
+                                "-lc",
+                                if (profile.id == "node") PiNodeRuntimeSetup.installCommand(noChown = false)
+                                else "apk add --no-cache --no-chown ${profile.packages}",
+                            ),
                             environment = mapOf("HOME" to runtime.homeDirectory),
                             workingDirectory = runtime.homeDirectory,
                             redirectErrorStream = true,
@@ -404,9 +409,7 @@ internal class NativeAlpineSettingsController(
                         val exit = process.awaitExit()
                         exited = true
                         stdout.await()
-                        check(exit.exitCode == 0 ||
-                            verifySharedAlpineProfile(runtime, profile.verificationCommand)
-                        ) {
+                        check(verifySharedAlpineProfile(runtime, profile.verificationCommand)) {
                             output.toString().trim().takeLast(1_000).ifBlank {
                                 "Alpine package installation exited with ${exit.exitCode}."
                             }

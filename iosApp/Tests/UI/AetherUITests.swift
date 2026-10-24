@@ -5,6 +5,52 @@ final class AetherUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testSettingsProviderRowsAndPersonalizationSaveRespond() throws {
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        if app.buttons["Agree"].waitForExistence(timeout: 5) { app.buttons["Agree"].tap() }
+        waitForChatStartup(app)
+        if app.buttons["Menu"].exists { app.buttons["Menu"].tap() }
+        XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
+        app.buttons["Settings"].tap()
+
+        let personalization = app.staticTexts["Personalization"].firstMatch
+        XCTAssertTrue(personalization.waitForExistence(timeout: 10))
+        personalization.tap()
+        XCTAssertTrue(app.textViews.firstMatch.waitForExistence(timeout: 10))
+        // Save the existing value so the regression test preserves the user's settings.
+        let original = app.textViews.firstMatch.value as? String
+        app.buttons["Save"].tap()
+        let returnedToSettings = app.staticTexts["General Settings"].waitForExistence(timeout: 5)
+        XCTAssertTrue(returnedToSettings || app.buttons["Saved"].exists)
+        if returnedToSettings {
+            personalization.tap()
+            XCTAssertTrue(app.textViews.firstMatch.waitForExistence(timeout: 10))
+            XCTAssertEqual(app.textViews.firstMatch.value as? String, original)
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
+
+        let providers = app.staticTexts["Model Providers"].firstMatch
+        XCTAssertTrue(providers.waitForExistence(timeout: 10))
+        providers.tap()
+        XCTAssertTrue(app.buttons["Add provider"].waitForExistence(timeout: 10))
+        app.buttons["Add provider"].tap()
+        let apiKey = app.buttons["provider-wizard-choice:API key"]
+        XCTAssertTrue(apiKey.waitForExistence(timeout: 10))
+        // Tap the trailing blank area, far from the leading icon.
+        apiKey.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5)).tap()
+        let search = app.textFields["Search providers"]
+        XCTAssertTrue(search.waitForExistence(timeout: 10))
+        search.tap()
+        search.typeText("OpenAI")
+        let openAI = app.buttons["provider-wizard-choice:OpenAI"]
+        XCTAssertTrue(openAI.waitForExistence(timeout: 10))
+        openAI.coordinate(withNormalizedOffset: CGVector(dx: 0.65, dy: 0.5)).tap()
+        XCTAssertTrue(app.secureTextFields["API key"].waitForExistence(timeout: 10))
+        app.buttons["Cancel"].tap()
+    }
+
     func testOrdinaryDeviceKeepsOriginalChatUI() throws {
         let app = XCUIApplication()
         app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]

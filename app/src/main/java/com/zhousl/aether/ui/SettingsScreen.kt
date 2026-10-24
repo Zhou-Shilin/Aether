@@ -438,7 +438,9 @@ fun SettingsScreen(
     piExtensionCatalog: List<PiExtensionCatalogEntry>,
     isLoadingPiExtensions: Boolean,
     piExtensionCatalogError: String,
+    piExtensionInstalledError: String,
     piExtensionOperationSource: String,
+    piExtensionOperationPhase: String,
     selectedPiPackageDetails: PiPackageDetails?,
     selectedPiPackageSource: String,
     isLoadingPiPackageDetails: Boolean,
@@ -1012,6 +1014,8 @@ fun SettingsScreen(
                 isLoading = isLoadingPiExtensions,
                 catalogError = piExtensionCatalogError,
                 operationSource = piExtensionOperationSource,
+                operationPhase = piExtensionOperationPhase,
+                installedError = piExtensionInstalledError,
                 onRefresh = onRefreshPiExtensions,
                 onUpdate = onUpdatePiExtensionPackage,
                 onRemove = onRemovePiExtension,
@@ -1058,6 +1062,7 @@ fun SettingsScreen(
                         isLoading = isLoadingPiPackageDetails,
                         error = piPackageDetailsError,
                         isOperating = piExtensionOperationSource == entry.source,
+                        operationPhase = piExtensionOperationPhase,
                         onRetry = { onLoadPiPackageDetails(entry) },
                         onInstall = { onInstallPiExtensionPackage(entry.source) },
                         onBack = { currentPage = SettingsPage.Extensions.name },
@@ -4093,6 +4098,8 @@ private fun PiExtensionsPage(
     isLoading: Boolean,
     catalogError: String,
     operationSource: String,
+    operationPhase: String,
+    installedError: String,
     onRefresh: () -> Unit,
     onUpdate: (String) -> Unit,
     onRemove: (InstalledPiExtension) -> Unit,
@@ -4140,6 +4147,10 @@ private fun PiExtensionsPage(
         trailingContentDescription = stringResource(R.string.settings_import_extension),
         onTrailingAction = onImport,
     ) {
+        if (operationSource.isNotBlank()) {
+            PiExtensionProgress(operationPhase)
+            Spacer(Modifier.height(14.dp))
+        }
         Text(
             text = stringResource(R.string.settings_pi_extensions_warning),
             style = MaterialTheme.typography.bodySmall,
@@ -4195,6 +4206,15 @@ private fun PiExtensionsPage(
 
         Spacer(Modifier.height(18.dp))
 
+        if (selectedTab == 0 && installedError.isNotBlank()) {
+            Text(installedError, color = MaterialTheme.colorScheme.error)
+            SettingsActionButton(
+                label = stringResource(R.string.common_retry),
+                onClick = onRefresh,
+                enabled = operationSource.isBlank() && !isLoading,
+            )
+        }
+
         when (selectedTab) {
             0 -> {
                 if (!hasLoadedInstalledExtensions) {
@@ -4214,7 +4234,7 @@ private fun PiExtensionsPage(
                             color = AetherOnSurfaceVariant,
                         )
                     }
-                } else if (installedExtensions.isEmpty()) {
+                } else if (installedExtensions.isEmpty() && installedError.isBlank()) {
                     SettingsCardGroup {
                         Column(
                             modifier = Modifier.fillMaxWidth().padding(24.dp),
@@ -4413,6 +4433,7 @@ private fun PiPackageDetailPage(
     isLoading: Boolean,
     error: String,
     isOperating: Boolean,
+    operationPhase: String,
     onRetry: () -> Unit,
     onInstall: () -> Unit,
     onBack: () -> Unit,
@@ -4437,6 +4458,7 @@ private fun PiPackageDetailPage(
         title = entry.name,
         onBack = onBack,
     ) {
+        if (isOperating) PiExtensionProgress(operationPhase)
         when {
             isLoading && details == null -> {
                 Row(
@@ -6440,6 +6462,35 @@ private fun SettingsCircleButton(
             icon,
             contentDescription = contentDescription,
             tint = if (enabled) AetherOnSurface else AetherOnSurface.copy(alpha = 0.45f),
+        )
+    }
+}
+
+@Composable
+private fun PiExtensionProgress(phase: String) {
+    var elapsedSeconds by remember { mutableStateOf(0L) }
+    LaunchedEffect(Unit) {
+        val startedAt = android.os.SystemClock.elapsedRealtime()
+        while (true) {
+            elapsedSeconds = (android.os.SystemClock.elapsedRealtime() - startedAt) / 1000
+            delay(1000)
+        }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            stringResource(when (phase) {
+                "installing" -> R.string.settings_extension_phase_installing
+                "saving" -> R.string.settings_extension_phase_saving
+                "reloading" -> R.string.settings_extension_phase_reloading
+                "refreshing" -> R.string.settings_extension_phase_refreshing
+                else -> R.string.settings_extension_phase_preparing
+            }),
+            color = AetherOnSurface,
+        )
+        Text(
+            stringResource(R.string.settings_extension_operation_elapsed, elapsedSeconds),
+            style = MaterialTheme.typography.bodySmall,
+            color = AetherOnSurfaceVariant,
         )
     }
 }

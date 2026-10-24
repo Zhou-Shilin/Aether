@@ -93,26 +93,13 @@ export interface AetherExtensionLoadOptions {
   disabledPackageSources?: string[];
 }
 
-export interface AetherInstalledExtensionPackage {
-  source: string;
-  scope: "user" | "project";
-  filtered: boolean;
-  installedPath?: string;
-  name: string;
-  version: string;
-  description: string;
-  extensionCount: number;
-  aetherExtensionCount: number;
-  nativeEntrypointCount: number;
-  skillCount: number;
-  promptCount: number;
-  themeCount: number;
-  skillPaths: string[];
-}
-
-type AetherConfiguredPackage = ReturnType<
-  DefaultPackageManager["listConfiguredPackages"]
->[number];
+export {
+  listExtensionPackages as listAetherExtensionPackages,
+  installExtensionPackage as installAetherExtensionPackage,
+  updateExtensionPackage as updateAetherExtensionPackage,
+  removeExtensionPackage as removeAetherExtensionPackage,
+} from "./extension-packages.js";
+export type { InstalledExtensionPackage as AetherInstalledExtensionPackage } from "./extension-packages.js";
 
 function readJsonFile(filePath: string): Record<string, unknown> | undefined {
   try {
@@ -224,171 +211,6 @@ export async function discoverPackageExtensionPaths(
     .filter((entry) => entry.enabled)
     .filter((entry) => !disabledPackageSources.has(entry.metadata.source))
     .map((entry) => path.resolve(entry.path));
-}
-
-function packageManifest(configuredPackage: AetherConfiguredPackage): Record<string, unknown> | undefined {
-  if (!configuredPackage.installedPath) return undefined;
-  return readJsonFile(path.join(configuredPackage.installedPath, "package.json"));
-}
-
-function manifestExtensionCount(manifest: Record<string, unknown> | undefined): number {
-  const pi = manifest?.pi;
-  if (!pi || typeof pi !== "object" || Array.isArray(pi)) return 0;
-  const extensions = (pi as Record<string, unknown>).extensions;
-  return Array.isArray(extensions)
-    ? extensions.filter((entry) => typeof entry === "string").length
-    : 0;
-}
-
-function manifestNativeEntrypointCount(
-  manifest: Record<string, unknown> | undefined,
-): number {
-  const aether = manifest?.aether;
-  if (!aether || typeof aether !== "object" || Array.isArray(aether)) return 0;
-  const native = (aether as Record<string, unknown>).native;
-  if (!native || typeof native !== "object" || Array.isArray(native)) return 0;
-  const nativeManifest = native as Record<string, unknown>;
-  if (nativeManifest.enabled === false) return 0;
-  const countConfigured = (configured: unknown): number => {
-    if (Array.isArray(configured)) {
-      return configured.filter((entry) =>
-        typeof entry === "string" && entry.trim().length > 0
-      ).length;
-    }
-    return typeof configured === "string" && configured.trim().length > 0
-      ? 1
-      : 0;
-  };
-  return countConfigured(nativeManifest.entrypoints) ||
-    countConfigured(nativeManifest.entrypoint);
-}
-
-interface AetherPackageResources {
-  extensions: string[];
-  skills: string[];
-  prompts: string[];
-  themes: string[];
-}
-
-function packageResourcesForSource(
-  source: string,
-  resolved: Awaited<ReturnType<DefaultPackageManager["resolve"]>>,
-): AetherPackageResources {
-  const pathsFor = (
-    entries: Awaited<ReturnType<DefaultPackageManager["resolve"]>>["extensions"],
-  ): string[] =>
-    entries
-      .filter((entry) => entry.enabled && entry.metadata.source === source)
-      .map((entry) => path.resolve(entry.path));
-  return {
-    extensions: pathsFor(resolved.extensions),
-    skills: pathsFor(resolved.skills),
-    prompts: pathsFor(resolved.prompts),
-    themes: pathsFor(resolved.themes),
-  };
-}
-
-function installedPackagePayload(
-  configuredPackage: AetherConfiguredPackage,
-  resources: AetherPackageResources,
-): AetherInstalledExtensionPackage {
-  const manifest = packageManifest(configuredPackage);
-  return {
-    source: configuredPackage.source,
-    scope: configuredPackage.scope,
-    filtered: configuredPackage.filtered,
-    installedPath: configuredPackage.installedPath,
-    name:
-      (typeof manifest?.name === "string" && manifest.name.trim()) ||
-      configuredPackage.source.replace(/^npm:/, ""),
-    version: typeof manifest?.version === "string" ? manifest.version : "",
-    description: typeof manifest?.description === "string" ? manifest.description : "",
-    extensionCount: resources.extensions.length || manifestExtensionCount(manifest),
-    aetherExtensionCount: aetherAppExtensionCountForManifest(manifest),
-    nativeEntrypointCount: manifestNativeEntrypointCount(manifest),
-    skillCount: resources.skills.length,
-    promptCount: resources.prompts.length,
-    themeCount: resources.themes.length,
-    skillPaths: resources.skills,
-  };
-}
-
-export async function listAetherExtensionPackages(
-  cwd: string,
-): Promise<AetherInstalledExtensionPackage[]> {
-  const packageManager = createPackageManager(cwd);
-  const configuredPackages = packageManager
-    .listConfiguredPackages()
-    .filter((configuredPackage) => configuredPackage.scope === "user");
-  if (configuredPackages.length === 0) return [];
-  const resolved = await packageManager.resolve();
-  return configuredPackages
-    .map((configuredPackage) =>
-      installedPackagePayload(
-        configuredPackage,
-        packageResourcesForSource(configuredPackage.source, resolved),
-      ),
-    )
-    .sort((left, right) => left.name.localeCompare(right.name));
-}
-
-function requireNpmPackageSource(source: string): string {
-  const normalized = source.trim();
-  if (!normalized.startsWith("npm:") || normalized.length <= 4 || /\s/.test(normalized)) {
-    throw new Error("Pi packages must use an npm: source.");
-  }
-  return normalized;
-}
-
-export async function installAetherExtensionPackage(
-  cwd: string,
-  source: string,
-): Promise<void> {
-  await createPackageManager(cwd).installAndPersist(requireNpmPackageSource(source));
-}
-
-export async function removeAetherExtensionPackage(
-  cwd: string,
-  source: string,
-): Promise<boolean> {
-  const normalized = requireNpmPackageSource(source);
-  const settingsManager = SettingsManager.create(cwd, PI_AGENT_DIRECTORY, {
-    projectTrusted: false,
-  });
-  const packageManager = new DefaultPackageManager({
-    cwd,
-    agentDir: PI_AGENT_DIRECTORY,
-    settingsManager,
-  });
-  const configuredPackage = packageManager.listConfiguredPackages().find((entry) =>
-    entry.scope === "user" && entry.source === normalized
-  );
-  if (!configuredPackage) return false;
-
-  const installedPath = configuredPackage.installedPath;
-  if (installedPath) {
-    const managedRoot = path.resolve(PI_AGENT_DIRECTORY, "npm", "node_modules");
-    const resolvedPath = path.resolve(installedPath);
-    const relative = path.relative(managedRoot, resolvedPath);
-    if (relative === "" || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
-      throw new Error("Refusing to remove an extension package outside the managed npm directory.");
-    }
-    fs.rmSync(resolvedPath, { recursive: true, force: true });
-  }
-
-  const configured = settingsManager.getGlobalSettings().packages ?? [];
-  settingsManager.setPackages(configured.filter((entry) => {
-    const configuredSource = typeof entry === "string" ? entry : entry.source;
-    return configuredSource !== normalized;
-  }));
-  return true;
-}
-
-export async function updateAetherExtensionPackage(
-  cwd: string,
-  source: string,
-): Promise<void> {
-  await createPackageManager(cwd).update(requireNpmPackageSource(source));
 }
 
 async function loadFactory(extensionPath: string): Promise<ExtensionFactory> {

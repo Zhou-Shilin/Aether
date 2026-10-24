@@ -6,7 +6,6 @@ import android.provider.OpenableColumns
 import android.view.Surface
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import java.io.FileOutputStream
 import com.zhousl.aether.BuildConfig
 import com.zhousl.aether.R
 import com.zhousl.aether.aetherRuntime
@@ -36,6 +35,7 @@ import com.zhousl.aether.data.InstalledSkill
 import com.zhousl.aether.data.InstalledPiExtension
 import com.zhousl.aether.data.PiExtensionInstallKind
 import com.zhousl.aether.data.PiExtensionCatalogEntry
+import com.zhousl.aether.data.writeExportDocument
 import com.zhousl.aether.data.PiDiscoveredSkillSource
 import com.zhousl.aether.data.ProviderModelCatalogClient
 import com.zhousl.aether.data.PublicCatalogThinkingResult
@@ -1884,12 +1884,12 @@ class AetherViewModel(
         destinationUri: Uri,
     ) {
         viewModelScope.launch {
-            val didExport = withContext(Dispatchers.IO) {
-                val session = runtime.chatRepository.getSessionWithMessages(sessionId) ?: return@withContext false
+            val didExport = runDataExport {
+                val session = runtime.chatRepository.getSessionWithMessages(sessionId) ?: return@runDataExport false
                 val piSession = runCatching { piKernelBridge.exportSessionJsonl(sessionId) }.getOrNull()
                 val piPath = piSession?.optString("exported_path").orEmpty()
                 val piJsonl = piPath.takeIf(String::isNotBlank)
-                    ?.let { path -> runCatching { java.io.File(path).readText(Charsets.UTF_8) }.getOrNull() }
+                    ?.let { path -> runCatching { runtime.alpineRuntime.resolveGuestPath(path).readText(Charsets.UTF_8) }.getOrNull() }
                 writeTextToUri(
                     uri = destinationUri,
                     text = JSONObject().apply {
@@ -1912,7 +1912,7 @@ class AetherViewModel(
     fun exportAllDataToUri(destinationUri: Uri) {
         val snapshot = _uiState.value
         viewModelScope.launch {
-            val didExport = withContext(Dispatchers.IO) {
+            val didExport = runDataExport {
                 val sessions = runtime.chatRepository.getSessionsWithMessages()
                 writeTextToUri(
                     uri = destinationUri,
@@ -1934,7 +1934,7 @@ class AetherViewModel(
                     "session_count" to snapshot.sessions.size,
                 ),
             )
-            val didExport = withContext(Dispatchers.IO) {
+            val didExport = runDataExport {
                 writeTextToUri(
                     uri = destinationUri,
                     text = buildDiagnosticLogText(snapshot),
@@ -2922,13 +2922,17 @@ class AetherViewModel(
 
     fun installPiExtensionPackage(source: String) {
         performPiExtensionOperation(source) {
-            piExtensionManager.installPackage(source)
+            piExtensionManager.installPackage(source) { phase ->
+                _uiState.update { it.copy(piExtensionOperationPhase = phase) }
+            }
         }
     }
 
     fun updatePiExtensionPackage(source: String) {
         performPiExtensionOperation(source) {
-            piExtensionManager.updatePackage(source)
+            piExtensionManager.updatePackage(source) { phase ->
+                _uiState.update { it.copy(piExtensionOperationPhase = phase) }
+            }
         }
     }
 
@@ -2977,7 +2981,7 @@ class AetherViewModel(
                     )
                 }
             refreshPiExtensionState(loadCatalog = false)
-            _uiState.update { it.copy(piExtensionOperationSource = "") }
+            _uiState.update { it.copy(piExtensionOperationSource = "", piExtensionOperationPhase = "") }
             onComplete(result.isSuccess)
         }
     }
@@ -2986,23 +2990,23 @@ class AetherViewModel(
         operationSource: String,
         operation: suspend () -> Result<Unit>,
     ) {
+        if (_uiState.value.piExtensionOperationSource.isNotBlank()) return
+        _uiState.update { it.copy(piExtensionOperationSource = operationSource, piExtensionOperationPhase = "preparing") }
         viewModelScope.launch {
-            _uiState.update { it.copy(piExtensionOperationSource = operationSource) }
-            val result = operation()
-            result
-                .onSuccess {
-                    emitTransientMessage(uiString(R.string.message_pi_extension_updated))
+            try {
+                operation().getOrThrow()
+                emitTransientMessage(uiString(R.string.message_pi_extension_updated))
+            } catch (failure: CancellationException) {
+                throw failure
+            } catch (failure: Exception) {
+                emitTransientMessage(uiString(R.string.message_pi_extension_operation_failed, failure.userFacingMessage()))
+            } finally {
+                try {
+                    refreshPiExtensionState(loadCatalog = false)
+                } finally {
+                    _uiState.update { it.copy(piExtensionOperationSource = "", piExtensionOperationPhase = "") }
                 }
-                .onFailure { throwable ->
-                    emitTransientMessage(
-                        uiString(
-                            R.string.message_pi_extension_operation_failed,
-                            throwable.userFacingMessage(),
-                        )
-                    )
-                }
-            refreshPiExtensionState(loadCatalog = false)
-            _uiState.update { it.copy(piExtensionOperationSource = "") }
+            }
         }
     }
 
@@ -3020,6 +3024,7 @@ class AetherViewModel(
         _uiState.update { current ->
             current.copy(
                 installedPiExtensions = installedResult.getOrDefault(current.installedPiExtensions),
+                piExtensionInstalledError = installedResult.exceptionOrNull()?.userFacingMessage().orEmpty(),
                 hasLoadedInstalledPiExtensions = true,
                 piExtensionCatalog = catalogResult?.getOrDefault(current.piExtensionCatalog)
                     ?: current.piExtensionCatalog,
@@ -5596,22 +5601,25 @@ class AetherViewModel(
         }
     }
 
+    private suspend fun runDataExport(operation: suspend () -> Boolean): Boolean = try {
+        withContext(Dispatchers.IO) { operation() }
+    } catch (failure: CancellationException) {
+        throw failure
+    } catch (failure: Exception) {
+        diagnosticLogger.event(
+            category = "export",
+            event = "data_export_failed",
+            details = mapOf("error" to failure.userFacingMessage()),
+        )
+        false
+    }
+
     private fun writeTextToUri(
         uri: Uri,
         text: String,
-    ): Boolean = runCatching {
-        val resolver = getApplication<Application>().contentResolver
-        // Open with "rwt" so the destination is truncated before writing. The default "w"
-        // mode only truncates when the document provider declares truncation support, and
-        // providers that ignore mode entirely (or stream via FUSE) can otherwise leave the
-        // exported file at 0 bytes.
-        resolver.openOutputStream(uri, "rwt")?.use { output ->
-            output.write(text.toByteArray(Charsets.UTF_8))
-            output.flush()
-            (output as? FileOutputStream)?.fd?.sync()
-        } ?: return false
-        true
-    }.getOrDefault(false)
+    ): Boolean = writeExportDocument(text) { mode ->
+        getApplication<Application>().contentResolver.openOutputStream(uri, mode)
+    }
 
     private fun readTextFromUri(uri: Uri): String =
         getApplication<Application>().contentResolver.openInputStream(uri)?.use { input ->
@@ -5881,7 +5889,7 @@ class AetherViewModel(
                 ?.let { exported ->
                     val path = exported.optString("exported_path")
                     val jsonl = path.takeIf(String::isNotBlank)
-                        ?.let { filePath -> runCatching { java.io.File(filePath).readText(Charsets.UTF_8) }.getOrNull() }
+                        ?.let { filePath -> runCatching { runtime.alpineRuntime.resolveGuestPath(filePath).readText(Charsets.UTF_8) }.getOrNull() }
                     piSessions.put(JSONObject().apply {
                         put("sessionId", session.id)
                         put("jsonlPath", path)

@@ -436,22 +436,24 @@ class PiExtensionManager(
         }
     }
 
-    suspend fun installPackage(source: String): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun installPackage(source: String, onProgress: suspend (String) -> Unit = {}): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             val response = piKernelBridge.installExtensionPackage(
                 source,
                 stateRepository.loadOptions(),
+                onProgress,
             )
             requireExtensionReloadSucceeded(response.optJSONObject("reload"))
             Unit
         }
     }
 
-    suspend fun updatePackage(source: String): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun updatePackage(source: String, onProgress: suspend (String) -> Unit = {}): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             val response = piKernelBridge.updateExtensionPackage(
                 source,
                 stateRepository.loadOptions(),
+                onProgress,
             )
             requireExtensionReloadSucceeded(response.optJSONObject("reload"))
             Unit

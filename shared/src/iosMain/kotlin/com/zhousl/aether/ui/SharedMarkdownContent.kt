@@ -32,7 +32,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.decodeToImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
@@ -601,7 +600,7 @@ private fun decodeSharedMarkdownDataUrlOrThrow(
     )
 }
 
-private fun decodeSharedMarkdownImageResult(
+private suspend fun decodeSharedMarkdownImageResult(
     binary: SharedMarkdownImageBinary,
     loadPreviewError: String,
 ): SharedMarkdownImageLoadResult {
@@ -615,7 +614,7 @@ private fun decodeSharedMarkdownImageResult(
             )
         }
     }
-    runCatching { binary.bytes.decodeToImageBitmap() }.getOrNull()?.let { bitmap ->
+    runCatching { decodeIosImagePreview(binary.bytes) }.getOrNull()?.let { bitmap ->
         return SharedMarkdownImageLoadResult(binary = binary, bitmap = bitmap)
     }
     if (mimeType?.startsWith("image/") == true) {

@@ -246,20 +246,30 @@ class SharedPiBridgeClient(
         abortOnCancellation = false,
     )
 
-    suspend fun installExtensionPackage(source: String): JsonObject =
+    suspend fun installExtensionPackage(source: String, onProgress: suspend (String) -> Unit = {}): JsonObject =
         request(
             type = "install_extension_package",
             payload = extensionPackagePayload(source, extensionLoadOptions()),
             timeoutMillis = 10 * 60_000L,
             abortOnCancellation = false,
+            onEvent = { event, payload ->
+                if (event == "extension_package_progress") {
+                    onProgress(payload["phase"]?.jsonPrimitive?.contentOrNull.orEmpty())
+                }
+            },
         )
 
-    suspend fun updateExtensionPackage(source: String): JsonObject =
+    suspend fun updateExtensionPackage(source: String, onProgress: suspend (String) -> Unit = {}): JsonObject =
         request(
             type = "update_extension_package",
             payload = extensionPackagePayload(source, extensionLoadOptions()),
             timeoutMillis = 10 * 60_000L,
             abortOnCancellation = false,
+            onEvent = { event, payload ->
+                if (event == "extension_package_progress") {
+                    onProgress(payload["phase"]?.jsonPrimitive?.contentOrNull.orEmpty())
+                }
+            },
         )
 
     suspend fun removeExtensionPackage(source: String): JsonObject =

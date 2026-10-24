@@ -21,9 +21,9 @@ import { reserveProtocolStdout, writeProtocolFrame } from "./protocol-output.js"
 reserveProtocolStdout();
 
 const BRIDGE_VERSION = "2.0.0-alpha.0";
-const PI_AI_VERSION = "0.85.1";
-const PI_AGENT_CORE_VERSION = "0.85.1";
-const PI_CODING_AGENT_VERSION = "0.85.1";
+const PI_AI_VERSION = "1.3.0";
+const PI_AGENT_CORE_VERSION = "1.3.0";
+const PI_CODING_AGENT_VERSION = "1.3.0";
 
 type JsonObject = Record<string, unknown>;
 
@@ -202,14 +202,17 @@ async function reloadAether(id: string, payload: JsonObject): Promise<JsonObject
 async function packageOperation(
   id: string,
   payload: JsonObject,
-  operation: (cwd: string, source: string) => Promise<unknown>,
+  operation: (cwd: string, source: string, onProgress: (phase: string) => void) => Promise<unknown>,
   result: JsonObject,
 ): Promise<JsonObject> {
   const source = asString(payload.source).trim();
-  await operation(process.cwd(), source);
+  const progress = (phase: string) => writeEvent(id, "extension_package_progress", { phase, source });
+  await operation(process.cwd(), source, progress);
+  progress("reloading");
   const aetherReload = await runOperation(id, () =>
     loadAetherAppExtensions(process.cwd(), loadOptions(payload))
   );
+  progress("refreshing");
   return {
     ...result,
     source,

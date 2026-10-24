@@ -2404,11 +2404,21 @@ internal fun inferMarkdownImageMimeType(
 private fun ByteArray.startsWith(prefix: ByteArray): Boolean =
     size >= prefix.size && copyOfRange(0, prefix.size).contentEquals(prefix)
 
-private fun decodeMarkdownBitmap(bytes: ByteArray): ImageBitmap? {
-    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.let { return it.asImageBitmap() }
+internal fun decodeMarkdownBitmap(bytes: ByteArray): ImageBitmap? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    if (bounds.outWidth > 0 && bounds.outHeight > 0) {
+        val options = BitmapFactory.Options().apply {
+            inSampleSize = calculateSampleSize(bounds.outWidth, bounds.outHeight, 2048)
+        }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.let { return it.asImageBitmap() }
+    }
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null
     return runCatching {
-        ImageDecoder.decodeBitmap(ImageDecoder.createSource(ByteBuffer.wrap(bytes))).asImageBitmap()
+        ImageDecoder.decodeBitmap(ImageDecoder.createSource(ByteBuffer.wrap(bytes))) { decoder, info, _ ->
+            val sample = calculateSampleSize(info.size.width, info.size.height, 2048)
+            decoder.setTargetSampleSize(sample)
+        }.asImageBitmap()
     }.getOrNull()
 }
 

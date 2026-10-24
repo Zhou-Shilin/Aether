@@ -446,7 +446,9 @@ class AlpineRuntime(
         } finally {
             rateSampler.stop()
         }
-        return if (result.optBoolean("ok") || verifyPackageProfile(profileId)) {
+        // APK success alone does not mean the installed executables can run.
+        val verified = verifyPackageProfile(profileId)
+        return if (verified) {
             LocalRuntimeSetupState(
                 runtimeId = id,
                 issue = LocalRuntimeIssue.Ready,
@@ -456,13 +458,17 @@ class AlpineRuntime(
             LocalRuntimeSetupState(
                 runtimeId = id,
                 issue = LocalRuntimeIssue.Failed,
-                detail = result.optString("errmsg").ifBlank { result.optString("stderr") },
+                detail = result.optString("errmsg").ifBlank {
+                    listOf(result.optString("stderr"), result.optString("stdout"))
+                        .filter(String::isNotBlank).joinToString("\n").takeLast(4_000)
+                }.ifBlank { "Alpine profile $profileId failed executable verification." },
             )
         }
     }
 
     fun packageProfileInstallCommand(profileId: String): String? {
         val packages = AlpinePackageProfiles[profileId] ?: return null
+        if (profileId == "node") return PiNodeRuntimeSetup.installCommand(noChown = true)
         return "apk add --no-cache --no-chown ${packages.joinToString(" ")}"
     }
 
@@ -1155,7 +1161,7 @@ class AlpineRuntime(
     private suspend fun verifyPackageProfile(profileId: String): Boolean {
         val command = when (profileId) {
             "python" -> "python3 --version && pip3 --version && virtualenv --version"
-            "node" -> "node --version && npm --version"
+            "node" -> PiNodeRuntimeSetup.verificationCommand
             "git_search" -> "git --version && rg --version && fd --version"
             "ssh" -> "ssh -V"
             "chrome" ->

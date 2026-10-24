@@ -4,6 +4,7 @@ import com.zhousl.aether.data.PiExtensionLoadOptions
 import com.zhousl.aether.data.AetherDiagnosticLogger
 import com.zhousl.aether.data.DiagnosticRedactor
 import com.zhousl.aether.runtime.AlpineRuntime
+import com.zhousl.aether.runtime.PiNodeRuntimeSetup
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -37,11 +38,11 @@ private const val PiBridgeWorkerGuestPath = "$PiBridgeGuestDirectory/image-resiz
 private const val PiBridgeWasmAssetPath = "$PiBridgeAssetDirectory/photon_rs_bg.wasm"
 private const val PiBridgeWasmGuestPath = "$PiBridgeGuestDirectory/photon_rs_bg.wasm"
 private const val PiBridgeWorkingDirectory = "/root/.aether/pi-bridge"
-private const val PiBridgeNodeMinVersion = "22.19.0"
+private const val PiBridgeNodeMinVersion = PiNodeRuntimeSetup.minimumVersion
 private const val PiBridgeVersion = "2.0.0-alpha.0"
-private const val PiAiVersion = "0.99.2"
-private const val PiAgentCoreVersion = "0.99.2"
-private const val PiCodingAgentVersion = "0.99.2"
+private const val PiAiVersion = "1.3.0"
+private const val PiAgentCoreVersion = "1.3.0"
+private const val PiCodingAgentVersion = "1.3.0"
 private const val PiBridgeRequestTimeoutMillis = 10 * 60 * 1000L
 private const val PiBridgeOAuthTimeoutMillis = 15 * 60 * 1000L
 private const val PiBridgePingTimeoutMillis = 15_000L
@@ -309,12 +310,16 @@ class PiKernelBridge(
     suspend fun installExtensionPackage(
         source: String,
         loadOptions: PiExtensionLoadOptions = PiExtensionLoadOptions(),
+        onProgress: suspend (String) -> Unit = {},
     ): JSONObject =
         request(
             type = "install_extension_package",
             payload = extensionLoadOptionsPayload(loadOptions).put("source", source),
             timeoutMillis = PiBridgeRequestTimeoutMillis,
             abortOnCancellation = false,
+            onEvent = { event, payload ->
+                if (event == "extension_package_progress") onProgress(payload.optString("phase"))
+            },
         )
 
     suspend fun removeExtensionPackage(
@@ -331,12 +336,16 @@ class PiKernelBridge(
     suspend fun updateExtensionPackage(
         source: String,
         loadOptions: PiExtensionLoadOptions = PiExtensionLoadOptions(),
+        onProgress: suspend (String) -> Unit = {},
     ): JSONObject =
         request(
             type = "update_extension_package",
             payload = extensionLoadOptionsPayload(loadOptions).put("source", source),
             timeoutMillis = PiBridgeRequestTimeoutMillis,
             abortOnCancellation = false,
+            onEvent = { event, payload ->
+                if (event == "extension_package_progress") onProgress(payload.optString("phase"))
+            },
         )
 
     suspend fun reloadAllExtensions(
@@ -826,7 +835,9 @@ class PiKernelBridge(
                 "min_version" to PiBridgeNodeMinVersion,
             ),
         )
-        if (version == null || compareSemver(version, PiBridgeNodeMinVersion) < 0) {
+        if (version == null || compareSemver(version, PiBridgeNodeMinVersion) < 0 ||
+            !alpineRuntime.isPackageProfileInstalled("node")
+        ) {
             onSetupProgress(PiCoreSetupUpdate(PiCoreSetupPhase.InstallingNode))
             diagnosticLogger.event(
                 category = "pi_bridge",
@@ -853,7 +864,7 @@ class PiKernelBridge(
                     code = "node_install_failed",
                 )
             }
-            val installedVersion = readNodeVersion()
+            val installedVersion = readNodeVersion(required = true)
             if (installedVersion == null || compareSemver(installedVersion, PiBridgeNodeMinVersion) < 0) {
                 throw PiBridgeException(
                     "Pi bridge requires Alpine node >= $PiBridgeNodeMinVersion, found ${installedVersion ?: "none"}.",
@@ -887,7 +898,7 @@ class PiKernelBridge(
         }
     }
 
-    private suspend fun readNodeVersion(): String? {
+    private suspend fun readNodeVersion(required: Boolean = false): String? {
         val raw = JSONObject(
             alpineRuntime.executeCommand(
                 command = "node --version",
@@ -895,7 +906,27 @@ class PiKernelBridge(
                 awaitTimeoutMillis = 30_000L,
             )
         )
-        if (!raw.optBoolean("ok")) return null
+        if (!raw.optBoolean("ok")) {
+            diagnosticLogger.event(
+                category = "pi_bridge",
+                event = "node_version_check_failed",
+                level = "warn",
+                details = mapOf(
+                    "exit_code" to raw.optInt("exit_code", -1),
+                    "stderr" to DiagnosticRedactor.sanitizeString(raw.optString("stderr").takeLast(2_000)),
+                    "error" to raw.optString("errmsg"),
+                ),
+            )
+            if (required) {
+                val detail = raw.optString("errmsg").ifBlank { raw.optString("stderr") }
+                throw PiBridgeException(
+                    "Unable to execute Alpine Node.js (exit ${raw.optInt("exit_code", -1)}). " +
+                        detail.trim().takeLast(2_000),
+                    code = "node_execution_failed",
+                )
+            }
+            return null
+        }
         return raw.optString("stdout")
             .lineSequence()
             .firstOrNull { it.trim().isNotBlank() }

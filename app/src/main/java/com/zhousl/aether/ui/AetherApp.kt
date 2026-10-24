@@ -627,7 +627,14 @@ private fun AetherAppContent(
                             context = context,
                             attachment = saveTarget.attachment,
                             destinationUri = destinationUri,
-                        )
+                        ) || (saveTarget.attachment.workspacePath.isNotBlank() &&
+                            runtimeWorkspaceFileBridge.saveWorkspaceFileToDocument(
+                                settings = uiState.settings,
+                                workspaceDirectory = currentRuntimeWorkspaceDirectory,
+                                termuxWorkspaceDirectory = currentWorkspaceDirectory,
+                                path = saveTarget.attachment.workspacePath,
+                                destinationUri = destinationUri,
+                            ))
 
                         is PendingSaveTarget.WorkspaceFile -> runtimeWorkspaceFileBridge.saveWorkspaceFileToDocument(
                             settings = uiState.settings,
@@ -1074,7 +1081,9 @@ private fun AetherAppContent(
                     piExtensionCatalog = uiState.piExtensionCatalog,
                     isLoadingPiExtensions = uiState.isLoadingPiExtensions,
                     piExtensionCatalogError = uiState.piExtensionCatalogError,
+                    piExtensionInstalledError = uiState.piExtensionInstalledError,
                     piExtensionOperationSource = uiState.piExtensionOperationSource,
+                    piExtensionOperationPhase = uiState.piExtensionOperationPhase,
                     selectedPiPackageDetails = uiState.selectedPiPackageDetails,
                     selectedPiPackageSource = uiState.selectedPiPackageSource,
                     isLoadingPiPackageDetails = uiState.isLoadingPiPackageDetails,

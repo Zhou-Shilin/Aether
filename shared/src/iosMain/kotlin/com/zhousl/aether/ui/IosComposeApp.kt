@@ -1368,11 +1368,17 @@ fun IosComposeApp(
             SharedApplicationLifecycle.backgrounded.collect { backgrounded ->
                 if (backgrounded) {
                     val backgroundedSession = currentSession
-                    appScope.launch { persistSession(backgroundedSession) }
-                    (sessionStates.values + backgroundedSession)
+                    val runningSessions = (sessionStates.values + backgroundedSession)
                         .distinctBy(SharedSessionUiState::id)
                         .filter { it.job?.isActive == true }
-                        .forEach(::ensureBackgroundExecution)
+                    runningSessions.forEach(::ensureBackgroundExecution)
+                    appScope.launch {
+                        withContext(NonCancellable) {
+                            (runningSessions + backgroundedSession)
+                                .distinctBy(SharedSessionUiState::id)
+                                .forEach { persistSession(it) }
+                        }
+                    }
                 }
             }
         }
@@ -2549,8 +2555,10 @@ fun IosComposeApp(
             val fileName = state.title.sanitizeSharedExportFileName() + ".json"
             appScope.launch {
                 runSharedAppCatching {
-                    val pi = bridgeClient.exportSessionJsonl(state.id)
-                    val piPath = pi["exported_path"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                    // The persisted conversation remains exportable when the agent
+                    // runtime is unavailable or its session was interrupted.
+                    val pi = runSharedAppCatching { bridgeClient.exportSessionJsonl(state.id) }.getOrNull()
+                    val piPath = pi?.get("exported_path")?.jsonPrimitive?.contentOrNull.orEmpty()
                     val piJsonl = piPath.takeIf(String::isNotBlank)
                         ?.let { path -> runCatching { runtime.fileSystem.read(path).decodeToString() }.getOrNull() }
                     val exported = Json.parseToJsonElement(json).jsonObject.toMutableMap().apply {
@@ -2958,6 +2966,7 @@ fun IosComposeApp(
                     val payload = runCatching {
                         Json.parseToJsonElement(payloadJson) as? JsonObject
                     }.getOrNull() ?: JsonObject(emptyMap())
+                    if (command.startsWith("pi_extension") && nativePiExtensionsState.operation.isNotBlank()) return
                     when (command) {
                         "update_settings" -> persistResolvedAppSettings(
                             sharedAppSettings.withNativeSettingsPatch(payload),
@@ -3287,26 +3296,36 @@ fun IosComposeApp(
                         "pi_extension_install" -> appScope.launch {
                             nativePiExtensionsState = nativePiExtensionsState.copy(
                                 operation = "install",
+                                operationPhase = "preparing",
                                 message = "",
                                 error = "",
                             )
                             nativePiExtensionsState = nativePiExtensionsController.install(
                                 nativePiExtensionsState,
                                 payload.nativeString("source"),
-                            )
+                            ) { phase ->
+                                withContext(Dispatchers.Main) {
+                                    nativePiExtensionsState = nativePiExtensionsState.copy(operationPhase = phase)
+                                }
+                            }
                             extensionSnapshot = extensionManager.snapshot
                             extensionSnapshotResolved = true
                         }
                         "pi_extension_update" -> appScope.launch {
                             nativePiExtensionsState = nativePiExtensionsState.copy(
                                 operation = "update",
+                                operationPhase = "preparing",
                                 message = "",
                                 error = "",
                             )
                             nativePiExtensionsState = nativePiExtensionsController.update(
                                 nativePiExtensionsState,
                                 payload.nativeString("id"),
-                            )
+                            ) { phase ->
+                                withContext(Dispatchers.Main) {
+                                    nativePiExtensionsState = nativePiExtensionsState.copy(operationPhase = phase)
+                                }
+                            }
                             extensionSnapshot = extensionManager.snapshot
                             extensionSnapshotResolved = true
                         }
@@ -8978,6 +8997,7 @@ internal fun buildNativeSettingsSnapshot(
     put("extensionCount", extensionSnapshot.extensions.size)
     put("piExtensions", buildJsonObject {
         put("operation", piExtensions.operation)
+        put("operationPhase", piExtensions.operationPhase)
         put("message", piExtensions.message)
         put("error", piExtensions.error)
         put("installedError", piExtensions.installedError)

@@ -956,4 +956,10 @@
     <string name="phone_use_authorizing">در حال اعطای مجوز…</string>
     <string name="phone_use_permission_title">فعال‌سازی دسترس‌پذیری Phone Use</string>
     <string name="phone_use_permission_body">برای کنترل گوشی توسط عامل، Aether را در تنظیمات دسترس‌پذیری Android فعال کنید.</string>
+    <string name="settings_extension_phase_preparing">آماده‌سازی محیط افزونه…</string>
+    <string name="settings_extension_phase_installing">دریافت بسته و نصب وابستگی‌ها…</string>
+    <string name="settings_extension_phase_saving">ذخیره بسته نصب‌شده…</string>
+    <string name="settings_extension_phase_reloading">بارگذاری مجدد افزونه‌ها…</string>
+    <string name="settings_extension_phase_refreshing">به‌روزرسانی فهرست افزونه‌ها…</string>
+    <string name="settings_extension_operation_elapsed">زمان سپری‌شده: %1$d ثانیه. بسته‌های بزرگ ممکن است چند دقیقه طول بکشند.</string>
 </resources>

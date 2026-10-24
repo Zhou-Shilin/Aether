@@ -1084,4 +1084,10 @@
     <string name="settings_agent_mode_orientation_hint">切换方向将停止当前虚拟屏幕，请随后重新启动应用。</string>
     <string name="agent_mode_fullscreen">全屏观看</string>
     <string name="agent_mode_exit_fullscreen">退出全屏</string>
+    <string name="settings_extension_phase_preparing">正在准备扩展运行环境…</string>
+    <string name="settings_extension_phase_installing">正在下载软件包并安装依赖…</string>
+    <string name="settings_extension_phase_saving">正在保存已安装软件包…</string>
+    <string name="settings_extension_phase_reloading">正在重新加载扩展…</string>
+    <string name="settings_extension_phase_refreshing">正在刷新已安装扩展…</string>
+    <string name="settings_extension_operation_elapsed">已用时 %1$d 秒。较大的软件包可能需要几分钟。</string>
 </resources>

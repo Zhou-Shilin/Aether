@@ -482,14 +482,12 @@ final class AetherRuntimeHost: NSObject, NativeRuntimeHost, UIDocumentPickerDele
         }
     }
 
-    private static let nodeVerificationCommand =
-        "node --version 2>/dev/null | grep -q '^v22\\.' && command -v npm >/dev/null 2>&1"
+    private static let nodeVerificationCommand = PiNodeRuntimeSetup.shared.verificationCommand
 
     private static let nodeInstallCommand = """
         attempt=1
         while [ "$attempt" -le 3 ]; do
-          apk add --no-cache nodejs npm && exit 0
-          \(nodeVerificationCommand) && exit 0
+          (\(PiNodeRuntimeSetup.shared.installCommand(noChown: false))) && exit 0
           sleep $((attempt * 2))
           attempt=$((attempt + 1))
         done

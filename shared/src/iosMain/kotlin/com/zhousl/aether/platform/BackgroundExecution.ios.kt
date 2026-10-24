@@ -20,12 +20,19 @@ private class IosBackgroundExecutionLease(
     name: String,
     onExpired: () -> Unit,
 ) : BackgroundExecutionLease {
-    private var identifier = host.beginBackgroundExecution(
-        name = name,
-        listener = object : NativeBackgroundExecutionListener {
-            override fun onExpired() = onExpired()
-        },
-    )
+    private var identifier = ""
+
+    init {
+        identifier = host.beginBackgroundExecution(
+            name = name,
+            listener = object : NativeBackgroundExecutionListener {
+                override fun onExpired() {
+                    identifier = ""
+                    onExpired()
+                }
+            },
+        )
+    }
 
     override val isActive: Boolean
         get() = identifier.isNotBlank()

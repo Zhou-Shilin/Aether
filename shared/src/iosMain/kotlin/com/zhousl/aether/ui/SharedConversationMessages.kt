@@ -100,7 +100,6 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.decodeToImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -331,9 +330,9 @@ internal fun SharedBrowserPreviewCard(
         value = runCatching {
             when {
                 presentedState.screenshotBase64.isNotBlank() ->
-                    Base64.decode(presentedState.screenshotBase64).decodeToImageBitmap()
+                    decodeIosImagePreview(Base64.decode(presentedState.screenshotBase64), 1400)
                 presentedState.previewPath.isNotBlank() ->
-                    runtime.fileSystem.read(presentedState.previewPath).decodeToImageBitmap()
+                    decodeIosImagePreview(runtime.fileSystem.read(presentedState.previewPath), 1400)
                 else -> null
             }
         }.getOrNull()
@@ -844,7 +843,7 @@ private fun SharedComposerImageAttachmentCard(
         key3 = runtime,
     ) {
         value = runCatching {
-            readSharedAttachmentBytes(attachment, runtime).decodeToImageBitmap()
+            decodeIosImagePreview(readSharedAttachmentBytes(attachment, runtime), 600)
         }.getOrNull()
     }
     Row(
@@ -1632,7 +1631,7 @@ private fun SharedImageAttachmentCard(
         key2 = runtime,
     ) {
         value = runCatching {
-            runtime?.let { readSharedAttachmentBytes(attachment, it).decodeToImageBitmap() }
+            runtime?.let { decodeIosImagePreview(readSharedAttachmentBytes(attachment, it), 600) }
         }.getOrNull()
     }
     Box(
@@ -1692,7 +1691,7 @@ internal fun SharedAttachmentPreviewDialog(
         value = try {
             if (isImage) {
                 val bytes = readSharedAttachmentBytes(attachment, runtime)
-                SharedAttachmentPreviewState.Image(bytes.decodeToImageBitmap())
+                SharedAttachmentPreviewState.Image(decodeIosImagePreview(bytes))
             } else if (isLikelySharedTextAttachment(attachment)) {
                 val bytes = runtime.fileSystem.readPrefix(
                     attachment.workspacePath,

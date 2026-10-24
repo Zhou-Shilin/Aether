@@ -47,7 +47,7 @@ import { registerBunOAuthFlows } from "@earendil-works/pi-ai/bun-oauth";
 import {
   type AgentMessage,
   type AgentToolResult,
-} from "@earendil-works/pi-agent-core/node";
+} from "@earendil-works/pi-agent-core";
 import {
   AgentSession,
   DefaultResourceLoader,
@@ -97,9 +97,9 @@ reserveProtocolStdout();
 registerBunOAuthFlows();
 
 const BRIDGE_VERSION = "2.0.0-alpha.0";
-const PI_AI_VERSION = "0.99.2";
-const PI_AGENT_CORE_VERSION = "0.99.2";
-const PI_CODING_AGENT_VERSION = "0.99.2";
+const PI_AI_VERSION = "1.3.0";
+const PI_AGENT_CORE_VERSION = "1.3.0";
+const PI_CODING_AGENT_VERSION = "1.3.0";
 const AETHER_LOOPBACK_OAUTH_CALLBACK_HOST = "127.0.0.1";
 const OAUTH_FETCH_MAX_ATTEMPTS = 3;
 const DEFAULT_AGENT_RETRY_MAX_RETRIES = 5;
@@ -3542,14 +3542,18 @@ function nativeExtensionLoadOptionsFromPayload(payload: JsonObject): {
   return currentExtensionLoadOptions;
 }
 
-async function installExtensionPackage(payload: JsonObject): Promise<JsonObject> {
+async function installExtensionPackage(id: string, payload: JsonObject): Promise<JsonObject> {
   const source = asString(payload.source).trim();
-  await installAetherExtensionPackage(process.cwd(), source);
+  const progress = (phase: string) => writeEvent(id, "extension_package_progress", { phase, source });
+  await installAetherExtensionPackage(process.cwd(), source, progress);
+  progress("reloading");
+  const reload = await reloadAllExtensionSessions(payload);
+  progress("refreshing");
   return {
     installed: true,
     source,
     ...(await installedExtensionPackagesPayload()),
-    reload: await reloadAllExtensionSessions(payload),
+    reload,
   };
 }
 
@@ -3563,14 +3567,18 @@ async function removeExtensionPackage(payload: JsonObject): Promise<JsonObject> 
   };
 }
 
-async function updateExtensionPackage(payload: JsonObject): Promise<JsonObject> {
+async function updateExtensionPackage(id: string, payload: JsonObject): Promise<JsonObject> {
   const source = asString(payload.source).trim();
-  await updateAetherExtensionPackage(process.cwd(), source);
+  const progress = (phase: string) => writeEvent(id, "extension_package_progress", { phase, source });
+  await updateAetherExtensionPackage(process.cwd(), source, progress);
+  progress("reloading");
+  const reload = await reloadAllExtensionSessions(payload);
+  progress("refreshing");
   return {
     updated: true,
     source,
     ...(await installedExtensionPackagesPayload()),
-    reload: await reloadAllExtensionSessions(payload),
+    reload,
   };
 }
 
@@ -3737,13 +3745,13 @@ async function handleRequest(request: BridgeRequest): Promise<void> {
       writeResponse(id, await listDiscoveredSkills(payload));
       return;
     case "install_extension_package":
-      writeResponse(id, await installExtensionPackage(payload));
+      writeResponse(id, await installExtensionPackage(id, payload));
       return;
     case "remove_extension_package":
       writeResponse(id, await removeExtensionPackage(payload));
       return;
     case "update_extension_package":
-      writeResponse(id, await updateExtensionPackage(payload));
+      writeResponse(id, await updateExtensionPackage(id, payload));
       return;
     case "reload_all_extensions":
       writeResponse(id, await reloadAllExtensionSessions(payload));

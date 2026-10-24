@@ -1087,6 +1087,7 @@ internal data class NativePiExtensionsState(
     val catalog: List<SharedPiCatalogEntry> = emptyList(),
     val details: SharedPiPackageDetails? = null,
     val operation: String = "",
+    val operationPhase: String = "",
     val message: String = "",
     val error: String = "",
     val installedError: String = "",
@@ -1177,8 +1178,10 @@ internal class NativePiExtensionsController(
     suspend fun install(
         previous: NativePiExtensionsState,
         source: String,
+        onProgress: suspend (String) -> Unit = {},
     ): NativePiExtensionsState = operate(previous, "Extension installed.") {
-        extensionBridgeClient.installExtensionPackage(source)
+        extensionBridgeClient.installExtensionPackage(source, onProgress)
+        onProgress("reloading")
         reloadAgentExtensionsIfRunning()
         extensionManager.reload()
     }
@@ -1186,6 +1189,7 @@ internal class NativePiExtensionsController(
     suspend fun update(
         previous: NativePiExtensionsState,
         id: String,
+        onProgress: suspend (String) -> Unit = {},
     ): NativePiExtensionsState {
         val extension = previous.installed.firstOrNull { it.id == id }
             ?: return previous.copy(operation = "", error = "Installed extension was not found.")
@@ -1193,7 +1197,8 @@ internal class NativePiExtensionsController(
             require(extension.kind == SharedExtensionInstallKind.Package) {
                 "Imported extensions must be replaced by importing them again."
             }
-            extensionBridgeClient.updateExtensionPackage(extension.source)
+            extensionBridgeClient.updateExtensionPackage(extension.source, onProgress)
+            onProgress("reloading")
             reloadAgentExtensionsIfRunning()
             extensionManager.reload()
         }
@@ -1282,7 +1287,9 @@ internal class NativePiExtensionsController(
     } catch (failure: CancellationException) {
         throw failure
     } catch (failure: Throwable) {
-        previous.copy(operation = "", message = "", error = failure.sharedExtensionMessage())
+        // Installation may have completed before a reload failed. Reconcile the
+        // durable package list even when the operation reports an error.
+        refreshInstalled(previous).copy(operation = "", operationPhase = "", message = "", error = failure.sharedExtensionMessage())
     }
 
     private suspend fun reloadAgentExtensionsIfRunning() {

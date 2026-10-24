@@ -1,8 +1,9 @@
 package com.zhousl.aether.ui
 
 import android.content.Context
-import com.zhousl.aether.AetherApplication
 import android.graphics.BitmapFactory
+import com.zhousl.aether.AetherApplication
+import com.zhousl.aether.data.LocalRuntimeId
 import android.net.Uri
 import android.os.SystemClock
 import android.widget.Toast
@@ -1236,10 +1237,14 @@ private fun AgentModeReplayPanel(
     }
     val frame = frames[selectedIndex]
     val overlayText = frame.overlayText
-    val bitmap = remember(frame.previewPath, frame.completedAtUptimeMillis) {
-        frame.previewPath
-            .takeIf { it.isNotBlank() && File(it).exists() }
-            ?.let { BitmapFactory.decodeFile(it) }
+    val bitmap by produceState<ImageBitmap?>(null, frame.previewPath, frame.completedAtUptimeMillis) {
+        value = withContext(Dispatchers.IO) {
+            decodeUriAttachmentBitmap(
+                uriString = Uri.fromFile(File(frame.previewPath)).toString(),
+                maxSize = 1400,
+                openInputStream = { File(frame.previewPath).inputStream() },
+            )
+        }
     }
 
     Column(
@@ -1286,7 +1291,7 @@ private fun AgentModeReplayPanel(
             )
             if (bitmap != null) {
                 Image(
-                    bitmap = bitmap.asImageBitmap(),
+                    bitmap = requireNotNull(bitmap),
                     contentDescription = stringResource(R.string.agent_mode_replay_frame),
                     modifier = Modifier
                         .fillMaxSize()
@@ -3425,15 +3430,54 @@ private fun rememberAttachmentBitmap(
     val context = LocalContext.current
     val bitmap by produceState<ImageBitmap?>(initialValue = null, attachment, maxSize) {
         value = withContext(Dispatchers.IO) {
-            decodeInlineAttachmentBitmap(attachment, maxSize)
-                ?: decodeUriAttachmentBitmap(
-                    resolver = context.contentResolver,
-                    uriString = attachment.uri,
-                    maxSize = maxSize,
-                )
+            decodeAttachmentBitmap(
+                attachment = attachment,
+                maxSize = maxSize,
+                openInputStream = { context.contentResolver.openInputStream(it) },
+                readWorkspaceBytes = { readWorkspaceAttachmentBytes(context, attachment, 32 * 1024 * 1024) },
+            )
         }
     }
     return bitmap
+}
+
+internal suspend fun decodeAttachmentBitmap(
+    attachment: ChatAttachment,
+    maxSize: Int,
+    openInputStream: (Uri) -> java.io.InputStream?,
+    readWorkspaceBytes: suspend () -> ByteArray?,
+): ImageBitmap? = try {
+    decodeInlineAttachmentBitmap(attachment, maxSize)
+    ?: decodeUriAttachmentBitmap(attachment.uri, maxSize, openInputStream)
+    ?: if (attachment.workspacePath.isNotBlank()) {
+        readWorkspaceBytes()?.let { bytes ->
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            val options = BitmapFactory.Options().apply {
+                inSampleSize = calculateSampleSize(bounds.outWidth, bounds.outHeight, maxSize)
+            }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.asImageBitmap()
+        }
+    } else null
+} catch (failure: kotlinx.coroutines.CancellationException) {
+    throw failure
+} catch (_: Exception) {
+    null
+}
+
+private suspend fun readWorkspaceAttachmentBytes(
+    context: android.content.Context,
+    attachment: ChatAttachment,
+    byteLimit: Int,
+): ByteArray? {
+    if (attachment.workspacePath.isBlank()) return null
+    val runtime = (context.applicationContext as? AetherApplication)?.runtime ?: return null
+    return runtime.runtimeWorkspaceFileBridge.readWorkspaceFile(
+        path = attachment.workspacePath,
+        workingDirectory = "",
+        defaultRuntimeId = LocalRuntimeId.Alpine,
+        byteLimit = byteLimit,
+    ).getOrNull()?.bytes
 }
 
 private fun decodeInlineAttachmentBitmap(
@@ -3450,16 +3494,6 @@ private fun decodeInlineAttachmentBitmap(
     val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }
     BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.asImageBitmap()
 }.getOrNull()
-
-private fun decodeUriAttachmentBitmap(
-    resolver: android.content.ContentResolver,
-    uriString: String,
-    maxSize: Int,
-): ImageBitmap? = decodeUriAttachmentBitmap(
-    uriString = uriString,
-    maxSize = maxSize,
-    openInputStream = { uri -> resolver.openInputStream(uri) },
-)
 
 internal fun decodeUriAttachmentBitmap(
     uriString: String,
@@ -3495,7 +3529,8 @@ private fun rememberAttachmentTextPreview(
                 resolver = context.contentResolver,
                 uriString = attachment.uri,
                 byteLimit = 64 * 1024 + 1,
-            ) ?: return@withContext null
+            ) ?: readWorkspaceAttachmentBytes(context, attachment, 64 * 1024 + 1)
+                ?: return@withContext null
 
             val decoded = decodeTextAttachment(bytes) ?: return@withContext null
             val isTruncated = bytes.size > 64 * 1024 || decoded.length > 12_000
@@ -3596,7 +3631,7 @@ private fun isLikelyTextAttachment(
     )
 }
 
-private fun calculateSampleSize(
+internal fun calculateSampleSize(
     width: Int,
     height: Int,
     maxSize: Int,

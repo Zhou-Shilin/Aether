@@ -2107,4 +2107,10 @@
     <string name="phone_use_authorizing">Авторизация…</string>
     <string name="phone_use_permission_title">Доступность для Phone Use</string>
     <string name="phone_use_permission_body">Включите Aether в настройках специальных возможностей Android, чтобы агент мог управлять телефоном.</string>
+    <string name="settings_extension_phase_preparing">Подготовка среды расширений…</string>
+    <string name="settings_extension_phase_installing">Загрузка пакета и установка зависимостей…</string>
+    <string name="settings_extension_phase_saving">Сохранение установленного пакета…</string>
+    <string name="settings_extension_phase_reloading">Перезагрузка расширений…</string>
+    <string name="settings_extension_phase_refreshing">Обновление списка расширений…</string>
+    <string name="settings_extension_operation_elapsed">Прошло: %1$d с. Установка больших пакетов может занять несколько минут.</string>
 </resources>

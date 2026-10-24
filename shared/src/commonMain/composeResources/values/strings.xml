@@ -1086,4 +1086,10 @@
     <string name="settings_agent_mode_orientation_hint">Changing orientation stops the current virtual display. Relaunch the app afterwards.</string>
     <string name="agent_mode_fullscreen">Fullscreen</string>
     <string name="agent_mode_exit_fullscreen">Exit fullscreen</string>
+    <string name="settings_extension_phase_preparing">Preparing extension runtime…</string>
+    <string name="settings_extension_phase_installing">Downloading package and installing dependencies…</string>
+    <string name="settings_extension_phase_saving">Saving installed package…</string>
+    <string name="settings_extension_phase_reloading">Reloading extensions…</string>
+    <string name="settings_extension_phase_refreshing">Refreshing installed extensions…</string>
+    <string name="settings_extension_operation_elapsed">Elapsed: %1$d s. Large packages may take several minutes.</string>
 </resources>

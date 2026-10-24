@@ -1,8 +1,9 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { randomUUID } from "node:crypto";
 import { DefaultPackageManager } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/package-manager.js";
-import { SettingsManager } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/settings-manager.js";
+import { FileSettingsStorage, SettingsManager } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/settings-manager.js";
 import { loadSkills } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/skills.js";
 import { aetherAppExtensionCountForManifest } from "./aether-extensions.js";
 
@@ -51,14 +52,53 @@ function createPackageManager(
   agentDirectory: string = PI_AGENT_DIRECTORY,
   projectTrusted = false,
 ): DefaultPackageManager {
-  const settingsManager = SettingsManager.create(cwd, agentDirectory, {
-    projectTrusted,
-  });
+  const settingsManager = createPackageSettings(cwd, agentDirectory, projectTrusted);
   return new DefaultPackageManager({
     cwd,
     agentDir: agentDirectory,
     settingsManager,
   });
+}
+
+// Keep the SDK's interprocess lock, but replace truncating writes with an atomic
+// rename. Killing the runtime during an install must not erase all package sources.
+function createPackageSettings(cwd: string, agentDirectory: string, projectTrusted = false): SettingsManager {
+  const storage = new FileSettingsStorage(cwd, agentDirectory);
+  const manager = SettingsManager.fromStorage({
+    withLock(scope, update) {
+      storage.withLock(scope, (current) => {
+        const next = update(current);
+        if (next === undefined) return undefined;
+        const target = scope === "global"
+          ? path.join(agentDirectory, "settings.json")
+          : path.join(cwd, ".pi", "settings.json");
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        const temporary = `${target}.${randomUUID()}.tmp`;
+        try {
+          const descriptor = fs.openSync(temporary, "wx", 0o600);
+          try {
+            fs.writeFileSync(descriptor, next, "utf8");
+            fs.fsyncSync(descriptor);
+          } finally {
+            fs.closeSync(descriptor);
+          }
+          fs.renameSync(temporary, target);
+        } finally {
+          fs.rmSync(temporary, { force: true });
+        }
+        return undefined;
+      });
+    },
+  }, { projectTrusted });
+  const failure = manager.drainErrors()[0];
+  if (failure) throw failure.error;
+  return manager;
+}
+
+async function flushPackageSettings(manager: SettingsManager): Promise<void> {
+  await manager.flush();
+  const failure = manager.drainErrors()[0];
+  if (failure) throw failure.error;
 }
 
 export async function listDiscoveredSkills(
@@ -187,12 +227,28 @@ export async function listExtensionPackages(cwd: string): Promise<InstalledExten
     .listConfiguredPackages()
     .filter((configuredPackage) => configuredPackage.scope === "user");
   if (configuredPackages.length === 0) return [];
-  const resolved = await packageManager.resolve();
-  return configuredPackages
-    .map((configuredPackage) => installedPackagePayload(
-      configuredPackage,
-      packageResourcesForSource(configuredPackage.source, resolved),
-    ))
+  const settings = createPackageSettings(cwd, PI_AGENT_DIRECTORY).getGlobalSettings();
+  const packages: InstalledExtensionPackage[] = [];
+  for (const configuredPackage of configuredPackages) {
+    let resources: PackageResources = { extensions: [], skills: [], prompts: [], themes: [] };
+    try {
+      // Listing is read-only: a missing or interrupted package must never trigger
+      // an npm install or hide the other packages while the network is unavailable.
+      const entry = settings.packages?.find((entry) =>
+        (typeof entry === "string" ? entry : entry.source) === configuredPackage.source
+      );
+      const isolated = new DefaultPackageManager({
+        cwd,
+        agentDir: PI_AGENT_DIRECTORY,
+        settingsManager: SettingsManager.inMemory({ ...settings, packages: entry ? [entry] : [] }),
+      });
+      resources = packageResourcesForSource(configuredPackage.source, await isolated.resolve(async () => "skip"));
+    } catch (error) {
+      process.stderr.write(`Unable to inspect ${configuredPackage.source}: ${String(error)}\n`);
+    }
+    packages.push(installedPackagePayload(configuredPackage, resources));
+  }
+  return packages
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 
@@ -204,15 +260,22 @@ function requireNpmPackageSource(source: string): string {
   return normalized;
 }
 
-export async function installExtensionPackage(cwd: string, source: string): Promise<void> {
-  await createPackageManager(cwd).installAndPersist(requireNpmPackageSource(source));
+export async function installExtensionPackage(
+  cwd: string,
+  source: string,
+  onProgress: (phase: string) => void = () => {},
+): Promise<void> {
+  const settingsManager = createPackageSettings(cwd, PI_AGENT_DIRECTORY);
+  const manager = new DefaultPackageManager({ cwd, agentDir: PI_AGENT_DIRECTORY, settingsManager });
+  onProgress("installing");
+  await manager.installAndPersist(requireNpmPackageSource(source));
+  onProgress("saving");
+  await flushPackageSettings(settingsManager);
 }
 
 export async function removeExtensionPackage(cwd: string, source: string): Promise<boolean> {
   const normalized = requireNpmPackageSource(source);
-  const settingsManager = SettingsManager.create(cwd, PI_AGENT_DIRECTORY, {
-    projectTrusted: false,
-  });
+  const settingsManager = createPackageSettings(cwd, PI_AGENT_DIRECTORY);
   const packageManager = new DefaultPackageManager({
     cwd,
     agentDir: PI_AGENT_DIRECTORY,
@@ -242,9 +305,15 @@ export async function removeExtensionPackage(cwd: string, source: string): Promi
     const configuredSource = typeof entry === "string" ? entry : entry.source;
     return configuredSource !== normalized;
   }));
+  await flushPackageSettings(settingsManager);
   return true;
 }
 
-export async function updateExtensionPackage(cwd: string, source: string): Promise<void> {
+export async function updateExtensionPackage(
+  cwd: string,
+  source: string,
+  onProgress: (phase: string) => void = () => {},
+): Promise<void> {
+  onProgress("installing");
   await createPackageManager(cwd).update(requireNpmPackageSource(source));
 }
