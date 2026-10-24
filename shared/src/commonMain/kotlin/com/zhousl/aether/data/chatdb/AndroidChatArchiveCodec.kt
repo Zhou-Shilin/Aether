@@ -182,7 +182,7 @@ private fun PersistedChatMessage.toAndroidChatMessageJson(
 
 private fun PersistedReasoningTrace.toAndroidReasoningTraceJson(): JsonObject = buildJsonObject {
     put("id", id)
-    put("rawText", if (chunks.any { it.title.isNotBlank() || it.detail.isNotBlank() }) "" else rawText)
+    put("rawText", rawText)
     put("latestStatusText", latestStatusText)
     put("startedAtMillis", startedAtMillis)
     completedAtMillis?.let { put("completedAtMillis", it) }
@@ -192,7 +192,7 @@ private fun PersistedReasoningTrace.toAndroidReasoningTraceJson(): JsonObject = 
                 put("id", chunk.id)
                 put("title", chunk.title)
                 put("detail", chunk.detail)
-                put("rawText", if (chunk.title.isNotBlank() || chunk.detail.isNotBlank()) "" else chunk.rawText)
+                put("rawText", chunk.rawText)
                 put("isPending", chunk.isPending)
                 put("createdAtMillis", chunk.createdAtMillis)
                 put("timelineOrder", chunk.timelineOrder)

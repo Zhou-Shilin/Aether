@@ -2426,7 +2426,7 @@ class SessionExecutionManager(
         }
 
         scope.launch(Dispatchers.IO) {
-            val summary = summarizeReasoningChunk(trimmed) ?: fallbackReasoningSummary(trimmed)
+            val summary = summarizeReasoningChunk(trimmed) ?: fallbackReasoningSummary()
             updateReasoningTrace(handle.sessionId, blockId) { trace ->
                 val latestStatusText = summary.detail.ifBlank { summary.title }
                 trace.copy(
@@ -2499,20 +2499,10 @@ class SessionExecutionManager(
         return parseReasoningSummary(result)
     }
 
-    private fun fallbackReasoningSummary(rawText: String): ReasoningSummary {
-        val compact = rawText
-            .lineSequence()
-            .map(String::trim)
-            .filter(String::isNotBlank)
-            .joinToString(" ")
-            .replace(Regex("\\s+"), " ")
-        return ReasoningSummary(
-            title = "Thinking through the next step",
-            detail = compact
-                .take(ReasoningSummaryDetailMaxChars)
-                .ifBlank { "Preparing the next action." },
-        )
-    }
+    private fun fallbackReasoningSummary(): ReasoningSummary = ReasoningSummary(
+        title = "Reasoning summary unavailable",
+        detail = "Select this description to view the original reasoning.",
+    )
 
     private fun parseReasoningSummary(text: String): ReasoningSummary? {
         val lines = text.lines().map(String::trim).filter(String::isNotBlank)

@@ -17,6 +17,22 @@ import org.junit.Test
 
 class ChatRepositorySerializationTest {
     @Test
+    fun completedSummariesRetainEachRawExcerptAfterSavingAndReloading() {
+        val trace = com.zhousl.aether.ui.ReasoningTrace(
+            id = "reasoning",
+            rawText = "first excerpt\nsecond excerpt",
+            completedAtMillis = 100L,
+            chunks = listOf(
+                com.zhousl.aether.ui.ReasoningSummaryChunk("first", "First", "First summary", "first excerpt"),
+                com.zhousl.aether.ui.ReasoningSummaryChunk("second", "Second", "Second summary", "second excerpt"),
+            ),
+        )
+        val message = ChatMessage(id = "assistant", author = MessageAuthor.Agent, text = "Answer", reasoningTrace = trace)
+        val restored = parseMessage(message.toJson(), 0)
+        assertEquals(trace, restored.reasoningTrace)
+    }
+
+    @Test
     fun serializationKeepsInlineImageBytesAndWorkspacePath() {
         val serialized = serializeChatSessions(
             listOf(

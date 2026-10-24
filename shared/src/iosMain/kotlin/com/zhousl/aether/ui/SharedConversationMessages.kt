@@ -253,7 +253,7 @@ internal fun SharedChatMessage.sharedBrowserOverlayText(): String {
     return responseBlocks.drop(firstBrowserBlock).asReversed().firstNotNullOfOrNull { block ->
         val trace = (block as? SharedAssistantResponseBlock.Reasoning)?.trace ?: return@firstNotNullOfOrNull null
         trace.latestStatusText.ifBlank {
-            trace.chunks.lastOrNull { it.detail.isNotBlank() || it.title.isNotBlank() }
+            trace.chunks.lastOrNull { !it.isPending && (it.detail.isNotBlank() || it.title.isNotBlank()) }
                 ?.let { it.detail.ifBlank(it::title) }
                 .orEmpty()
         }.takeIf(String::isNotBlank)
@@ -2024,13 +2024,12 @@ private fun SharedReasoningStatus(
     onOpenLink: (String) -> Unit,
 ) {
     var sheetVisible by remember(trace.id) { mutableStateOf(false) }
-    var showRawReasoning by remember(trace.id) { mutableStateOf(false) }
     val interactionSource = remember(trace.id) { MutableInteractionSource() }
-    val latestDetail = remember(trace.latestStatusText, trace.chunks, trace.rawText) {
+    val latestDetail = remember(trace.latestStatusText, trace.chunks) {
         trace.latestStatusText.ifBlank {
-            trace.chunks.lastOrNull { it.detail.isNotBlank() || it.title.isNotBlank() }
+            trace.chunks.lastOrNull { !it.isPending && (it.detail.isNotBlank() || it.title.isNotBlank()) }
                 ?.let { chunk -> chunk.detail.ifBlank { chunk.title } }
-                .orEmpty().ifBlank { trace.rawText.trim().takeLast(180) }
+                .orEmpty()
         }
     }
     val completed = trace.completedAtMillis != null
@@ -2081,22 +2080,15 @@ private fun SharedReasoningStatus(
                 )
             },
         ) {
-            Column(
-                modifier = Modifier.fillMaxWidth().heightIn(max = 640.dp)
-                    .verticalScroll(rememberScrollState())
-                    .padding(start = 24.dp, top = 10.dp, end = 24.dp, bottom = 30.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                if (trace.rawText.isNotBlank()) {
-                    androidx.compose.material3.TextButton(onClick = { showRawReasoning = !showRawReasoning }) {
-                        Text(stringResource(Res.string.chat_raw_reasoning))
-                    }
-                }
-                if (showRawReasoning || !trace.hasTimelineContent) {
-                    SharedRawReasoningPanel(trace.rawText)
-                }
+            ReasoningSheetPages(
+                traceId = trace.id,
+                rawText = trace.rawText,
+                sections = trace.chunks.map { ReasoningRawSection(it.id, it.rawText) },
+            ) { onOpenRawReasoning ->
                 if (trace.hasTimelineContent || trace.completedAtMillis != null) {
-                    SharedReasoningTimeline(trace, onOpenLink)
+                    SharedReasoningTimeline(trace, onOpenLink, onOpenRawReasoning)
+                } else {
+                    SharedReasoningShimmerText(stringResource(Res.string.chat_thinking))
                 }
             }
         }
@@ -2139,26 +2131,6 @@ internal fun SharedReasoningShimmerText(
         end = Offset(shimmerOffset + 180f, 0f),
     )
     Text(text, modifier = modifier, style = MaterialTheme.typography.bodyMedium.copy(brush = brush))
-}
-
-@Composable
-private fun SharedRawReasoningPanel(rawText: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            stringResource(Res.string.chat_raw_reasoning),
-            style = MaterialTheme.typography.labelMedium,
-            color = AetherOnSurfaceVariant,
-        )
-        SelectionContainer {
-            Text(
-                text = rawText.ifBlank { stringResource(Res.string.chat_waiting_for_reasoning) },
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
-                    .background(AetherSurfaceHigh).padding(14.dp),
-                color = AetherOnSurfaceVariant,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-    }
 }
 
 internal sealed interface SharedReasoningTimelineItem {
@@ -2212,6 +2184,7 @@ internal fun sharedReasoningTimelineItems(trace: SharedReasoningTrace): List<Sha
 private fun SharedReasoningTimeline(
     trace: SharedReasoningTrace,
     onOpenLink: (String) -> Unit,
+    onOpenRawReasoning: (String, String) -> Unit,
 ) {
     val items = remember(trace.chunks, trace.toolInvocations) { sharedReasoningTimelineItems(trace) }
     val hasDone = trace.completedAtMillis != null
@@ -2222,9 +2195,13 @@ private fun SharedReasoningTimeline(
             val isLast = !hasDone && index == items.lastIndex
             when (item) {
                 is SharedReasoningTimelineItem.Summary -> SharedReasoningTimelineRow(
-                    title = item.chunk.title.ifBlank { summarizingTitle },
-                    detail = item.chunk.detail.ifBlank { preparingDetail },
+                    title = if (item.chunk.isPending) "" else item.chunk.title.ifBlank { summarizingTitle },
+                    detail = if (item.chunk.isPending) pendingReasoningPreview(item.chunk.rawText)
+                        else item.chunk.detail.ifBlank { preparingDetail },
                     isLast = isLast,
+                    onOpenRawReasoning = if (!item.chunk.isPending && item.chunk.rawText.isNotBlank()) {
+                        { onOpenRawReasoning(item.chunk.title, item.chunk.id) }
+                    } else null,
                 )
                 is SharedReasoningTimelineItem.Tool -> SharedReasoningTimelineToolRow(
                     tool = item.tool,
@@ -2238,7 +2215,12 @@ private fun SharedReasoningTimeline(
 }
 
 @Composable
-private fun SharedReasoningTimelineRow(title: String, detail: String, isLast: Boolean) {
+private fun SharedReasoningTimelineRow(
+    title: String,
+    detail: String,
+    isLast: Boolean,
+    onOpenRawReasoning: (() -> Unit)?,
+) {
     Row(
         modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -2248,13 +2230,24 @@ private fun SharedReasoningTimelineRow(title: String, detail: String, isLast: Bo
             modifier = Modifier.weight(1f).padding(bottom = if (isLast) 0.dp else 22.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text(
-                title,
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                color = AetherOnSurface,
-            )
+            if (title.isNotBlank()) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                    color = AetherOnSurface,
+                )
+            }
             if (detail.isNotBlank()) {
-                Text(detail, style = MaterialTheme.typography.bodyMedium, color = AetherOnSurfaceVariant)
+                Text(
+                    detail,
+                    modifier = if (onOpenRawReasoning != null) Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onOpenRawReasoning,
+                    ) else Modifier,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AetherOnSurfaceVariant,
+                )
             }
         }
     }

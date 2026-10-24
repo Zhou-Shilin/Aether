@@ -1384,7 +1384,7 @@ private fun parseReasoningTrace(json: JSONObject?): ReasoningTrace? {
 
 private fun ReasoningTrace.toJson(): JSONObject = JSONObject().apply {
     put("id", id)
-    put("rawText", if (hasSummary) "" else rawText)
+    put("rawText", rawText)
     put("latestStatusText", latestStatusText)
     put("startedAtMillis", startedAtMillis)
     completedAtMillis?.let { put("completedAtMillis", it) }
@@ -1416,10 +1416,7 @@ private fun ReasoningSummaryChunk.toJson(): JSONObject = JSONObject().apply {
     put("id", id)
     put("title", title)
     put("detail", detail)
-    put(
-        "rawText",
-        if (title.isNotBlank() || detail.isNotBlank()) "" else rawText,
-    )
+    put("rawText", rawText)
     put("isPending", isPending)
     put("createdAtMillis", createdAtMillis)
     put("timelineOrder", timelineOrder)

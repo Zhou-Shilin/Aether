@@ -1910,11 +1910,11 @@ fun ReasoningTraceStatus(
     onOpenLink: (String) -> Unit = {},
 ) {
     var sheetVisible by remember(trace.id) { mutableStateOf(false) }
-    val latestDetail = remember(trace.latestStatusText, trace.chunks, trace.rawText) {
+    val latestDetail = remember(trace.latestStatusText, trace.chunks) {
         trace.latestStatusText.ifBlank {
-            trace.chunks.lastOrNull { it.detail.isNotBlank() || it.title.isNotBlank() }
+            trace.chunks.lastOrNull { !it.isPending && (it.detail.isNotBlank() || it.title.isNotBlank()) }
             ?.let { chunk -> chunk.detail.ifBlank { chunk.title } }
-            .orEmpty().ifBlank { trace.rawText.trim().takeLast(180) }
+            .orEmpty()
         }
     }
     val completed = trace.completedAtMillis != null
@@ -2005,57 +2005,19 @@ private fun ReasoningTraceSheetContent(
     trace: ReasoningTrace,
     onOpenLink: (String) -> Unit,
 ) {
-    var showRawReasoning by remember(trace.id) { mutableStateOf(false) }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(max = 640.dp)
-            .verticalScroll(rememberScrollState())
-            .padding(start = 24.dp, top = 10.dp, end = 24.dp, bottom = 30.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        if (trace.rawText.isNotBlank()) {
-            androidx.compose.material3.TextButton(onClick = { showRawReasoning = !showRawReasoning }) {
-                Text(stringResource(R.string.chat_raw_reasoning))
-            }
-        }
-        if (showRawReasoning || !trace.hasTimelineContent) {
-            RawReasoningPanel(rawText = trace.rawText)
-        }
+    ReasoningSheetPages(
+                traceId = trace.id,
+                rawText = trace.rawText,
+                sections = trace.chunks.map { ReasoningRawSection(it.id, it.rawText) },
+            ) { onOpenRawReasoning ->
         if (trace.hasTimelineContent || trace.completedAtMillis != null) {
             ReasoningTimeline(
                 trace = trace,
                 onOpenLink = onOpenLink,
+                onOpenRawReasoning = onOpenRawReasoning,
             )
-        }
-    }
-}
-
-@Composable
-private fun RawReasoningPanel(
-    rawText: String,
-) {
-    val waitingForReasoning = stringResource(R.string.chat_waiting_for_reasoning)
-    val displayText = remember(rawText, waitingForReasoning) {
-        rawText.ifBlank { waitingForReasoning }
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = stringResource(R.string.chat_raw_reasoning),
-            style = MaterialTheme.typography.labelMedium,
-            color = AetherOnSurfaceVariant,
-        )
-        SelectionContainer {
-            Text(
-                text = displayText,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(AetherSurfaceHigh)
-                    .padding(14.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                color = AetherOnSurfaceVariant,
-            )
+        } else {
+            ShimmerStatusText(stringResource(R.string.chat_thinking))
         }
     }
 }
@@ -2064,6 +2026,7 @@ private fun RawReasoningPanel(
 private fun ReasoningTimeline(
     trace: ReasoningTrace,
     onOpenLink: (String) -> Unit,
+    onOpenRawReasoning: (String, String) -> Unit,
 ) {
     val timelineItems = remember(trace.chunks, trace.toolInvocations) {
         reasoningTimelineItems(trace)
@@ -2076,12 +2039,16 @@ private fun ReasoningTimeline(
             val isLast = !hasDoneChunk && index == timelineItems.lastIndex
             when (item) {
                 is ReasoningTimelineItem.Summary -> ReasoningTimelineRow(
-                    title = item.chunk.title.ifBlank { summarizingReasoningTitle },
+                    title = if (item.chunk.isPending) "" else item.chunk.title.ifBlank { summarizingReasoningTitle },
                     detail = when {
+                        item.chunk.isPending -> pendingReasoningPreview(item.chunk.rawText)
                         item.chunk.detail.isNotBlank() -> item.chunk.detail
                         else -> preparingReasoningSummary
                     },
                     isLast = isLast,
+                    onOpenRawReasoning = if (!item.chunk.isPending && item.chunk.rawText.isNotBlank()) {
+                        { onOpenRawReasoning(item.chunk.title, item.chunk.id) }
+                    } else null,
                 )
 
                 is ReasoningTimelineItem.Tool -> ReasoningTimelineToolRow(
@@ -2156,6 +2123,7 @@ private fun ReasoningTimelineRow(
     title: String,
     detail: String,
     isLast: Boolean,
+    onOpenRawReasoning: (() -> Unit)?,
 ) {
     Row(
         modifier = Modifier
@@ -2170,14 +2138,18 @@ private fun ReasoningTimelineRow(
                 .padding(bottom = if (isLast) 0.dp else 22.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                color = AetherOnSurface,
-            )
+            if (title.isNotBlank()) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                    color = AetherOnSurface,
+                )
+            }
             if (detail.isNotBlank()) {
                 Text(
                     text = detail,
+                    modifier = if (onOpenRawReasoning != null) Modifier.noRippleClickable(onClick = onOpenRawReasoning)
+                        else Modifier,
                     style = MaterialTheme.typography.bodyMedium,
                     color = AetherOnSurfaceVariant,
                 )

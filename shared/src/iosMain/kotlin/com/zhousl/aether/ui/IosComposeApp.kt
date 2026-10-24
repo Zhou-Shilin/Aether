@@ -1806,7 +1806,7 @@ fun IosComposeApp(
                         }
                     } else {
                         null
-                    } ?: fallbackSharedReasoningSummary(prepared.chunk.rawText)
+                    } ?: fallbackSharedReasoningSummary()
                     if (sessionStates[target.id] !== target) return@launch
                     target.messages.updateMessage(assistantId) { current ->
                         current.withCompletedReasoningSummary(
@@ -4537,14 +4537,10 @@ private fun parseSharedReasoningSummary(text: String): SharedReasoningSummary? {
     return SharedReasoningSummary(title, detail)
 }
 
-private fun fallbackSharedReasoningSummary(rawText: String): SharedReasoningSummary {
-    val compact = rawText.lineSequence().map(String::trim).filter(String::isNotBlank)
-        .joinToString(" ").replace(Regex("\\s+"), " ")
-    return SharedReasoningSummary(
-        title = "Thinking through the next step",
-        detail = compact.take(SharedReasoningSummaryDetailMaxChars).ifBlank { "Preparing the next action." },
-    )
-}
+private fun fallbackSharedReasoningSummary(): SharedReasoningSummary = SharedReasoningSummary(
+    title = "Reasoning summary unavailable",
+    detail = "Select this description to view the original reasoning.",
+)
 
 private fun String.sanitizeSharedExportFileName(): String = trim()
     .replace(Regex("[\\\\/:*?\"<>|]+"), "-")
