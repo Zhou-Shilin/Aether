@@ -1,6 +1,7 @@
 package com.zhousl.aether.runtime
 
 import android.content.Context
+import android.net.ConnectivityManager
 import android.net.TrafficStats
 import android.os.Build
 import com.zhousl.aether.data.AetherDiagnosticLogger
@@ -8,9 +9,11 @@ import com.zhousl.aether.data.AlpineEnvironmentVariable
 import com.zhousl.aether.data.LocalRuntimeId
 import com.zhousl.aether.data.normalizeAlpineEnvironmentVariables
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 import java.util.zip.GZIPInputStream
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -96,6 +99,7 @@ class AlpineRuntime(
     private val loaderFile = File(loaderDir, "loader")
     private val prootFile = File(hostBinDir, "proot")
     private val libTallocFile = File(hostLibDir, "libtalloc.so.2")
+    private val guestResolvConfLock = Any()
     private val runs = ConcurrentHashMap<String, AlpineRun>()
     private val nextRunId = AtomicInteger(1)
     private val packageInstallMutex = Mutex()
@@ -1136,19 +1140,7 @@ class AlpineRuntime(
     }
 
     private fun ensureGuestNetworkConfig() {
-        val resolvConf = File(rootfsDir, "etc/resolv.conf")
-        if (!resolvConf.isFile || resolvConf.length() == 0L) {
-            resolvConf.parentFile?.mkdirs()
-            resolvConf.writeText(
-                """
-                nameserver 1.1.1.1
-                nameserver 8.8.8.8
-                options timeout:2 attempts:2
-                """.trimIndent() + "\n"
-            )
-            resolvConf.setReadable(true, false)
-            resolvConf.setWritable(true, true)
-        }
+        writeGuestResolvConf()
         val apkWorld = File(rootfsDir, "lib/apk/db/world")
         if (!apkWorld.exists()) {
             apkWorld.parentFile?.mkdirs()
@@ -1156,6 +1148,68 @@ class AlpineRuntime(
             apkWorld.setReadable(true, false)
             apkWorld.setWritable(true, true)
         }
+    }
+
+    /** Called before a reused bridge request: musl reads resolv.conf per lookup, so a refreshed
+     * file reaches a Node process that outlived a network change. */
+    suspend fun refreshGuestResolvConf() = withContext(Dispatchers.IO) {
+        writeGuestResolvConf()
+    }
+
+    private fun writeGuestResolvConf() {
+        val resolvConf = File(rootfsDir, "etc/resolv.conf")
+        // An unreadable resolver is left exactly as it is; a chat turn must not fail over it.
+        val existing = if (resolvConf.isFile) runCatching { resolvConf.readText() }.getOrElse { return } else null
+        if (!shouldRewriteGuestResolvConf(existing)) return
+        val content = guestResolvConfContent(deviceDnsLinks())
+        if (existing == content) return
+        synchronized(guestResolvConfLock) {
+            // Another caller may have written while this one was computing its own content.
+            val current = if (resolvConf.isFile) runCatching { resolvConf.readText() }.getOrElse { return } else null
+            if (current != null && current != existing) return
+            // Stage outside the rootfs under an unpredictable name, then rename it into place: the
+            // guest can plant /etc/resolv.conf.aether-tmp as a symlink and a host-side write through
+            // it would land wherever that symlink points, and a reader must never see half a file,
+            // because a half file whose digest no longer matches is treated as a hand edit forever.
+            val staging = runCatching {
+                hostTmpDir.mkdirs()
+                File.createTempFile("resolv-conf", ".aether", hostTmpDir)
+            }.getOrElse { return }
+            runCatching {
+                staging.writeText(content)
+                staging.setReadable(true, false)
+                staging.setWritable(true, true)
+                if (!staging.renameTo(resolvConf)) throw IOException("Unable to replace ${resolvConf.path}")
+            }.onFailure { staging.delete() }
+        }
+    }
+
+    /**
+     * DNS of every network the device currently holds, active network first. Public resolvers alone
+     * cannot answer names that only a VPN resolver knows (Tailscale or NetBird MagicDNS), and the
+     * guest shares the host network namespace, so those resolvers are reachable.
+     *
+     * Private DNS (DNS over TLS) has no resolv.conf spelling, so guest lookups stay cleartext to the
+     * network resolver. That is unchanged from the public resolvers this replaced.
+     */
+    private fun deviceDnsLinks(): List<GuestDnsLink> {
+        val connectivity = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return emptyList()
+        val activeNetwork = runCatching { connectivity.activeNetwork }.getOrNull()
+        val networks = buildList {
+            activeNetwork?.let { network -> add(network) }
+            runCatching { connectivity.allNetworks.toList() }.getOrNull()
+                ?.filter { network -> network != activeNetwork }
+                ?.let { remaining -> addAll(remaining) }
+        }
+        return networks
+            .mapNotNull { network -> runCatching { connectivity.getLinkProperties(network) }.getOrNull() }
+            .map { link ->
+                GuestDnsLink(
+                    nameservers = link.dnsServers.mapNotNull { address -> address?.hostAddress },
+                    searchDomains = listOfNotNull(link.domains),
+                )
+            }
     }
 
     private suspend fun verifyPackageProfile(profileId: String): Boolean {
@@ -1413,6 +1467,78 @@ class AlpineRuntime(
             thread = null
         }
     }
+}
+
+private const val GuestResolvConfMarkerPrefix = "# Generated by Aether"
+private val GuestResolvConfFallbackNameservers = listOf("1.1.1.1", "8.8.8.8")
+
+// musl only consults the first MAXNS nameservers and the first MAXDNSRCH search domains.
+private const val GuestResolvConfMaxNameservers = 3
+private const val GuestResolvConfMaxSearchDomains = 6
+
+// What Aether wrote before it learned to read the device network.
+private const val GuestResolvConfLegacyContent =
+    "nameserver 1.1.1.1\nnameserver 8.8.8.8\noptions timeout:2 attempts:2"
+
+/** One network's resolver configuration, in host preference order. */
+internal data class GuestDnsLink(
+    val nameservers: List<String> = emptyList(),
+    val searchDomains: List<String> = emptyList(),
+)
+
+// A scoped IPv6 address is not valid in resolv.conf.
+private fun isUsableGuestNameserver(nameserver: String): Boolean =
+    nameserver.isNotBlank() && !nameserver.contains('%')
+
+internal fun guestResolvConfContent(links: List<GuestDnsLink>): String {
+    // musl queries every configured nameserver at once and keeps the first answer, so resolvers of
+    // different networks must not be mixed: a fast NXDOMAIN from the underlying network would beat
+    // the VPN resolver that actually knows the name. Only the first network with a usable
+    // resolver is used, and the public resolvers are the last resort when none has one.
+    val link = links.firstOrNull { candidate ->
+        candidate.nameservers.any { nameserver -> isUsableGuestNameserver(nameserver.trim()) }
+    } ?: GuestDnsLink()
+    val nameservers = link.nameservers
+        .map { nameserver -> nameserver.trim() }
+        .filter { nameserver -> isUsableGuestNameserver(nameserver) }
+        .distinct()
+        .take(GuestResolvConfMaxNameservers)
+        .ifEmpty { GuestResolvConfFallbackNameservers }
+    // LinkProperties documents comma separation, but Android VPNs join search domains with spaces.
+    val searchDomains = link.searchDomains
+        .flatMap { domain -> domain.split(Regex("[,\\s]+")) }
+        .map { domain -> domain.trim() }
+        .filter { domain -> domain.isNotEmpty() && !domain.any { character -> character.isWhitespace() } }
+        .distinct()
+        .take(GuestResolvConfMaxSearchDomains)
+    val body = buildString {
+        nameservers.forEach { nameserver -> appendLine("nameserver $nameserver") }
+        if (searchDomains.isNotEmpty()) appendLine("search ${searchDomains.joinToString(" ")}")
+        appendLine("options timeout:2 attempts:2")
+    }
+    return guestResolvConfMarkerFor(body) + "\n" + body
+}
+
+// The digest lets an edit that kept the marker line be recognised as an edit.
+internal fun guestResolvConfMarkerFor(body: String): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+        .digest(body.toByteArray(Charsets.UTF_8))
+        .joinToString("") { byte -> "%02x".format(byte) }
+    return "$GuestResolvConfMarkerPrefix $digest"
+}
+
+/**
+ * A resolver the user edited by hand is left alone; only files Aether wrote untouched are
+ * refreshed, which the digest in the marker line proves. Files from before the marker existed are
+ * recognised by their exact legacy content, otherwise every existing install would keep the public
+ * resolvers this replaced.
+ */
+internal fun shouldRewriteGuestResolvConf(existing: String?): Boolean {
+    if (existing.isNullOrEmpty()) return true
+    if (existing.trim() == GuestResolvConfLegacyContent.trim()) return true
+    val marker = existing.lineSequence().firstOrNull().orEmpty().trim()
+    return marker.startsWith(GuestResolvConfMarkerPrefix) &&
+        guestResolvConfMarkerFor(existing.substringAfter('\n')) == marker
 }
 
 internal fun resolveAlpineManagedHostFile(

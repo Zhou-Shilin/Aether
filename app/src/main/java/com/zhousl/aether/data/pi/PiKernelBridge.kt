@@ -574,6 +574,7 @@ class PiKernelBridge(
                 requestId = id,
                 details = diagnosticDetails,
             )
+            alpineRuntime.refreshGuestResolvConf()
             val requestProcess = if (startIfNeeded) {
                 diagnosticLogger.event(
                     category = "pi_bridge",
