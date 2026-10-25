@@ -5,6 +5,109 @@ final class AetherUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testNativeMenusAvoidTheirButtons() throws {
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        waitForChatStartup(app)
+        try verifyMenuPlacement(app)
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            XCUIDevice.shared.orientation = .landscapeLeft
+            defer { XCUIDevice.shared.orientation = .portrait }
+            try verifyMenuPlacement(app)
+        }
+    }
+
+    private func verifyMenuPlacement(_ app: XCUIApplication) throws {
+        let selector = app.buttons["chat.modelSelector"]
+        XCTAssertTrue(selector.waitForExistence(timeout: 10))
+        let selectorFrame = selector.frame
+        // Tap the original Kotlin artwork, independently of the native AX frame.
+        app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: selectorFrame.midX, dy: selectorFrame.midY)).tap()
+        XCTAssertTrue(app.buttons["chat.menu.reasoning"].waitForExistence(timeout: 5))
+        let modelRows = app.collectionViews.containing(.button, identifier: "chat.menu.reasoning")
+            .firstMatch.buttons.allElementsBoundByIndex
+        XCTAssertFalse(modelRows.isEmpty)
+        let modelBounds = modelRows.reduce(CGRect.null) { $0.union($1.frame) }.insetBy(dx: -8, dy: -8)
+        XCTAssertGreaterThanOrEqual(modelBounds.minY, selectorFrame.maxY + 4)
+        XCTAssertFalse(modelBounds.intersects(selectorFrame))
+        let model = XCTAttachment(screenshot: app.screenshot())
+        model.lifetime = .keepAlways
+        add(model)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.4)).tap()
+        XCTAssertTrue(app.buttons["chat.menu.reasoning"].waitForNonExistence(timeout: 5))
+
+        let plus = app.buttons["chat.add"]
+        let plusFrame = plus.frame
+        app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: plusFrame.midX, dy: plusFrame.midY)).tap()
+        XCTAssertTrue(app.buttons["chat.menu.photos"].waitForExistence(timeout: 5))
+        let plusRows = app.collectionViews.containing(.button, identifier: "chat.menu.photos")
+            .firstMatch.buttons.allElementsBoundByIndex
+        XCTAssertFalse(plusRows.isEmpty)
+        let plusBounds = plusRows.reduce(CGRect.null) { $0.union($1.frame) }.insetBy(dx: -8, dy: -8)
+        XCTAssertLessThanOrEqual(plusBounds.maxY, plusFrame.minY - 4)
+        XCTAssertFalse(plusBounds.intersects(plusFrame))
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.4)).tap()
+        XCTAssertTrue(app.buttons["chat.menu.photos"].waitForNonExistence(timeout: 5))
+    }
+
+    func testNativeMenusKeepKotlinShell() throws {
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        if app.buttons["Agree"].waitForExistence(timeout: 5) { app.buttons["Agree"].tap() }
+        if app.buttons["Skip"].waitForExistence(timeout: 3) { app.buttons["Skip"].tap() }
+        waitForChatStartup(app)
+
+        let selector = app.buttons["chat.modelSelector"]
+        XCTAssertTrue(selector.waitForExistence(timeout: 10))
+        if selector.isEnabled {
+            selector.tap()
+            XCTAssertTrue(app.buttons["chat.menu.reasoning"].waitForExistence(timeout: 5))
+            let model = XCTAttachment(screenshot: app.screenshot())
+            model.lifetime = .keepAlways
+            add(model)
+            selector.tap()
+        }
+        app.buttons["chat.add"].tap()
+        let photos = app.buttons["chat.menu.photos"]
+        XCTAssertTrue(photos.waitForExistence(timeout: 5))
+        XCTAssertTrue(photos.isHittable)
+        XCTAssertTrue(app.buttons["chat.menu.files"].exists)
+        let menu = XCTAttachment(screenshot: app.screenshot())
+        menu.lifetime = .keepAlways
+        add(menu)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.3)).tap()
+        XCTAssertTrue(app.buttons["chat.menu.files"].waitForNonExistence(timeout: 5))
+
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            XCTAssertFalse(app.buttons["Menu"].exists)
+        } else {
+            app.buttons["Menu"].tap()
+        }
+        // The original Kotlin drawer exposes Search and Settings buttons,
+        // with a Kotlin text field that appears only after Search is pressed.
+        XCTAssertTrue(app.buttons["Search"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Settings"].exists)
+        XCTAssertEqual(app.searchFields.count, 0)
+        app.buttons["Search"].tap()
+        let search = app.textViews.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap()
+        search.typeText("No matching conversation")
+        XCTAssertTrue(app.staticTexts["No chats match"].waitForExistence(timeout: 5))
+        let drawer = XCTAttachment(screenshot: app.screenshot())
+        drawer.lifetime = .keepAlways
+        add(drawer)
+        app.buttons["Settings"].tap()
+        XCTAssertTrue(app.staticTexts["General Settings"].waitForExistence(timeout: 10))
+    }
+
     func testSettingsProviderRowsAndPersonalizationSaveRespond() throws {
         let app = XCUIApplication()
         app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]

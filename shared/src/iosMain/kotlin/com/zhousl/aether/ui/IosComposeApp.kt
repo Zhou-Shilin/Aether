@@ -316,6 +316,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -6419,46 +6421,15 @@ private fun SharedConversationModelSelector(
     onReasoningEffortSelected: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    var showingReasoningEffort by remember { mutableStateOf(false) }
-    var menuSelectedModelKey by remember { mutableStateOf(selectedModelKey) }
-    var anchorHeightPx by remember { mutableIntStateOf(0) }
-    val density = LocalDensity.current
-    val selectedOption = options.findModelOption(menuSelectedModelKey) ?: options.firstOrNull()
-
-    LaunchedEffect(selectedModelKey) {
-        menuSelectedModelKey = selectedModelKey
-    }
-    val thinkingKey = selectedOption?.let { option ->
-        sharedThinkingCatalogKey(option.piProviderId, option.modelId)
-    }
-    val supportedThinkingLevels = thinkingKey?.let(thinkingLevelsByProviderModel::get).orEmpty()
-    val effectiveReasoningEffort = thinkingKey
-        ?.let(thinkingLevelClampsByProviderModel::get)
-        ?.get(reasoningEffort)
-        ?: reasoningEffort
+    val selected = options.findModelOption(selectedModelKey) ?: options.firstOrNull()
     val fallbackLabel = stringResource(Res.string.chat_select_model)
-    val selectedDisplay = remember(selectedOption, modelCatalogInfo) {
-        selectedOption?.let { option ->
-            formatSharedSelectedModelDisplayName(
-                modelCatalogInfo[option.key]?.displayName ?: option.modelId,
-            )
-        }
-    }
-    val selectedModelName = selectedDisplay
-        ?.let { display -> listOf(display.primary, display.secondary).filter(String::isNotBlank) }
-        ?.joinToString(" ")
-        ?.takeIf(String::isNotBlank)
-        ?: selectedOption?.chatLabel
-        ?: fallbackLabel
-
+    val display = selected?.let { formatSharedSelectedModelDisplayName(modelCatalogInfo[it.key]?.displayName ?: it.modelId) }
+    val effortLabels = thinkingLevelsByProviderModel.values.flatten().distinct().associateWith { sharedReasoningEffortLabel(it) }
+    val selectedDisplay = display
     Box(modifier = modifier, contentAlignment = Alignment.CenterStart) {
         Box(
             modifier = Modifier
-                .height(38.dp)
-                .onGloballyPositioned { coordinates ->
-                    anchorHeightPx = coordinates.boundsInWindow().height.toInt()
-                },
+                .height(38.dp),
         ) {
             Box(
                 modifier = Modifier
@@ -6472,13 +6443,7 @@ private fun SharedConversationModelSelector(
                 modifier = Modifier
                     .height(38.dp)
                     .clip(RoundedCornerShape(999.dp))
-                    .background(AetherSurface.copy(alpha = 0.96f))
-                    .clickable(enabled = options.isNotEmpty()) {
-                        onOpened()
-                        menuSelectedModelKey = selectedModelKey
-                        showingReasoningEffort = false
-                        expanded = true
-                    },
+                    .background(AetherSurface.copy(alpha = 0.96f)),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (selectedDisplay != null) {
@@ -6497,289 +6462,37 @@ private fun SharedConversationModelSelector(
                     )
                 }
             }
-        }
-
-        SharedAnimatedPopupHost(visible = expanded) { menuVisibility ->
-            Popup(
-                alignment = Alignment.TopStart,
-                offset = IntOffset(0, anchorHeightPx + with(density) { 10.dp.roundToPx() }),
-                onDismissRequest = { expanded = false },
-                properties = PopupProperties(
-                    focusable = true,
-                    dismissOnBackPress = true,
-                    dismissOnClickOutside = true,
-                ),
-            ) {
-                androidx.compose.animation.AnimatedVisibility(
-                    visibleState = menuVisibility,
-                    enter = fadeIn(tween(140, easing = SharedConversationMotionEasing)) +
-                        scaleIn(
-                            initialScale = 0.90f,
-                            transformOrigin = TransformOrigin(0f, 0f),
-                            animationSpec = tween(220, easing = SharedConversationMotionEasing),
-                        ) + slideInVertically(
-                            animationSpec = tween(240, easing = SharedConversationMotionEasing),
-                            initialOffsetY = { -it / 12 },
-                        ),
-                    exit = fadeOut(tween(120, easing = SharedConversationMotionEasing)) +
-                        scaleOut(
-                            targetScale = 0.96f,
-                            transformOrigin = TransformOrigin(0f, 0f),
-                            animationSpec = tween(160, easing = SharedConversationMotionEasing),
-                        ),
-                ) {
-                    AnimatedContent(
-                        targetState = showingReasoningEffort && supportedThinkingLevels.isNotEmpty(),
-                        transitionSpec = {
-                            val enteringOffset: (Int) -> Int = { width ->
-                                if (targetState) width / 10 else -width / 10
-                            }
-                            val exitingOffset: (Int) -> Int = { width ->
-                                if (targetState) -width / 10 else width / 10
-                            }
-                            (
-                                fadeIn(
-                                    animationSpec = tween(
-                                        durationMillis = 220,
-                                        delayMillis = 60,
-                                        easing = SharedConversationMotionEasing,
-                                    ),
-                                ) + slideInHorizontally(
-                                    animationSpec = tween(
-                                        durationMillis = 340,
-                                        easing = SharedConversationMotionEasing,
-                                    ),
-                                    initialOffsetX = enteringOffset,
-                                )
-                            ).togetherWith(
-                                fadeOut(
-                                    animationSpec = tween(
-                                        durationMillis = 150,
-                                        easing = SharedConversationMotionEasing,
-                                    ),
-                                ) + slideOutHorizontally(
-                                    animationSpec = tween(
-                                        durationMillis = 280,
-                                        easing = SharedConversationMotionEasing,
-                                    ),
-                                    targetOffsetX = exitingOffset,
-                                )
-                            ).using(
-                                SizeTransform(clip = false) { _, _ ->
-                                    tween(durationMillis = 360, easing = SharedConversationMotionEasing)
+            NativeChatControl("model", buildJsonObject {
+                put("selected", selected?.key.orEmpty())
+                put("primary", display?.primary ?: stringResource(Res.string.chat_select_model))
+                put("secondaryName", display?.secondary.orEmpty())
+                put("displayIcon", display?.icon?.name.orEmpty())
+                put("modelTitle", stringResource(Res.string.chat_model))
+                put("reasoningTitle", stringResource(Res.string.chat_reasoning_effort))
+                put("effort", reasoningEffort)
+                putJsonArray("options") {
+                    options.forEach { option ->
+                        val key = sharedThinkingCatalogKey(option.piProviderId, option.modelId)
+                        add(buildJsonObject {
+                            put("id", option.key); put("title", option.chatLabel)
+                            putJsonArray("efforts") {
+                                thinkingLevelsByProviderModel[key].orEmpty().forEach { effort ->
+                                    add(buildJsonObject { put("id", effort); put("title", effortLabels[effort].orEmpty()) })
                                 }
-                            )
-                        },
-                        modifier = Modifier.width(242.dp)
-                            .shadow(14.dp, RoundedCornerShape(22.dp), ambientColor = AetherScrim, spotColor = AetherScrim)
-                            .clip(RoundedCornerShape(22.dp))
-                            .background(AetherSurface)
-                            .padding(vertical = 5.dp),
-                        label = "shared-conversation-model-menu-mode",
-                    ) { showReasoning ->
-                        if (showReasoning) {
-                            SharedConversationReasoningEffortMenu(
-                                efforts = supportedThinkingLevels,
-                                selectedEffort = effectiveReasoningEffort,
-                                selectedModelName = selectedModelName,
-                                onBack = { showingReasoningEffort = false },
-                                onSelected = { effort ->
-                                    onReasoningEffortSelected(effort)
-                                    expanded = false
-                                },
-                            )
-                        } else {
-                            SharedConversationModelListMenu(
-                                options = options,
-                                modelCatalogInfo = modelCatalogInfo,
-                                selectedOption = selectedOption,
-                                reasoningEffort = effectiveReasoningEffort,
-                                showReasoningEffort = supportedThinkingLevels.isNotEmpty(),
-                                onReasoningEffortClick = { showingReasoningEffort = true },
-                                onSelected = { option ->
-                                    menuSelectedModelKey = option.key
-                                    onSelected(option.key) { hasThinkingLevels ->
-                                        if (expanded && menuSelectedModelKey == option.key) {
-                                            if (hasThinkingLevels) {
-                                                showingReasoningEffort = true
-                                            } else {
-                                                expanded = false
-                                            }
-                                        }
-                                    }
-                                },
-                            )
-                        }
+                            }
+                            put("effectiveEffort", thinkingLevelClampsByProviderModel[key]?.get(reasoningEffort) ?: reasoningEffort)
+                        })
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SharedConversationMenuModeEntry(title: String, value: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
-            .padding(start = 19.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column {
-            Text(title, style = MaterialTheme.typography.bodyMedium, color = AetherOnSurface)
-            Text(
-                value,
-                style = MaterialTheme.typography.bodySmall,
-                color = AetherOnSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-@Composable
-private fun SharedConversationReasoningEffortMenu(
-    efforts: List<String>,
-    selectedEffort: String,
-    selectedModelName: String,
-    onBack: () -> Unit,
-    onSelected: (String) -> Unit,
-) {
-    Column(horizontalAlignment = Alignment.Start) {
-        SharedConversationMenuModeEntry(
-            title = stringResource(Res.string.chat_model),
-            value = selectedModelName,
-            onClick = onBack,
-        )
-        efforts.forEach { effort ->
-            val selected = effort == selectedEffort
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 5.dp, vertical = 1.dp)
-                    .clip(RoundedCornerShape(15.dp))
-                    .background(if (selected) AetherOnSurface.copy(alpha = 0.06f) else Color.Transparent)
-                    .clickable { onSelected(effort) }
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    sharedReasoningEffortLabel(effort),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = AetherOnSurface,
-                    modifier = Modifier.weight(1f),
-                )
-                if (selected) {
-                    Icon(
-                        Icons.Rounded.Check,
-                        contentDescription = null,
-                        tint = AetherOnSurfaceVariant,
-                        modifier = Modifier.size(16.dp),
-                    )
+            }, Modifier.matchParentSize()) { action, value, completion ->
+                when (action) {
+                    "open" -> onOpened()
+                    "model" -> onSelected(value, completion)
+                    "effort" -> onReasoningEffortSelected(value)
                 }
             }
         }
     }
-}
-
-@Composable
-private fun SharedConversationModelListMenu(
-    options: List<ProviderModelOption>,
-    modelCatalogInfo: Map<String, SharedModelCatalogInfo>,
-    selectedOption: ProviderModelOption?,
-    reasoningEffort: String,
-    showReasoningEffort: Boolean,
-    onReasoningEffortClick: () -> Unit,
-    onSelected: (ProviderModelOption) -> Unit,
-) {
-    Column(horizontalAlignment = Alignment.Start) {
-        if (showReasoningEffort) {
-            SharedConversationMenuModeEntry(
-                title = stringResource(Res.string.chat_reasoning_effort),
-                value = sharedReasoningEffortLabel(reasoningEffort),
-                onClick = onReasoningEffortClick,
-            )
-        }
-        val modelListHeight = (options.size * 42).coerceAtMost(312).dp
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth().height(modelListHeight),
-        ) {
-            items(options, key = ProviderModelOption::key) { option ->
-                SharedConversationModelMenuRow(
-                    option = option,
-                    catalogInfo = modelCatalogInfo[option.key],
-                    selected = option.key == selectedOption?.key,
-                    onClick = { onSelected(option) },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SharedConversationModelMenuRow(
-    option: ProviderModelOption,
-    catalogInfo: SharedModelCatalogInfo?,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 5.dp, vertical = 1.dp)
-            .clip(RoundedCornerShape(15.dp))
-            .background(if (selected) AetherOnSurface.copy(alpha = 0.06f) else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 9.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(9.dp),
-    ) {
-        SharedLabLogoBadge(
-            catalogInfo = catalogInfo,
-            fallbackProviderId = option.piProviderId,
-            modifier = Modifier.size(22.dp),
-        )
-        Text(
-            option.chatLabel,
-            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Normal),
-            color = AetherOnSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Start,
-            modifier = Modifier.weight(1f),
-        )
-        if (selected) {
-            Icon(
-                Icons.Rounded.Check,
-                contentDescription = null,
-                tint = AetherOnSurfaceVariant,
-                modifier = Modifier.size(16.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun SharedLabLogoBadge(
-    catalogInfo: SharedModelCatalogInfo?,
-    fallbackProviderId: String,
-    modifier: Modifier = Modifier,
-) {
-    val info = catalogInfo
-    val paths = remember(info?.labLogoPathData) {
-        SharedModelLogoPathCache.getOrParse(info?.labLogoPathData.orEmpty())
-    }
-    if (info != null && paths.isNotEmpty()) {
-        Canvas(modifier) {
-            val scaleX = size.width / info.labLogoViewportWidth
-            val scaleY = size.height / info.labLogoViewportHeight
-            scale(scaleX = scaleX, scaleY = scaleY, pivot = Offset.Zero) {
-                paths.forEach { path -> drawPath(path, AetherOnSurface) }
-            }
-        }
-        return
-    }
-    ProviderBrandIcon(
-        providerId = info?.labId.orEmpty().ifBlank { fallbackProviderId },
-        contentDescription = null,
-        modifier = modifier.padding(2.5.dp),
-    )
 }
 
 internal data class SharedSelectedModelDisplayName(
@@ -7373,41 +7086,62 @@ private fun SharedComposer(
                         }
                     }
 
-                    Box(modifier = Modifier.align(plusButtonAlignment)) {
-                        Box(
-                            modifier = Modifier.size(48.dp)
-                                .shadow(
-                                    plusShadowElevation,
-                                    CircleShape,
-                                    ambientColor = AetherScrim,
-                                    spotColor = AetherScrim,
-                                )
-                                .clip(CircleShape)
-                                .background(if (plusSeparated) AetherSurface else Color.Transparent)
-                                .clickable { menuOpen = !menuOpen },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                Icons.Rounded.Add,
-                                contentDescription = stringResource(Res.string.chat_add_attachment),
-                                tint = AetherOnSurface,
-                                modifier = Modifier.size(27.dp),
-                            )
+                    // Keep the existing Compose button artwork; SwiftUI only owns its menu anchor.
+                    Box(
+                        modifier = Modifier.align(plusButtonAlignment).size(48.dp)
+                            .shadow(plusShadowElevation, CircleShape, ambientColor = AetherScrim, spotColor = AetherScrim)
+                            .clip(CircleShape)
+                            .background(if (plusSeparated) AetherSurface else Color.Transparent),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Rounded.Add, contentDescription = null, tint = AetherOnSurface, modifier = Modifier.size(27.dp))
+                    }
+
+                    val extensionUi = LocalSharedAetherExtensionUiController.current
+                    val photosLabel = stringResource(Res.string.chat_photos)
+                    val filesLabel = stringResource(Res.string.chat_files)
+                    val chromeLabel = stringResource(Res.string.chrome_label)
+                    val hasCustomPlusMenu = extensionUi?.snapshot?.componentsAt(SharedExtensionComponentChatComposerSkillPicker).orEmpty().isNotEmpty() ||
+                        extensionUi?.snapshot?.surfacesAt(SharedExtensionSlotChatComposerPlusMenu).orEmpty().isNotEmpty()
+                    NativeChatControl("plus", buildJsonObject {
+                        put("customMenu", hasCustomPlusMenu)
+                        put("more", stringResource(Res.string.common_more))
+                        put("label", stringResource(Res.string.chat_add_attachment))
+                        put("separated", plusSeparated)
+                        putJsonArray("items") {
+                            fun item(id: String, title: String, icon: String, selected: Boolean = false) {
+                                add(buildJsonObject { put("id", id); put("title", title); put("icon", icon); put("selected", selected) })
+                            }
+                            item("photos", photosLabel, "photo")
+                            item("files", filesLabel, "paperclip")
+                            if (chromeAvailable) item("chrome", chromeLabel, "globe", chromeEnabled)
+                            availableSkills.forEach { item("skill:" + it.id, it.sharedQuickActionLabel(), "square.stack.3d.up", it.id in selectedSkillIds) }
+                            mcpServers.forEach { item("mcp:" + it.id, it.sharedQuickActionLabel(), if (it.transport == SharedMcpTransport.Stdio) "terminal" else "cloud", it.id in activeMcpServerIds) }
+                            extensionUi?.snapshot?.composerMenuItems.orEmpty().forEach { item("extension:" + it.extensionId + ":" + it.localId, it.title, "puzzlepiece.extension", it.selected) }
                         }
+                    }, Modifier.align(plusButtonAlignment).size(48.dp)) { action, value, _ ->
+                        when {
+                            action == "open" -> menuOpen = true
+                            value == "photos" -> pickAttachment(true)
+                            value == "files" -> pickAttachment(false)
+                            value == "chrome" -> onChromeSelected(!chromeEnabled)
+                            value.startsWith("skill:") -> value.removePrefix("skill:").let { onSkillSelected(it, it !in selectedSkillIds) }
+                            value.startsWith("mcp:") -> value.removePrefix("mcp:").let { onMcpServerSelected(it, it !in activeMcpServerIds) }
+                            value.startsWith("extension:") -> extensionUi?.snapshot?.composerMenuItems?.find { "extension:" + it.extensionId + ":" + it.localId == value }?.let {
+                                extensionUi.onAction(it.extensionId, it.action.ifBlank { it.localId }, it.args)
+                            }
+                        }
+                    }
+                    if (hasCustomPlusMenu) {
                         SharedComposerPlusMenu(
-                            visible = menuOpen,
-                            density = density,
-                            chromeAvailable = chromeAvailable,
-                            chromeEnabled = chromeEnabled,
-                            availableSkills = availableSkills,
-                            selectedSkillIds = selectedSkillIds,
-                            mcpServers = mcpServers,
-                            activeMcpServerIds = activeMcpServerIds,
+                            visible = menuOpen, density = density,
+                            chromeAvailable = chromeAvailable, chromeEnabled = chromeEnabled,
+                            availableSkills = availableSkills, selectedSkillIds = selectedSkillIds,
+                            mcpServers = mcpServers, activeMcpServerIds = activeMcpServerIds,
                             onDismiss = { menuOpen = false },
-                            onPickImages = { pickAttachment(true) },
-                            onPickFiles = { pickAttachment(false) },
-                            onChromeSelected = onChromeSelected,
-                            onSkillSelected = onSkillSelected,
+                            onPickImages = { menuOpen = false; pickAttachment(true) },
+                            onPickFiles = { menuOpen = false; pickAttachment(false) },
+                            onChromeSelected = onChromeSelected, onSkillSelected = onSkillSelected,
                             onMcpServerSelected = onMcpServerSelected,
                         )
                     }
@@ -9184,15 +8918,20 @@ private fun IosConversationWorkspace(
     drawer: @Composable () -> Unit,
     content: @Composable () -> Unit,
 ) {
+    val conversation: @Composable () -> Unit = {
+        val obscured = !expanded &&
+            (drawerState.currentValue == DrawerValue.Open || drawerState.targetValue == DrawerValue.Open)
+        CompositionLocalProvider(LocalNativeChatControlsObscured provides obscured) { content() }
+    }
     if (isDuo) {
         ConversationWorkspace(
             expanded = expanded,
-            drawerState = drawerState, drawer = drawer, content = content,
+            drawerState = drawerState, drawer = drawer, content = conversation,
         )
     } else {
         SharedAdaptiveConversationLayout(
             useTabletLayout = expanded, drawerState = drawerState,
-            drawerContent = drawer, content = content,
+            drawerContent = drawer, content = conversation,
         )
     }
 }

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		7B6A15F9953BE9BC4AD2599E /* NativeChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38EE4BC3239DA5F552E1AC05 /* NativeChatView.swift */; };
 		D001CAFE001CAFE001CAFE001 /* DuoAgentComputerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D001CAFE001CAFE001CAFE002 /* DuoAgentComputerView.swift */; };
 		08CF4E928C8BE1C146193EAC /* LICENSE.md in Resources */ = {isa = PBXBuildFile; fileRef = 6FB4FBD38ACC21BB9B40C297 /* LICENSE.md */; };
 		0B54DD41A9AC30FF012B8ABC /* libiconv.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 3727F800A2CD973EBC5B5911 /* libiconv.tbd */; };
@@ -108,6 +109,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		38EE4BC3239DA5F552E1AC05 /* NativeChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeChatView.swift; sourceTree = "<group>"; };
 		D001CAFE001CAFE001CAFE002 /* DuoAgentComputerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuoAgentComputerView.swift; sourceTree = "<group>"; };
 		0908A05CCEDE326A36B151FC /* TerminalInputView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalInputView.swift; sourceTree = "<group>"; };
 		093ABAAD7B72B9ED74843F83 /* libarchive */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = libarchive; path = "../third_party/ish-arm64/deps/libarchive.xcodeproj"; sourceTree = "<group>"; };
@@ -354,6 +356,7 @@
 				291E7BE178D9B5D3B4C60E04 /* AetherAnalytics.swift */,
 				E6FA4FCFE0F0081C692280C9 /* AetherApp.swift */,
 				D001CAFE001CAFE001CAFE002 /* DuoAgentComputerView.swift */,
+				38EE4BC3239DA5F552E1AC05 /* NativeChatView.swift */,
 				2A7004BB95C901F53D40B60B /* AetherRuntimeHost.swift */,
 			);
 			path = App;
@@ -702,6 +705,7 @@
 				C480F0D164C3E764CB6162B0 /* AetherAnalytics.swift in Sources */,
 				2A8EED7E02AB8DCCD1890366 /* AetherApp.swift in Sources */,
 				D001CAFE001CAFE001CAFE001 /* DuoAgentComputerView.swift in Sources */,
+				7B6A15F9953BE9BC4AD2599E /* NativeChatView.swift in Sources */,
 				CB425A7A27C9C1222CC06CCA /* AetherISHRuntime.m in Sources */,
 				24743FC96595F01836CE4170 /* AetherRuntimeHost.swift in Sources */,
 				A7589EC588F10F987B71198E /* AetherTerminalView.swift in Sources */,

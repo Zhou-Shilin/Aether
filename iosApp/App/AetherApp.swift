@@ -13,6 +13,7 @@ private final class AetherAppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        IosNativeChatHost.shared.factory = NativeChatFactory.shared
         IosAnalytics.shared.setListener(listener: AetherAnalytics.shared)
         AetherRuntimeHost.shared.registerBackgroundExecution()
         let domain = NSFileProviderDomain(identifier: NSFileProviderDomainIdentifier("com.baimoqilin.aether"), displayName: "Aether")
