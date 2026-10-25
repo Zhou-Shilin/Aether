@@ -1178,6 +1178,7 @@ private struct NativeProviderEditor: View {
                 if !fetchError.isEmpty {
                     Text(fetchError).foregroundStyle(.red).font(.caption)
                 }
+                modelSelectionActions
                 ForEach(allModels, id: \.self) { modelID in
                     Toggle(modelID, isOn: Binding(
                         get: { draft.enabledModels.contains(modelID) },
@@ -1313,6 +1314,7 @@ private struct NativeProviderEditor: View {
                     Text(model.text("No models were returned. Add a model ID above or try again.", "未获取到模型。请在上方添加模型 ID，或重试。"))
                         .font(.callout).foregroundStyle(.secondary)
                 }
+                modelSelectionActions
                 ForEach(allModels, id: \.self) { modelID in
                     Toggle(modelID, isOn: Binding(
                         get: { draft.enabledModels.contains(modelID) },
@@ -1347,6 +1349,24 @@ private struct NativeProviderEditor: View {
             }
         }
         .listStyle(.insetGrouped)
+    }
+
+    @ViewBuilder
+    private var modelSelectionActions: some View {
+        if !allModels.isEmpty {
+            HStack {
+                Button(model.text("Select all", "全选", "همه را انتخاب کنید", "Выбрать все")) {
+                    draft.enabledModels = Set(allModels)
+                }
+                .disabled(Set(allModels).isSubset(of: draft.enabledModels))
+                Spacer()
+                Button(model.text("Clear all", "取消全选", "پاک کردن همه", "Очистить все")) {
+                    draft.enabledModels.removeAll()
+                }
+                .disabled(draft.enabledModels.isEmpty)
+            }
+            .buttonStyle(.borderless)
+        }
     }
 
     private var filteredProviders: [[String: Any]] {
