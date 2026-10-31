@@ -88,7 +88,7 @@ class AetherDiagnosticLogger private constructor(
             put("thread", thread.name)
             put("exceptionType", throwable.javaClass.name)
             put("message", DiagnosticRedactor.sanitizeString(throwable.message.orEmpty()))
-            put("stackTrace", DiagnosticRedactor.sanitizeString(throwable.stackTraceToString()).take(DiagnosticStackMaxChars))
+            put("stackTrace", DiagnosticRedactor.sanitizeString(throwable.stackTraceToString(), DiagnosticStackMaxChars))
         }
         synchronized(lock) {
             runCatching {
@@ -208,19 +208,25 @@ internal object DiagnosticRedactor {
         value is Array<*> -> JSONArray().apply {
             value.forEachIndexed { index, item -> put(sanitizeValue("item_$index", item)) }
         }
+        isStackTraceKey(key) -> sanitizeString(value.toString(), DiagnosticStackMaxChars)
         value is Number || value is Boolean -> value
         else -> sanitizeString(value.toString())
     }
 
-    fun sanitizeString(value: String): String {
+    fun sanitizeString(value: String, maxChars: Int = DiagnosticValueMaxChars): String {
         var sanitized = value
         inlineSecretPatterns.forEach { pattern ->
             sanitized = pattern.replace(sanitized) { match ->
                 match.groupValues.getOrNull(1).orEmpty() + "[REDACTED]"
             }
         }
-        return sanitized.takeWithSuffix(DiagnosticValueMaxChars)
+        return sanitized.takeWithSuffix(maxChars)
     }
+
+    private fun isStackTraceKey(key: String): Boolean =
+        key.endsWith("_stack", ignoreCase = true) ||
+            key.equals("stackTrace", ignoreCase = true) ||
+            key.equals("stack_trace", ignoreCase = true)
 
     fun sanitizedBaseUrl(baseUrl: String): String {
         val uri = runCatching { URI(baseUrl.trim()) }.getOrNull() ?: return sanitizeString(baseUrl)

@@ -8,6 +8,23 @@ import org.junit.Test
 
 class AetherDiagnosticLoggerTest {
     @Test
+    fun stackTracesKeepDeepFramesAndStillRedactSecrets() {
+        val stack = "token=private-value\n" + "    at example.Frame.method(Frame.kt:10)\n".repeat(120)
+        val sanitized = DiagnosticRedactor.sanitizeMap(
+            mapOf("exception_stack" to stack, "stackTrace" to stack, "stack_trace" to stack, "message" to stack),
+        )
+        for (key in listOf("exception_stack", "stackTrace", "stack_trace")) {
+            val value = sanitized.getString(key)
+            assertTrue(value.length > 700)
+            assertTrue(value.length <= 5_000)
+            assertFalse(value.contains("private-value"))
+        }
+        val key = "message"
+        assertTrue((sanitized.getString(key)).length <= 700)
+        assertTrue(DiagnosticRedactor.sanitizeString(stack.repeat(2), 5_000).length <= 5_000)
+    }
+
+    @Test
     fun redactorRemovesSensitiveValuesAndLargeContent() {
         val sanitized = DiagnosticRedactor.sanitizeMap(
             mapOf(

@@ -111,15 +111,20 @@ internal object SharedDiagnosticRedactor {
         values.forEach { (key, value) -> put(key, sanitizeValue(key, value)) }
     }
 
-    fun sanitizeString(value: String): String {
+    fun sanitizeString(value: String, maxChars: Int = SharedDiagnosticValueMaximumCharacters): String {
         var sanitized = value
         inlineSecretPatterns.forEach { pattern ->
             sanitized = pattern.replace(sanitized) { match ->
                 match.groupValues.getOrNull(1).orEmpty() + "[REDACTED]"
             }
         }
-        return sanitized.takeWithSharedDiagnosticSuffix(SharedDiagnosticValueMaximumCharacters)
+        return sanitized.takeWithSharedDiagnosticSuffix(maxChars)
     }
+
+    private fun isStackTraceKey(key: String): Boolean =
+        key.endsWith("_stack", ignoreCase = true) ||
+            key.equals("stackTrace", ignoreCase = true) ||
+            key.equals("stack_trace", ignoreCase = true)
 
     fun sanitizedBaseUrl(baseUrl: String): String {
         val url = runCatching { Url(baseUrl.trim()) }.getOrNull()
@@ -137,6 +142,7 @@ internal object SharedDiagnosticRedactor {
         value == null -> JsonNull
         isSensitiveKey(key) -> JsonPrimitive("[REDACTED]")
         shouldSummarizeLargeContent(key) -> JsonPrimitive(summarizeLargeContent(value))
+        isStackTraceKey(key) -> JsonPrimitive(sanitizeString((value as? JsonPrimitive)?.content ?: value.toString(), 5_000))
         value is JsonObject -> buildJsonObject {
             value.forEach { (nestedKey, nestedValue) ->
                 put(nestedKey, sanitizeValue(nestedKey, nestedValue))

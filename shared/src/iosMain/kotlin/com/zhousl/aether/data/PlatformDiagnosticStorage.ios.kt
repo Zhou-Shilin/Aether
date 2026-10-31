@@ -48,8 +48,9 @@ internal actual object PlatformDiagnosticStorage {
                     put("message", SharedDiagnosticRedactor.sanitizeString(throwable.message.orEmpty()))
                     put(
                         "stackTrace",
-                        SharedDiagnosticRedactor.sanitizeString(throwable.stackTraceToString())
-                            .take(SharedDiagnosticStackMaximumCharacters),
+                        SharedDiagnosticRedactor.sanitizeString(
+                            throwable.stackTraceToString(), SharedDiagnosticStackMaximumCharacters,
+                        ),
                     )
                 }
                 writeText(crashPath, SharedDiagnosticPrettyJson.encodeToString(crash))

@@ -9,6 +9,23 @@ import kotlinx.serialization.json.jsonPrimitive
 
 class SharedDiagnosticLoggerTest {
     @Test
+    fun stackTracesKeepDeepFramesAndStillRedactSecrets() {
+        val stack = "token=private-value\n" + "    at example.Frame.method(Frame.kt:10)\n".repeat(120)
+        val sanitized = SharedDiagnosticRedactor.sanitizeMap(
+            mapOf("exception_stack" to stack, "stackTrace" to stack, "stack_trace" to stack, "message" to stack),
+        )
+        for (key in listOf("exception_stack", "stackTrace", "stack_trace")) {
+            val value = sanitized[key]?.jsonPrimitive?.content.orEmpty()
+            assertTrue(value.length > 700)
+            assertTrue(value.length <= 5_000)
+            assertFalse(value.contains("private-value"))
+        }
+        val key = "message"
+        assertTrue((sanitized[key]?.jsonPrimitive?.content.orEmpty()).length <= 700)
+        assertTrue(SharedDiagnosticRedactor.sanitizeString(stack.repeat(2), 5_000).length <= 5_000)
+    }
+
+    @Test
     fun diagnosticDetailsUseAndroidCompatibleRedactionRules() {
         val sanitized = SharedDiagnosticRedactor.sanitizeMap(
             mapOf(
