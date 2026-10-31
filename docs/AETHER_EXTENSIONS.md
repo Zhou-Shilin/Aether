@@ -664,7 +664,7 @@ The lower-level `aether.host.invoke()` bridge remains available:
 
 | Method | Purpose |
 | --- | --- |
-| `app.getState` | Read settings, sessions, draft, Skills, and runtime UI state |
+| `app.getState` | Read settings, session summaries, draft, Skills, and runtime UI state |
 | `app.setDraftInput` | Replace composer text |
 | `app.appendDraftInput` | Append composer text |
 | `app.sendMessage` | Set optional text and submit, queue, or steer |
@@ -682,3 +682,15 @@ The lower-level `aether.host.invoke()` bridge remains available:
 
 Prefer discoverable services and state transactions for reusable Mods; use host
 methods for app-specific operations that do not yet have a service.
+
+### State snapshot size
+
+Extension host snapshots and event contexts must not include full conversation
+history, inline attachments, raw provider payloads, or tool output. On Android,
+`state.sessions` contains metadata only: `id`, `title`, `preview`, `hasCustomTitle`,
+`agentModeEnabled`, `chromeEnabled`, `selectedModelKey`, `message_count`, and
+`last_message_at_millis`. Titles and previews are capped at 4,000 characters.
+The previous `sessions[].messages` field is no longer included; use conversation
+export when full history is needed. iOS contexts already omit conversation
+history. On both platforms `state.get(path)` returns `{ path, value }` and builds
+only the requested top-level state field.

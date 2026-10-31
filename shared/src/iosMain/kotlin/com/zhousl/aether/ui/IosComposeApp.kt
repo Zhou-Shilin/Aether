@@ -1618,28 +1618,33 @@ fun IosComposeApp(
             }
         }
 
-        fun extensionContext(state: SharedSessionUiState = currentSession): JsonObject = buildJsonObject {
-            put("screen", route.name.lowercase())
-            put("session_id", state.id)
-            put("session_title", state.title)
-            put("draft_input", state.input)
-            put("is_generating", state.isWorking)
-            put("is_running", state.isWorking)
-            put("is_editing", state.editingMessageId.isNotBlank())
-            put("selected_model_key", state.selectedModelKey)
-            put("agent_mode_enabled", false)
-            put("selected_skill_ids", JsonArray(state.selectedSkillIds.map(::JsonPrimitive)))
-            put("selected_mcp_server_ids", JsonArray(state.activeMcpServerIds.map(::JsonPrimitive)))
-            put(
-                "default_skill_ids",
-                JsonArray(sharedAppSettings.defaultSelectedSkillIds.map(::JsonPrimitive)),
-            )
-            put("language", sharedAppSettings.language.storageValue)
-            put("theme", sharedAppSettings.themeMode.storageValue)
-            put("extension_count", extensionSnapshot.extensions.size)
-            put("skill_count", installedSkills.count(SharedInstalledSkill::isEnabled))
-            put("mcp_server_count", mcpServers.count(SharedMcpServerConfig::enabled))
-            put("skills", JsonArray(installedSkills.map { skill ->
+        fun extensionContext(
+            state: SharedSessionUiState = currentSession,
+            rootKey: String? = null,
+        ): JsonObject = buildJsonObject {
+            fun field(key: String, value: () -> JsonElement) {
+                if (rootKey == null || rootKey == key) put(key, value())
+            }
+            field("screen") { JsonPrimitive(route.name.lowercase()) }
+            field("session_id") { JsonPrimitive(state.id) }
+            field("session_title") { JsonPrimitive(state.title) }
+            field("draft_input") { JsonPrimitive(state.input) }
+            field("is_generating") { JsonPrimitive(state.isWorking) }
+            field("is_running") { JsonPrimitive(state.isWorking) }
+            field("is_editing") { JsonPrimitive(state.editingMessageId.isNotBlank()) }
+            field("selected_model_key") { JsonPrimitive(state.selectedModelKey) }
+            field("agent_mode_enabled") { JsonPrimitive(false) }
+            field("selected_skill_ids") { JsonArray(state.selectedSkillIds.map(::JsonPrimitive)) }
+            field("selected_mcp_server_ids") { JsonArray(state.activeMcpServerIds.map(::JsonPrimitive)) }
+            field("default_skill_ids") {
+                JsonArray(sharedAppSettings.defaultSelectedSkillIds.map(::JsonPrimitive))
+            }
+            field("language") { JsonPrimitive(sharedAppSettings.language.storageValue) }
+            field("theme") { JsonPrimitive(sharedAppSettings.themeMode.storageValue) }
+            field("extension_count") { JsonPrimitive(extensionSnapshot.extensions.size) }
+            field("skill_count") { JsonPrimitive(installedSkills.count(SharedInstalledSkill::isEnabled)) }
+            field("mcp_server_count") { JsonPrimitive(mcpServers.count(SharedMcpServerConfig::enabled)) }
+            field("skills") { JsonArray(installedSkills.map { skill ->
                 buildJsonObject {
                     put("id", skill.id)
                     put("name", skill.name)
@@ -1649,10 +1654,10 @@ fun IosComposeApp(
                     put("selected", skill.id in state.selectedSkillIds)
                     put("default_selected", skill.id in sharedAppSettings.defaultSelectedSkillIds)
                 }
-            }))
-            put("reasoning_effort", sharedAppSettings.reasoningEffort)
-            put("message_count", state.messages.size)
-            put("custom_messages", JsonArray(state.messages.filter { it.customType.isNotBlank() }.map { message ->
+            }) }
+            field("reasoning_effort") { JsonPrimitive(sharedAppSettings.reasoningEffort) }
+            field("message_count") { JsonPrimitive(state.messages.size) }
+            field("custom_messages") { JsonArray(state.messages.filter { it.customType.isNotBlank() }.map { message ->
                 buildJsonObject {
                     put("id", message.id)
                     put("type", message.customType)
@@ -1661,7 +1666,7 @@ fun IosComposeApp(
                         Json.parseToJsonElement(message.customPayloadJson) as? JsonObject
                     }.getOrNull() ?: JsonObject(emptyMap()))
                 }
-            }))
+            }) }
         }
 
         fun resolveProviderForModel(preferredKey: String, fallbackKey: String = ""): LlmProviderConfig? {
@@ -2590,8 +2595,21 @@ fun IosComposeApp(
 
         suspend fun handleSharedExtensionHostCall(method: String, args: JsonObject): JsonObject =
             when (method) {
-                    "app.getState", "state.get" -> withContext(Dispatchers.Main) {
+                    "app.getState" -> withContext(Dispatchers.Main) {
                         extensionContext()
+                    }
+                    "state.get" -> withContext(Dispatchers.Main) {
+                        val path = args["path"]?.jsonPrimitive?.contentOrNull.orEmpty().trim()
+                        val segments = path.trim('/').replace('/', '.').split('.').filter(String::isNotBlank)
+                        var value: JsonElement = extensionContext(rootKey = segments.firstOrNull())
+                        segments.forEach { segment ->
+                            value = when (val current = value) {
+                                is JsonObject -> current[segment] ?: JsonNull
+                                is JsonArray -> segment.toIntOrNull()?.let { current.getOrNull(it) } ?: JsonNull
+                                else -> JsonNull
+                            }
+                        }
+                        buildJsonObject { put("path", path); put("value", value) }
                     }
                     "app.setDraftInput" -> withContext(Dispatchers.Main) {
                         currentSession.input = args["text"]?.jsonPrimitive?.contentOrNull.orEmpty()

@@ -3523,7 +3523,7 @@ class AetherViewModel(
     ): JSONObject = when (method) {
         "get" -> {
             val path = args.optString("path").trim()
-            val state = buildAetherExtensionHostState(_uiState.value)
+            val state = buildAetherExtensionHostState(_uiState.value, extensionStateRootKey(path))
             JSONObject()
                 .put("path", path)
                 .put("value", jsonValueAtPath(state, path))
@@ -3937,26 +3937,29 @@ class AetherViewModel(
 
     private fun buildAetherExtensionHostState(
         snapshot: AetherUiState,
+        rootKey: String? = null,
     ): JSONObject {
         val activeSession = snapshot.sessions.firstOrNull { it.id == snapshot.currentSessionId }
         val execution = snapshot.sessionExecutionStates[snapshot.currentSessionId]
         val selectedSkillIds = currentSelectedSkillIds(snapshot)
         return JSONObject().apply {
-            put("screen", snapshot.currentScreen.name.lowercase())
-            put("session_id", snapshot.currentSessionId)
-            put("draft_input", snapshot.draftInput)
-            put("is_running", execution?.isRunning == true)
-            put("is_editing", snapshot.editingMessageId != null)
-            put("selected_model_key", activeSession?.selectedModelKey ?: snapshot.draftSelectedModelKey)
-            put("agent_mode_enabled", activeSession?.agentModeEnabled ?: snapshot.draftAgentModeEnabled)
-            put("selected_skill_ids", JSONArray(selectedSkillIds))
-            put("default_skill_ids", JSONArray(snapshot.settings.defaultSelectedSkillIds))
-            put("skills", buildSkillsModState(snapshot).optJSONArray("skills"))
-            put("settings", snapshot.settings.toJson())
-            put("provider_configs", JSONArray(serializeProviderConfigs(snapshot.providerConfigs)))
-            put("sessions", JSONArray(serializeChatSessions(snapshot.sessions)))
-            put(
-                "installed_extensions",
+            fun field(key: String, value: () -> Any?) {
+                if (rootKey == null || rootKey == key) put(key, value())
+            }
+            field("screen") { snapshot.currentScreen.name.lowercase() }
+            field("session_id") { snapshot.currentSessionId }
+            field("draft_input") { snapshot.draftInput }
+            field("is_running") { execution?.isRunning == true }
+            field("is_editing") { snapshot.editingMessageId != null }
+            field("selected_model_key") { activeSession?.selectedModelKey ?: snapshot.draftSelectedModelKey }
+            field("agent_mode_enabled") { activeSession?.agentModeEnabled ?: snapshot.draftAgentModeEnabled }
+            field("selected_skill_ids") { JSONArray(selectedSkillIds) }
+            field("default_skill_ids") { JSONArray(snapshot.settings.defaultSelectedSkillIds) }
+            field("skills") { buildSkillsModState(snapshot).optJSONArray("skills") }
+            field("settings") { snapshot.settings.toJson() }
+            field("provider_configs") { JSONArray(serializeProviderConfigs(snapshot.providerConfigs)) }
+            field("sessions") { extensionSessionSummaries(snapshot.sessions) }
+            field("installed_extensions") {
                 JSONArray().apply {
                     snapshot.installedPiExtensions.forEach { extension ->
                         put(
@@ -3970,8 +3973,8 @@ class AetherViewModel(
                             }
                         )
                     }
-                },
-            )
+                }
+            }
         }
     }
 
