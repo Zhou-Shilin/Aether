@@ -392,6 +392,7 @@
     <string name="settings_prioritize_efficient_summary_models">Prioritize efficient summary models</string>
     <string name="settings_automatic_model">Automatic</string>
     <string name="settings_none">None</string>
+    <string name="settings_do_not_summarize">Do not summarize.</string>
     <string name="settings_automatic_model_with_name">Automatic · %1$s</string>
     <string name="settings_no_providers_configured">No providers configured</string>
     <string name="settings_add_provider_description">Add a provider to connect to an LLM API.</string>

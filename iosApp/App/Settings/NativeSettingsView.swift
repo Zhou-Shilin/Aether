@@ -973,13 +973,13 @@ private struct NativeModelSelector: View {
 
     var body: some View {
         List {
-            Button { model.patch([settingKey: ""]) } label: {
-                modelRow(model.text("Automatic", "自动"), key: "")
-            }
             if purpose == "title" || purpose == "naming" {
                 Button { model.patch([settingKey: "__none__"]) } label: {
-                    modelRow(model.text("None", "无"), key: "__none__")
+                    modelRow(model.text("None", "无"), subtitle: model.text("Do not summarize.", "不进行总结。"), key: "__none__")
                 }
+            }
+            Button { model.patch([settingKey: ""]) } label: {
+                modelRow(model.text("Automatic", "自动"), subtitle: automaticSubtitle, key: "")
             }
             ForEach(filtered, id: \.nativeID) { option in
                 Button { model.patch([settingKey: model.string(option, "key")]) } label: {
@@ -998,9 +998,21 @@ private struct NativeModelSelector: View {
         return model.modelOptions.filter { model.string($0, "fullLabel").localizedCaseInsensitiveContains(query) }
     }
 
-    private func modelRow(_ label: String, key: String) -> some View {
+    private var automaticSubtitle: String {
+        guard purpose == "title" || purpose == "naming" else { return "" }
+        let automatic = model.snapshot["automaticModels"] as? [String: Any] ?? [:]
+        let resolved = automatic[purpose] as? [String: Any] ?? [:]
+        return model.string(resolved, "label")
+    }
+
+    private func modelRow(_ label: String, subtitle: String = "", key: String) -> some View {
         HStack {
-            Text(label).foregroundStyle(.primary)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(label).foregroundStyle(.primary)
+                if !subtitle.isEmpty {
+                    Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
+                }
+            }
             Spacer()
             if model.settingString(settingKey) == key { Image(systemName: "checkmark").foregroundStyle(.tint) }
         }

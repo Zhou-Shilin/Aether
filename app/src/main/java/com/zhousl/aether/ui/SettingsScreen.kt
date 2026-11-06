@@ -809,12 +809,11 @@ fun SettingsScreen(
                 options = enabledModelOptions,
                 purpose = AutomaticModelPurpose.Title,
                 allowNone = true,
-                automaticLabel = enabledModelOptions.findModelOption(
+                automaticLabel = stringResource(R.string.settings_automatic_model),
+                automaticSubtitle = enabledModelOptions.findModelOption(
                     enabledModelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Title)
                         .ifBlank { enabledModelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Chat) }
-                )?.fullLabel?.let { stringResource(R.string.settings_automatic_model_with_name, it) }
-                    ?: stringResource(R.string.settings_automatic_model),
-                automaticSubtitle = stringResource(R.string.settings_prioritize_sota_models),
+                )?.fullLabel.orEmpty(),
                 onSelected = {
                     val syncAutomaticPair = it.isNotBlank() &&
                         it != DisabledAuxiliaryModelKey &&
@@ -839,12 +838,11 @@ fun SettingsScreen(
                 options = enabledModelOptions,
                 purpose = AutomaticModelPurpose.Naming,
                 allowNone = true,
-                automaticLabel = enabledModelOptions.findModelOption(
+                automaticLabel = stringResource(R.string.settings_automatic_model),
+                automaticSubtitle = enabledModelOptions.findModelOption(
                     enabledModelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Naming)
                         .ifBlank { enabledModelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Chat) }
-                )?.fullLabel?.let { stringResource(R.string.settings_automatic_model_with_name, it) }
-                    ?: stringResource(R.string.settings_automatic_model),
-                automaticSubtitle = stringResource(R.string.settings_prioritize_sota_models),
+                )?.fullLabel.orEmpty(),
                 onSelected = {
                     val syncAutomaticPair = it.isNotBlank() &&
                         it != DisabledAuxiliaryModelKey &&
@@ -2666,7 +2664,7 @@ private fun ModelSelectionListPage(
                 SettingsCardGroup {
                     ModelSelectionListRow(
                         title = stringResource(R.string.settings_none),
-                        subtitle = "",
+                        subtitle = stringResource(R.string.settings_do_not_summarize),
                         selected = selectedKey == DisabledAuxiliaryModelKey,
                         onClick = { onSelected(DisabledAuxiliaryModelKey) },
                     )
@@ -2684,21 +2682,21 @@ private fun ModelSelectionListPage(
         Spacer(Modifier.height(12.dp))
 
         SettingsCardGroup {
+            if (allowNone) {
+                ModelSelectionListRow(
+                    title = stringResource(R.string.settings_none),
+                    subtitle = stringResource(R.string.settings_do_not_summarize),
+                    selected = selectedKey == DisabledAuxiliaryModelKey,
+                    onClick = { onSelected(DisabledAuxiliaryModelKey) },
+                )
+                CardDivider()
+            }
             ModelSelectionListRow(
                 title = automaticLabel,
                 subtitle = automaticSubtitle,
                 selected = selectedKey.isBlank(),
                 onClick = { onSelected("") },
             )
-            if (allowNone) {
-                CardDivider()
-                ModelSelectionListRow(
-                    title = stringResource(R.string.settings_none),
-                    subtitle = "",
-                    selected = selectedKey == DisabledAuxiliaryModelKey,
-                    onClick = { onSelected(DisabledAuxiliaryModelKey) },
-                )
-            }
             filteredOptions.forEach { option ->
                 CardDivider()
                 ModelSelectionListRow(
