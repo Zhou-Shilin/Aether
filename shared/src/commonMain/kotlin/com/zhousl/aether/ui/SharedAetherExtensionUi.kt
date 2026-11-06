@@ -492,7 +492,7 @@ private fun SharedAetherExtensionNode(
                     )
                 }
             },
-            modifier = resolvedModifier.fillMaxWidth()
+            modifier = resolvedModifier.extensionWebGestureRegion().fillMaxWidth()
                 .height(node.double("height", 240.0).dp)
                 .clip(RoundedCornerShape(node.double("radius", 8.0).dp)),
         )

@@ -31,3 +31,27 @@ The device runs a local hosted build that includes this generic patch alongside
 other local features. The isolated PR branch is checked separately against upstream
 main. iOS source is connected, but Xcode compilation and device validation remain
 pending on a Mac. Linux browser tests do not establish iOS parity.
+
+## Touch ownership
+
+The shared drawer suppresses swipe recognition only while a pointer sequence starts
+inside a registered extension web panel. A passive observer runs in Compose's
+Initial pointer pass; it does not consume WebView or vertical scroll events. The
+lease lasts until every pointer is released, cancelled, or the region leaves
+composition. An already-open drawer retains its closing gesture; the menu button
+and touches outside the web panel keep their normal behavior. Android's native
+extension WebView and iOS's shared extension renderer mark the same region, and
+both mobile drawers use the shared guard. No HTML focus callback or model request
+is involved.
+
+This follows [Android's drawer gesture control](https://developer.android.com/develop/ui/compose/components/drawer)
+and [Compose event propagation](https://developer.android.com/develop/ui/compose/touch-input/pointer-input/understand-gestures).
+[UIKit interop guidance](https://kotlinlang.org/docs/multiplatform/compose-ios-touch.html)
+warns that giving every touch to a native view can prevent parent scrolling; this
+patch preserves the existing interop policy rather than enabling NonCooperative mode.
+
+Three desktop Robolectric/Compose UI tests cover panel swipe isolation, restoration
+after cancellation, and vertical parent scrolling. The Android hosted APK builds.
+These tests use a Compose panel to exercise the guard; real WebView gestures and
+iOS device interaction remain manual validation, with physical input performed by
+the device tester.

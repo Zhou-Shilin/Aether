@@ -928,6 +928,7 @@ private fun AetherExtensionWebView(
             }
         },
         modifier = modifier
+            .extensionWebGestureRegion()
             .fillMaxWidth()
             .height(node.optDouble("height", 240.0).dp)
             .clip(RoundedCornerShape(node.optDouble("radius", 20.0).dp)),
