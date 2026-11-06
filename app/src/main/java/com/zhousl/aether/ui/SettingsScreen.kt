@@ -212,6 +212,7 @@ private enum class SettingsPage {
     DefaultModels,
     DefaultChatModel,
     DefaultTitleModel,
+    DefaultSummarizingModel,
     DefaultNamingModel,
     DefaultCompactingModel,
     AddProvider,
@@ -273,6 +274,7 @@ private fun SettingsPage.depth(): Int = when (this) {
     SettingsPage.ExtensionSettingsCategory -> 2
     SettingsPage.DefaultChatModel,
     SettingsPage.DefaultTitleModel,
+    SettingsPage.DefaultSummarizingModel,
     SettingsPage.DefaultNamingModel,
     SettingsPage.DefaultCompactingModel -> 3
 }
@@ -419,6 +421,7 @@ fun SettingsScreen(
     themeMode: AppThemeMode,
     defaultChatModelKey: String,
     defaultTitleModelKey: String,
+    defaultSummarizingModelKey: String,
     defaultNamingModelKey: String,
     defaultCompactingModelKey: String,
     providerConfigs: List<LlmProviderConfig>,
@@ -459,7 +462,7 @@ fun SettingsScreen(
         Int,
         List<TermuxEnvironmentVariable>,
     ) -> Unit,
-    onSaveDefaultModelKeys: (String, String, String, String) -> Unit,
+    onSaveDefaultModelKeys: (String, String, String, String, String) -> Unit,
     onSaveAgentModeAuthorization: (Boolean, AgentModeAuthorizationMethod) -> Unit,
     onUpdateLanguage: (AppLanguage) -> Unit,
     onUpdateThemeMode: (AppThemeMode) -> Unit,
@@ -566,6 +569,7 @@ fun SettingsScreen(
     }
     var defaultChatModelKeyValue by rememberSaveable { mutableStateOf(defaultChatModelKey) }
     var defaultTitleModelKeyValue by rememberSaveable { mutableStateOf(defaultTitleModelKey) }
+    var defaultSummarizingModelKeyValue by rememberSaveable { mutableStateOf(defaultSummarizingModelKey) }
     var defaultNamingModelKeyValue by rememberSaveable { mutableStateOf(defaultNamingModelKey) }
     var defaultCompactingModelKeyValue by rememberSaveable { mutableStateOf(defaultCompactingModelKey) }
 
@@ -627,6 +631,7 @@ fun SettingsScreen(
         SettingsPage.DefaultModels -> SettingsPage.Providers
         SettingsPage.DefaultChatModel,
         SettingsPage.DefaultTitleModel,
+        SettingsPage.DefaultSummarizingModel,
         SettingsPage.DefaultNamingModel,
         SettingsPage.DefaultCompactingModel -> SettingsPage.DefaultModels
         SettingsPage.AddProvider, SettingsPage.EditProvider -> SettingsPage.Providers
@@ -770,10 +775,12 @@ fun SettingsScreen(
                 modelOptions = enabledModelOptions,
                 defaultChatModelKey = defaultChatModelKeyValue,
                 defaultTitleModelKey = defaultTitleModelKeyValue,
+                defaultSummarizingModelKey = defaultSummarizingModelKeyValue,
                 defaultNamingModelKey = defaultNamingModelKeyValue,
                 defaultCompactingModelKey = defaultCompactingModelKeyValue,
                 onOpenDefaultChatModel = { currentPage = SettingsPage.DefaultChatModel.name },
                 onOpenDefaultTitleModel = { currentPage = SettingsPage.DefaultTitleModel.name },
+                onOpenDefaultSummarizingModel = { currentPage = SettingsPage.DefaultSummarizingModel.name },
                 onOpenDefaultNamingModel = { currentPage = SettingsPage.DefaultNamingModel.name },
                 onOpenDefaultCompactingModel = { currentPage = SettingsPage.DefaultCompactingModel.name },
                 onBack = { currentPage = SettingsPage.Providers.name },
@@ -795,6 +802,7 @@ fun SettingsScreen(
                     onSaveDefaultModelKeys(
                         defaultChatModelKeyValue,
                         defaultTitleModelKeyValue,
+                        defaultSummarizingModelKeyValue,
                         defaultNamingModelKeyValue,
                         defaultCompactingModelKeyValue,
                     )
@@ -824,6 +832,32 @@ fun SettingsScreen(
                     onSaveDefaultModelKeys(
                         defaultChatModelKeyValue,
                         defaultTitleModelKeyValue,
+                        defaultSummarizingModelKeyValue,
+                        defaultNamingModelKeyValue,
+                        defaultCompactingModelKeyValue,
+                    )
+                },
+                onBack = { currentPage = SettingsPage.DefaultModels.name },
+            )
+
+            SettingsPage.DefaultSummarizingModel -> ModelSelectionListPage(
+                title = stringResource(R.string.settings_default_summarizing_model),
+                subtitle = stringResource(R.string.settings_default_summarizing_model_subtitle),
+                selectedKey = defaultSummarizingModelKeyValue,
+                options = enabledModelOptions,
+                purpose = AutomaticModelPurpose.Title,
+                allowNone = true,
+                automaticLabel = stringResource(R.string.settings_automatic_model),
+                automaticSubtitle = enabledModelOptions.findModelOption(
+                    enabledModelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Title)
+                        .ifBlank { enabledModelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Chat) }
+                )?.fullLabel.orEmpty(),
+                onSelected = {
+                    defaultSummarizingModelKeyValue = it
+                    onSaveDefaultModelKeys(
+                        defaultChatModelKeyValue,
+                        defaultTitleModelKeyValue,
+                        defaultSummarizingModelKeyValue,
                         defaultNamingModelKeyValue,
                         defaultCompactingModelKeyValue,
                     )
@@ -853,6 +887,7 @@ fun SettingsScreen(
                     onSaveDefaultModelKeys(
                         defaultChatModelKeyValue,
                         defaultTitleModelKeyValue,
+                        defaultSummarizingModelKeyValue,
                         defaultNamingModelKeyValue,
                         defaultCompactingModelKeyValue,
                     )
@@ -877,6 +912,7 @@ fun SettingsScreen(
                     onSaveDefaultModelKeys(
                         defaultChatModelKeyValue,
                         defaultTitleModelKeyValue,
+                        defaultSummarizingModelKeyValue,
                         defaultNamingModelKeyValue,
                         defaultCompactingModelKeyValue,
                     )
@@ -2432,10 +2468,12 @@ private fun DefaultModelsPage(
     modelOptions: List<ProviderModelOption>,
     defaultChatModelKey: String,
     defaultTitleModelKey: String,
+    defaultSummarizingModelKey: String,
     defaultNamingModelKey: String,
     defaultCompactingModelKey: String,
     onOpenDefaultChatModel: () -> Unit,
     onOpenDefaultTitleModel: () -> Unit,
+    onOpenDefaultSummarizingModel: () -> Unit,
     onOpenDefaultNamingModel: () -> Unit,
     onOpenDefaultCompactingModel: () -> Unit,
     onBack: () -> Unit,
@@ -2484,6 +2522,20 @@ private fun DefaultModelsPage(
                     modelOptions.findModelOption(defaultTitleModelKey)?.fullLabel.orEmpty()
                 },
                 onClick = onOpenDefaultTitleModel,
+            )
+            CardDivider()
+            SettingsNavRow(
+                icon = Icons.Rounded.AutoAwesome,
+                title = stringResource(R.string.settings_default_summarizing_model),
+                subtitle = if (defaultSummarizingModelKey.isBlank()) {
+                    automaticTitleLabel?.let { stringResource(R.string.settings_automatic_model_with_name, it) }
+                        ?: stringResource(R.string.settings_automatic_model)
+                } else if (defaultSummarizingModelKey == DisabledAuxiliaryModelKey) {
+                    stringResource(R.string.settings_none)
+                } else {
+                    modelOptions.findModelOption(defaultSummarizingModelKey)?.fullLabel.orEmpty()
+                },
+                onClick = onOpenDefaultSummarizingModel,
             )
             CardDivider()
             SettingsNavRow(

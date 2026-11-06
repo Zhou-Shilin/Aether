@@ -404,6 +404,8 @@ internal data class SharedReasoningSummaryFollowUp(
 
 internal class SharedReasoningTurnTracker {
     private var activeBlockId: String? = null
+    private var activeRawChunkId: String? = null
+    private var activeRawBlockId: String? = null
     private var activeDirectSummaryBlockId: String? = null
     private var activeDirectSummaryChunkId: String? = null
     private var firstSummarySubmitted = false
@@ -440,6 +442,19 @@ internal class SharedReasoningTurnTracker {
         summaryFollowUpRequested = false
         summaryFollowUpForced = false
         return followUp
+    }
+
+    fun finishRawChunk() {
+        activeRawBlockId = null
+        activeRawChunkId = null
+    }
+
+    fun rawChunkId(blockId: String): String {
+        if (activeRawBlockId == blockId) activeRawChunkId?.let { return it }
+        return "$blockId-raw-${chunkCounter++}".also {
+            activeRawBlockId = blockId
+            activeRawChunkId = it
+        }
     }
 
     fun finishDirectSummaryChunk() {
@@ -1750,7 +1765,7 @@ fun IosComposeApp(
             forceRemaining: Boolean,
             fallbackConfig: LlmProviderConfig,
         ) {
-            if (sharedAppSettings.defaultTitleModelKey == DisabledAuxiliaryModelKey) return
+            if (sharedAppSettings.defaultSummarizingModelKey == DisabledAuxiliaryModelKey) return
             if (!tracker.beginSummary(forceRemaining)) return
             var submission: SharedReasoningSummarySubmission? = null
             val now = platformCurrentTimeMillis()
@@ -1767,7 +1782,7 @@ fun IosComposeApp(
             }
             val modelOptions = providerConfigs.availableModelOptions()
             val titleModelKey = resolveSharedStoredOrAutomaticModelKey(
-                storedKey = sharedAppSettings.defaultTitleModelKey,
+                storedKey = sharedAppSettings.defaultSummarizingModelKey,
                 options = modelOptions,
                 purpose = AutomaticModelPurpose.Title,
                 fallbackPurpose = AutomaticModelPurpose.Chat,
@@ -2158,7 +2173,10 @@ fun IosComposeApp(
                             reasoningTracker.finishDirectSummaryChunk()
                             val now = platformCurrentTimeMillis()
                             target.messages.updateMessage(assistantId) { current ->
-                                current.completePendingReconnect().appendAssistantReasoningDelta(delta, now).copy(
+                                val updated = current.completePendingReconnect().appendAssistantReasoningDelta(delta, now)
+                                (if (sharedAppSettings.defaultSummarizingModelKey == DisabledAuxiliaryModelKey) {
+                                    updated.appendRawReasoningPreview(delta, reasoningTracker, now)
+                                } else updated).copy(
                                     status = "",
                                     statusDetail = "",
                                 )
@@ -2202,6 +2220,7 @@ fun IosComposeApp(
                         onToolEvent = { event ->
                             backgroundLeases[target.id]?.update("Running ${event.name}")
                             if (event.outputJson == null) {
+                                reasoningTracker.finishRawChunk()
                                 reasoningTracker.finishDirectSummaryChunk()
                                 enqueueReasoningSummary(
                                     target = target,
@@ -2231,6 +2250,7 @@ fun IosComposeApp(
                             }
                         },
                         onHostToolStarted = { call ->
+                            reasoningTracker.finishRawChunk()
                             backgroundLeases[target.id]?.update("Running ${call.name}")
                             reasoningTracker.finishDirectSummaryChunk()
                             val now = platformCurrentTimeMillis()
@@ -4383,6 +4403,7 @@ private fun buildSharedSettingsDiagnosticSummary(settings: AppSettings): JsonObj
     put("baseUrl", SharedDiagnosticRedactor.sanitizedBaseUrl(settings.baseUrl))
     put("defaultChatModelKey", settings.defaultChatModelKey)
     put("defaultTitleModelKey", settings.defaultTitleModelKey)
+    put("defaultSummarizingModelKey", settings.defaultSummarizingModelKey)
     put("defaultNamingModelKey", settings.defaultNamingModelKey)
     put("llmInactivityReconnectTimeoutSeconds", settings.llmInactivityReconnectTimeoutSeconds)
     put("privacyPolicyAccepted", settings.privacyPolicyAccepted)
@@ -7623,6 +7644,27 @@ internal fun SharedChatMessage.appendAssistantReasoningDelta(
     return copy(reasoningText = reasoningText + delta, responseBlocks = updatedBlocks)
 }
 
+internal fun SharedChatMessage.appendRawReasoningPreview(
+    delta: String,
+    tracker: SharedReasoningTurnTracker,
+    nowMillis: Long,
+): SharedChatMessage {
+    val block = responseBlocks.lastOrNull() as? SharedAssistantResponseBlock.Reasoning ?: return this
+    val chunkId = tracker.rawChunkId(block.id)
+    val previous = block.trace.chunks.firstOrNull { it.id == chunkId }
+    val text = previous?.rawText.orEmpty() + delta
+    val chunk = previous?.copy(rawText = text, detail = text.trim().take(200))
+        ?: SharedReasoningSummaryChunk(
+            id = chunkId, title = "Thinking", detail = text.trim().take(200),
+            rawText = text, createdAtMillis = nowMillis, timelineOrder = tracker.nextTimelineOrder(),
+        )
+    val chunks = if (previous == null) block.trace.chunks + chunk
+        else block.trace.chunks.map { if (it.id == chunkId) chunk else it }
+    return copy(responseBlocks = responseBlocks.dropLast(1) + block.copy(
+        trace = block.trace.copy(chunks = chunks, latestStatusText = chunk.detail),
+    ))
+}
+
 internal fun SharedChatMessage.appendDirectAssistantReasoningSummaryDelta(
     delta: String,
     tracker: SharedReasoningTurnTracker,
@@ -8914,6 +8956,7 @@ internal fun AppSettings.withNativeSettingsPatch(patch: JsonObject): AppSettings
         ?: oldCommandHistoryRetentionHours,
     defaultChatModelKey = patch.nativeStringOrNull("defaultChatModelKey") ?: defaultChatModelKey,
     defaultTitleModelKey = patch.nativeStringOrNull("defaultTitleModelKey") ?: defaultTitleModelKey,
+    defaultSummarizingModelKey = patch.nativeStringOrNull("defaultSummarizingModelKey") ?: defaultSummarizingModelKey,
     defaultNamingModelKey = patch.nativeStringOrNull("defaultNamingModelKey") ?: defaultNamingModelKey,
     defaultCompactingModelKey = patch.nativeStringOrNull("defaultCompactingModelKey")
         ?: defaultCompactingModelKey,

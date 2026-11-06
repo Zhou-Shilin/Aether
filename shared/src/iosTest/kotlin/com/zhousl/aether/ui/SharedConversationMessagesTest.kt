@@ -830,6 +830,32 @@ class SharedConversationMessagesTest {
     }
 
     @Test
+    fun rawThinkingPreviewOnlySplitsAtToolCalls() {
+        val tracker = SharedReasoningTurnTracker()
+        val firstText = "a".repeat(220)
+        var message = SharedChatMessage(text = "", fromUser = false)
+        message = message.appendAssistantReasoningDelta(firstText, 100)
+            .appendRawReasoningPreview(firstText, tracker, 100)
+        message = message.appendAssistantReasoningDelta(" continued", 200)
+            .appendRawReasoningPreview(" continued", tracker, 200)
+        tracker.finishRawChunk()
+        message = message.withStartedAssistantTool(
+            SharedPiHostToolCall("tool", "read", buildJsonObject {}),
+            startedAtMillis = 300,
+            timelineOrder = tracker.nextTimelineOrder(),
+        )
+        message = message.appendAssistantReasoningDelta("after tool", 400)
+            .appendRawReasoningPreview("after tool", tracker, 400)
+
+        val trace = assertIs<SharedAssistantResponseBlock.Reasoning>(message.responseBlocks.single()).trace
+        assertEquals(listOf("Thinking", "Thinking"), trace.chunks.map { it.title })
+        assertEquals("a".repeat(200), trace.chunks.first().detail)
+        assertEquals(firstText + " continued", trace.chunks.first().rawText)
+        assertEquals("after tool", trace.chunks.last().detail)
+        assertEquals(listOf(1L, 2L, 3L), sharedReasoningTimelineItems(trace).map { it.sortOrder })
+    }
+
+    @Test
     fun streamingEventsPreserveResponseOrderAndCompleteToolJson() {
         val arguments = buildJsonObject {
             put("path", "/workspace/report.json")

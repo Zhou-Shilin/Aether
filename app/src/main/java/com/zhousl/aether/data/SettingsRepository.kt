@@ -198,6 +198,7 @@ class SettingsRepository(
             themeMode = AppThemeMode.fromStorage(preferences[THEME_MODE]),
             defaultChatModelKey = preferences[DEFAULT_CHAT_MODEL_KEY].orEmpty(),
             defaultTitleModelKey = preferences[DEFAULT_TITLE_MODEL_KEY].orEmpty(),
+            defaultSummarizingModelKey = preferences[DEFAULT_SUMMARIZING_MODEL_KEY].orEmpty(),
             defaultNamingModelKey = preferences[DEFAULT_NAMING_MODEL_KEY].orEmpty(),
             defaultCompactingModelKey = preferences[DEFAULT_COMPACTING_MODEL_KEY].orEmpty(),
             defaultSelectedSkillIds = preferences[DEFAULT_SELECTED_SKILL_IDS]
@@ -505,6 +506,7 @@ class SettingsRepository(
             it[THEME_MODE] = settings.themeMode.storageValue
             it[DEFAULT_CHAT_MODEL_KEY] = settings.defaultChatModelKey
             it[DEFAULT_TITLE_MODEL_KEY] = settings.defaultTitleModelKey
+            it[DEFAULT_SUMMARIZING_MODEL_KEY] = settings.defaultSummarizingModelKey
             it[DEFAULT_NAMING_MODEL_KEY] = settings.defaultNamingModelKey
             it[DEFAULT_COMPACTING_MODEL_KEY] = settings.defaultCompactingModelKey
             it[DEFAULT_SELECTED_SKILL_IDS] = serializeStringArray(settings.defaultSelectedSkillIds)
@@ -580,12 +582,14 @@ class SettingsRepository(
     suspend fun updateDefaultModelKeys(
         chat: String,
         title: String,
+        summarizing: String,
         naming: String,
         compacting: String,
     ) {
         context.dataStore.edit {
             it[DEFAULT_CHAT_MODEL_KEY] = chat
             it[DEFAULT_TITLE_MODEL_KEY] = title
+            it[DEFAULT_SUMMARIZING_MODEL_KEY] = summarizing
             it[DEFAULT_NAMING_MODEL_KEY] = naming
             it[DEFAULT_COMPACTING_MODEL_KEY] = compacting
         }
@@ -724,6 +728,7 @@ class SettingsRepository(
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val DEFAULT_CHAT_MODEL_KEY = stringPreferencesKey("default_chat_model_key")
         val DEFAULT_TITLE_MODEL_KEY = stringPreferencesKey("default_title_model_key")
+        val DEFAULT_SUMMARIZING_MODEL_KEY = stringPreferencesKey("default_summarizing_model_key")
         val DEFAULT_NAMING_MODEL_KEY = stringPreferencesKey("default_naming_model_key")
         val DEFAULT_COMPACTING_MODEL_KEY = stringPreferencesKey("default_compacting_model_key")
         val MODEL_CATALOG_CACHE_JSON = stringPreferencesKey("model_catalog_cache_json")

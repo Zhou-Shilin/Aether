@@ -932,6 +932,7 @@ private struct NativeDefaultModelsView: View {
     private let rows = [
         ("defaultChatModelKey", "Chat", "对话", "chat"),
         ("defaultTitleModelKey", "Title generation", "标题生成", "title"),
+        ("defaultSummarizingModelKey", "Summarizing", "总结", "summarizing"),
         ("defaultNamingModelKey", "Naming", "命名", "naming"),
         ("defaultCompactingModelKey", "Compacting", "上下文压缩", "compacting"),
     ]
@@ -953,7 +954,7 @@ private struct NativeDefaultModelsView: View {
         if selected == "__none__" { return model.text("None", "无") }
         if selected.isEmpty {
             let automatic = model.snapshot["automaticModels"] as? [String: Any] ?? [:]
-            let resolved = automatic[purpose] as? [String: Any] ?? [:]
+            let resolved = automatic[purpose == "summarizing" ? "title" : purpose] as? [String: Any] ?? [:]
             let label = model.string(resolved, "label")
             return label.isEmpty
                 ? model.text("Automatic", "自动")
@@ -973,7 +974,7 @@ private struct NativeModelSelector: View {
 
     var body: some View {
         List {
-            if purpose == "title" || purpose == "naming" {
+            if purpose == "title" || purpose == "summarizing" || purpose == "naming" {
                 Button { model.patch([settingKey: "__none__"]) } label: {
                     modelRow(model.text("None", "无"), subtitle: model.text("Do not summarize.", "不进行总结。"), key: "__none__")
                 }
@@ -999,10 +1000,13 @@ private struct NativeModelSelector: View {
     }
 
     private var automaticSubtitle: String {
-        guard purpose == "title" || purpose == "naming" else { return "" }
+        guard purpose == "title" || purpose == "summarizing" || purpose == "naming" else { return "" }
         let automatic = model.snapshot["automaticModels"] as? [String: Any] ?? [:]
-        let resolved = automatic[purpose] as? [String: Any] ?? [:]
-        return model.string(resolved, "label")
+        let resolved = automatic[purpose == "summarizing" ? "title" : purpose] as? [String: Any] ?? [:]
+        let label = model.string(resolved, "label")
+        if !label.isEmpty { return label }
+        let fallback = automatic["chat"] as? [String: Any] ?? [:]
+        return model.string(fallback, "label")
     }
 
     private func modelRow(_ label: String, subtitle: String = "", key: String) -> some View {

@@ -384,6 +384,8 @@
     <string name="settings_default_chat_model_subtitle">Used for new chats and when a conversation has not selected a model yet.</string>
     <string name="settings_default_title_model">Default Title Model</string>
     <string name="settings_default_title_model_subtitle">Used when Aether automatically generates conversation titles.</string>
+    <string name="settings_default_summarizing_model">Default Summarizing Model</string>
+    <string name="settings_default_summarizing_model_subtitle">Used to summarize reasoning in the thinking timeline.</string>
     <string name="settings_default_naming_model">Default Naming Model</string>
     <string name="settings_default_naming_model_subtitle">Used for automatic naming flows such as Agent Skills.</string>
     <string name="settings_default_compacting_model">Default Compacting Model</string>

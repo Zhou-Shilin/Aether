@@ -216,6 +216,7 @@ data class AppSettings(
     val themeMode: AppThemeMode = AppThemeMode.System,
     val defaultChatModelKey: String = "",
     val defaultTitleModelKey: String = "",
+    val defaultSummarizingModelKey: String = "",
     val defaultNamingModelKey: String = "",
     val defaultCompactingModelKey: String = "",
     val defaultSelectedSkillIds: List<String> = emptyList(),

@@ -1061,6 +1061,7 @@ private fun AetherAppContent(
                     themeMode = uiState.settings.themeMode,
                     defaultChatModelKey = uiState.settings.defaultChatModelKey,
                     defaultTitleModelKey = uiState.settings.defaultTitleModelKey,
+                    defaultSummarizingModelKey = uiState.settings.defaultSummarizingModelKey,
                     defaultNamingModelKey = uiState.settings.defaultNamingModelKey,
                     defaultCompactingModelKey = uiState.settings.defaultCompactingModelKey,
                     providerConfigs = uiState.providerConfigs,

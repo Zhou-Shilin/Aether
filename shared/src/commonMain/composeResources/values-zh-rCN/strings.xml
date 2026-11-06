@@ -382,6 +382,8 @@
     <string name="settings_default_chat_model_subtitle">用于新建聊天，以及当前会话尚未单独选择模型时。</string>
     <string name="settings_default_title_model">默认标题模型</string>
     <string name="settings_default_title_model_subtitle">用于 Aether 自动生成会话标题。</string>
+    <string name="settings_default_summarizing_model">默认总结模型</string>
+    <string name="settings_default_summarizing_model_subtitle">用于总结思维链时间线。</string>
     <string name="settings_default_naming_model">默认命名模型</string>
     <string name="settings_default_naming_model_subtitle">用于 Agent Skills 等自动命名流程。</string>
     <string name="settings_default_compacting_model">默认压缩模型</string>

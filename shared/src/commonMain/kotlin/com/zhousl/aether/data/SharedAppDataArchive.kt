@@ -359,6 +359,7 @@ private fun AppSettings.toAndroidAppSettingsJson(): JsonObject = buildJsonObject
     put("themeMode", themeMode.storageValue)
     put("defaultChatModelKey", defaultChatModelKey)
     put("defaultTitleModelKey", defaultTitleModelKey)
+    put("defaultSummarizingModelKey", defaultSummarizingModelKey)
     put("defaultNamingModelKey", defaultNamingModelKey)
     put("defaultCompactingModelKey", defaultCompactingModelKey)
     put("defaultSelectedSkillIds", buildJsonArray { defaultSelectedSkillIds.forEach { add(JsonPrimitive(it)) } })
@@ -471,6 +472,10 @@ private fun parseAndroidAppSettings(value: JsonObject): AppSettings {
         defaultTitleModelKey = value.stringValueOrDefault(
             "defaultTitleModelKey",
             defaults.defaultTitleModelKey,
+        ),
+        defaultSummarizingModelKey = value.stringValueOrDefault(
+            "defaultSummarizingModelKey",
+            defaults.defaultSummarizingModelKey,
         ),
         defaultNamingModelKey = value.stringValueOrDefault(
             "defaultNamingModelKey",

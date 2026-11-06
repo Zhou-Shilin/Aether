@@ -1461,6 +1461,7 @@ class AetherViewModel(
             settingsRepository.updateDefaultModelKeys(
                 updatedSettings.defaultChatModelKey,
                 updatedSettings.defaultTitleModelKey,
+                updatedSettings.defaultSummarizingModelKey,
                 updatedSettings.defaultNamingModelKey,
                 updatedSettings.defaultCompactingModelKey,
             )
@@ -2369,6 +2370,7 @@ class AetherViewModel(
     fun saveDefaultModelKeys(
         chat: String,
         title: String,
+        summarizing: String,
         naming: String,
         compacting: String,
     ) {
@@ -2377,13 +2379,14 @@ class AetherViewModel(
                 settings = current.settings.copy(
                     defaultChatModelKey = chat,
                     defaultTitleModelKey = title,
+                    defaultSummarizingModelKey = summarizing,
                     defaultNamingModelKey = naming,
                     defaultCompactingModelKey = compacting,
                 ),
             )
         }
         viewModelScope.launch {
-            settingsRepository.updateDefaultModelKeys(chat, title, naming, compacting)
+            settingsRepository.updateDefaultModelKeys(chat, title, summarizing, naming, compacting)
         }
     }
 
@@ -5689,6 +5692,7 @@ class AetherViewModel(
             put("baseUrl", DiagnosticRedactor.sanitizedBaseUrl(snapshot.settings.baseUrl))
             put("defaultChatModelKey", snapshot.settings.defaultChatModelKey)
             put("defaultTitleModelKey", snapshot.settings.defaultTitleModelKey)
+            put("defaultSummarizingModelKey", snapshot.settings.defaultSummarizingModelKey)
             put("defaultNamingModelKey", snapshot.settings.defaultNamingModelKey)
             put("llmInactivityReconnectTimeoutSeconds", snapshot.settings.llmInactivityReconnectTimeoutSeconds)
             put("keepTasksRunningInBackground", snapshot.settings.keepTasksRunningInBackground)
@@ -6046,6 +6050,7 @@ class AetherViewModel(
         put("themeMode", themeMode.storageValue)
         put("defaultChatModelKey", defaultChatModelKey)
         put("defaultTitleModelKey", defaultTitleModelKey)
+        put("defaultSummarizingModelKey", defaultSummarizingModelKey)
         put("defaultNamingModelKey", defaultNamingModelKey)
         put("defaultCompactingModelKey", defaultCompactingModelKey)
         put("defaultSelectedSkillIds", JSONArray(defaultSelectedSkillIds))
@@ -6159,6 +6164,7 @@ class AetherViewModel(
             themeMode = AppThemeMode.fromStorage(json.optString("themeMode")),
             defaultChatModelKey = json.optString("defaultChatModelKey", defaults.defaultChatModelKey),
             defaultTitleModelKey = json.optString("defaultTitleModelKey", defaults.defaultTitleModelKey),
+            defaultSummarizingModelKey = json.optString("defaultSummarizingModelKey", defaults.defaultSummarizingModelKey),
             defaultNamingModelKey = json.optString("defaultNamingModelKey", defaults.defaultNamingModelKey),
             defaultCompactingModelKey = json.optString(
                 "defaultCompactingModelKey",
