@@ -72,6 +72,25 @@ class ModelSelectionResolverTest {
     }
 
     @Test
+    fun disabledAuxiliaryModelsDoNotFallBackToAutomaticSelection() {
+        val configs = listOf(
+            providerConfig(
+                id = "provider-1",
+                providerId = "provider-1",
+                baseUrl = "https://provider-1.example/v1",
+                modelId = "gpt-5.6-sol",
+            ),
+        )
+        val settings = AppSettings(
+            defaultTitleModelKey = DisabledAuxiliaryModelKey,
+            defaultNamingModelKey = DisabledAuxiliaryModelKey,
+        )
+
+        assertEquals(DisabledAuxiliaryModelKey, resolveDefaultTitleModelKey(settings, configs))
+        assertEquals(DisabledAuxiliaryModelKey, resolveDefaultNamingModelKey(settings, configs))
+    }
+
+    @Test
     fun explicitOnboardingModelOverridesAutomaticChatPreference() {
         val config = providerConfig(
             id = "tour-provider",

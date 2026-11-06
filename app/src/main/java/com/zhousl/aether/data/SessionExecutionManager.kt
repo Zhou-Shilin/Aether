@@ -2451,6 +2451,7 @@ class SessionExecutionManager(
         rawText: String,
     ): ReasoningSummary? {
         val settings = currentSettings.value
+        if (settings.defaultTitleModelKey == DisabledAuxiliaryModelKey) return null
         val providerConfigs = currentProviderConfigs.value
         val titleSettings = resolveModelSettings(
             baseSettings = settings,
@@ -2463,8 +2464,12 @@ class SessionExecutionManager(
         }
         val modelKey = thinkingCatalogKey(titleSettings.piProviderId, titleSettings.modelId)
         val thinkingLevelMap = settingsRepository.loadThinkingLevelMapsCache()[modelKey].orEmpty()
-        val isReasoningModel = settingsRepository.loadThinkingCatalogCache()[modelKey]
-            .orEmpty().isNotEmpty()
+        val modelsDevThinkingLevels = settingsRepository.loadThinkingCatalogCache()[modelKey]
+        val reasoningEffort = lowestAvailableReasoningEffort(
+            modelsDevThinkingLevels,
+            thinkingLevelMap,
+        )
+        val isReasoningModel = !modelsDevThinkingLevels.isNullOrEmpty()
         val prompt = buildString {
             appendLine("Summarize this assistant reasoning excerpt for a user-visible thinking timeline.")
             appendLine("Return exactly two short paragraphs: first a concise title, then one detail paragraph.")
@@ -2482,7 +2487,7 @@ class SessionExecutionManager(
             append(rawText.take(ReasoningSummaryMaxInputChars))
         }
         val result = piCompletionClient?.completeOnce(
-            settings = titleSettings,
+            settings = reasoningEffort?.let { titleSettings.copy(reasoningEffort = it) } ?: titleSettings,
             systemPrompt = ReasoningSummarySystemPrompt,
             messages = listOf(
                 LlmMessage(
@@ -2490,10 +2495,11 @@ class SessionExecutionManager(
                     contentParts = listOf(LlmTextPart(prompt)),
                 )
             ),
-            disableReasoning = true,
+            disableReasoning = false,
+            omitReasoningEffort = reasoningEffort == null,
             thinkingLevelMap = thinkingLevelMap,
             isReasoningModel = isReasoningModel,
-            modelsDevThinkingLevels = settingsRepository.loadThinkingCatalogCache()[modelKey],
+            modelsDevThinkingLevels = modelsDevThinkingLevels,
             modelsDevLimits = settingsRepository.loadModelLimitsCache()[modelKey],
         )?.getOrNull()?.assistantText?.trim().orEmpty()
         return parseReasoningSummary(result)

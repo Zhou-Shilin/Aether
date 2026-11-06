@@ -980,7 +980,7 @@ private fun AssistantMessageWorkContent(
 
 @Composable
 fun ConversationAssistantGroupBubble(
-    messages: List<ChatMessage>,
+    rawMessages: List<ChatMessage>,
     actionsEnabled: Boolean,
     workspaceDirectory: String?,
     allowRootImageRead: Boolean = false,
@@ -991,6 +991,7 @@ fun ConversationAssistantGroupBubble(
     onDelete: () -> Unit,
     sessionTotalTokens: Long? = null,
 ) {
+    val messages = mergeAdjacentWorkMessages(rawMessages)
     if (messages.isEmpty()) return
     val groupUsageStatistics = messages.lastOrNull { it.usageStatistics != null }?.usageStatistics
     val thoughtDurationMillis = messages.lastOrNull()?.thoughtDurationMillis
@@ -1147,6 +1148,57 @@ fun ConversationAssistantGroupBubble(
                 onCopy = onCopy,
                 onRedo = onRedo,
                 onDelete = onDelete,
+            )
+        }
+    }
+}
+
+internal fun mergeAdjacentWorkMessages(messages: List<ChatMessage>): List<ChatMessage> {
+    if (messages.size < 2) return messages
+    return buildList {
+        messages.forEach { message ->
+            val previous = lastOrNull()
+            val canMerge = previous != null &&
+                previous.author == MessageAuthor.Agent &&
+                message.author == MessageAuthor.Agent &&
+                previous.text.isBlank() && message.text.isBlank() &&
+                previous.statusText.isBlank() && message.statusText.isBlank() &&
+                previous.attachments.isEmpty() && message.attachments.isEmpty() &&
+                (previous.reasoningTrace != null || previous.toolInvocations.isNotEmpty()) &&
+                (message.reasoningTrace != null || message.toolInvocations.isNotEmpty())
+            if (!canMerge) {
+                add(message)
+                return@forEach
+            }
+            removeAt(lastIndex)
+            val traces = listOfNotNull(previous.reasoningTrace, message.reasoningTrace)
+            val tools = (previous.toolInvocations + previous.reasoningTrace?.toolInvocations.orEmpty() +
+                message.toolInvocations + message.reasoningTrace?.toolInvocations.orEmpty())
+                .distinctBy(ChatToolInvocation::id)
+            val mergedTrace = traces.firstOrNull()?.copy(
+                rawText = traces.map(ReasoningTrace::rawText).filter(String::isNotBlank).joinToString("\n"),
+                chunks = traces.flatMap(ReasoningTrace::chunks),
+                toolInvocations = tools,
+                latestStatusText = traces.asReversed().firstOrNull { it.latestStatusText.isNotBlank() }
+                    ?.latestStatusText.orEmpty(),
+                startedAtMillis = (traces.map(ReasoningTrace::startedAtMillis) +
+                    tools.map(ChatToolInvocation::startedAtMillis))
+                    .filter { it > 0L }.minOrNull() ?: traces.first().startedAtMillis,
+                completedAtMillis = if (traces.all { it.completedAtMillis != null } &&
+                    tools.none(ChatToolInvocation::isRunning)) {
+                    (traces.mapNotNull(ReasoningTrace::completedAtMillis) +
+                        tools.mapNotNull(ChatToolInvocation::completedAtMillis))
+                        .filter { it > 0L }.maxOrNull()
+                } else {
+                    null
+                },
+            )
+            add(
+                previous.copy(
+                    toolInvocations = tools,
+                    reasoningTrace = mergedTrace ?: previous.reasoningTrace,
+                    thoughtDurationMillis = message.thoughtDurationMillis ?: previous.thoughtDurationMillis,
+                ),
             )
         }
     }

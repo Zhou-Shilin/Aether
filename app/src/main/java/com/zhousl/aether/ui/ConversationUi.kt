@@ -654,7 +654,7 @@ fun ConversationScreen(
                             is ConversationListItem.AssistantGroup -> {
                                 val lastMessage = item.messages.last()
                                 ConversationAssistantGroupBubble(
-                                    messages = item.messages,
+                                    rawMessages = item.messages,
                                     actionsEnabled = !isSending,
                                     workspaceDirectory = workspaceDirectory,
                                     allowRootImageRead = allowRootImageRead,

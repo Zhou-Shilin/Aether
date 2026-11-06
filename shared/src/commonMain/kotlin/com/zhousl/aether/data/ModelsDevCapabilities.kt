@@ -12,6 +12,15 @@ import kotlinx.serialization.json.doubleOrNull
 /** Thinking levels understood by Aether and Pi, in ascending order. */
 val ModelsDevThinkingLevels: List<String> = listOf("off", "minimal", "low", "medium", "high", "xhigh", "max")
 
+fun lowestAvailableReasoningEffort(
+    availableLevels: List<String>?,
+    thinkingLevelMap: Map<String, String> = emptyMap(),
+): String? {
+    val supported = availableLevels.orEmpty().map { it.trim().lowercase() }.toSet() +
+        thinkingLevelMap.keys.map { it.trim().lowercase() }
+    return ModelsDevThinkingLevels.firstOrNull { it != "off" && it in supported }
+}
+
 /** Request limits models.dev publishes for one provider model. */
 @Serializable
 data class ModelsDevModelLimits(

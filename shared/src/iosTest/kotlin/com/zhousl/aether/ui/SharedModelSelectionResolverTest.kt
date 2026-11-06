@@ -9,6 +9,68 @@ import kotlin.test.assertEquals
 
 class SharedModelSelectionResolverTest {
     @Test
+    fun adjacentReasoningBlocksWithoutCommentaryMergeTogether() {
+        val firstTool = SharedChatToolInvocation("tool-1", "bash", "{}", isRunning = false)
+        val secondTool = SharedChatToolInvocation("tool-2", "bash", "{}", isRunning = false)
+        val blocks = listOf(
+            SharedAssistantResponseBlock.Reasoning(
+                "reasoning-1",
+                SharedReasoningTrace("trace-1", rawText = "first", toolInvocations = listOf(firstTool), startedAtMillis = 10, completedAtMillis = 20),
+            ),
+            SharedAssistantResponseBlock.ToolGroup("tools", listOf(firstTool, secondTool)),
+            SharedAssistantResponseBlock.Reasoning(
+                "reasoning-2",
+                SharedReasoningTrace("trace-2", rawText = "second", toolInvocations = listOf(secondTool), startedAtMillis = 21, completedAtMillis = 30),
+            ),
+        )
+
+        val merged = mergeAdjacentSharedReasoningWorkBlocks(blocks)
+
+        assertEquals(1, merged.size)
+        val trace = (merged.single() as SharedAssistantResponseBlock.Reasoning).trace
+        assertEquals("first\nsecond", trace.rawText)
+        assertEquals(listOf("tool-1", "tool-2"), trace.toolInvocations.map { it.id })
+        assertEquals(10L, trace.startedAtMillis)
+        assertEquals(30L, trace.completedAtMillis)
+    }
+
+    @Test
+    fun adjacentToolAndReasoningBlocksWithoutCommentaryMergeTogether() {
+        val tool = SharedChatToolInvocation(
+            id = "tool-1",
+            name = "bash",
+            summary = "Restarting Minecraft server",
+            startedAtMillis = 10,
+            completedAtMillis = 20,
+            isRunning = false,
+        )
+        val reasoning = SharedAssistantResponseBlock.Reasoning(
+            "reasoning-1",
+            SharedReasoningTrace("trace-1", rawText = "Checking the server", startedAtMillis = 21),
+        )
+
+        val merged = mergeAdjacentSharedReasoningWorkBlocks(
+            listOf(SharedAssistantResponseBlock.ToolGroup("tools", listOf(tool)), reasoning),
+        )
+
+        assertEquals(1, merged.size)
+        val trace = (merged.single() as SharedAssistantResponseBlock.Reasoning).trace
+        assertEquals("Checking the server", trace.rawText)
+        assertEquals(listOf("tool-1"), trace.toolInvocations.map { it.id })
+        assertEquals(10L, trace.startedAtMillis)
+        assertEquals("Executed bash command", trace.latestStatusText)
+    }
+
+    @Test
+    fun commentarySeparatesReasoningBlocks() {
+        val first = SharedAssistantResponseBlock.Reasoning("one", SharedReasoningTrace("trace-1", rawText = "one"))
+        val commentary = SharedAssistantResponseBlock.Text("text", "Updating the server now.")
+        val second = SharedAssistantResponseBlock.Reasoning("two", SharedReasoningTrace("trace-2", rawText = "two"))
+
+        assertEquals(listOf(first, commentary, second), mergeAdjacentSharedReasoningWorkBlocks(listOf(first, commentary, second)))
+    }
+
+    @Test
     fun auxiliaryModelUsesPurposeRankingAndHonorsValidStoredKey() {
         val options = listOf(
             modelConfig("provider-1", "gpt-5.6-sol"),

@@ -100,6 +100,7 @@ import com.zhousl.aether.data.shouldRevealFollowUpTourCard
 import com.zhousl.aether.data.resolveDefaultChatModelKey
 import com.zhousl.aether.data.resolveDefaultCompactingModelKey
 import com.zhousl.aether.data.resolveDefaultTitleModelKey
+import com.zhousl.aether.data.lowestAvailableReasoningEffort
 import com.zhousl.aether.data.resolveAutomaticModelKey
 import com.zhousl.aether.data.resolveModelSettings
 import com.zhousl.aether.data.resolveStoredOrAutomaticModelKey
@@ -5215,7 +5216,8 @@ class AetherViewModel(
         seedMessage: ChatMessage,
         settings: AppSettings,
     ) {
-                if (!settings.isProviderSetupValid()) {
+        if (settings.defaultTitleModelKey == com.zhousl.aether.data.DisabledAuxiliaryModelKey) return
+        if (!settings.isProviderSetupValid()) {
             return
         }
 
@@ -5233,8 +5235,12 @@ class AetherViewModel(
             val modelKey = thinkingCatalogKey(titleSettings.piProviderId, titleSettings.modelId)
             val thinkingLevelMap = _uiState.value.thinkingLevelClampsByProviderModel[modelKey].orEmpty()
             val isReasoningModel = modelKey in _uiState.value.reasoningModels
+            val titleReasoningEffort = lowestAvailableReasoningEffort(
+                _uiState.value.thinkingLevelsByProviderModel[modelKey],
+                thinkingLevelMap,
+            )
             val title = piCompletionClient.completeOnce(
-                settings = titleSettings,
+                settings = titleReasoningEffort?.let { titleSettings.copy(reasoningEffort = it) } ?: titleSettings,
                 systemPrompt = SessionTitleSystemPrompt,
                 messages = listOf(
                     LlmMessage(
@@ -5242,7 +5248,8 @@ class AetherViewModel(
                         contentParts = listOf(LlmTextPart(titleInput)),
                     )
                 ),
-                disableReasoning = true,
+                disableReasoning = false,
+                omitReasoningEffort = titleReasoningEffort == null,
                 thinkingLevelMap = thinkingLevelMap,
                 isReasoningModel = isReasoningModel,
                 modelsDevThinkingLevels = _uiState.value.thinkingLevelsByProviderModel[modelKey],

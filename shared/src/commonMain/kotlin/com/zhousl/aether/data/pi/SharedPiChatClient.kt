@@ -113,6 +113,7 @@ class SharedPiChatClient(
         messages: List<SharedPiChatMessage>,
         systemPrompt: String = platformDefaultSystemPrompt(),
         reasoning: String = "off",
+        omitReasoningEffort: Boolean = false,
         timeoutMillis: Int = 360_000,
         thinkingLevelMap: Map<String, String> = emptyMap(),
         isReasoningModel: Boolean? = null,
@@ -134,7 +135,7 @@ class SharedPiChatClient(
                 put("system_prompt", systemPrompt.ifBlank { platformDefaultSystemPrompt() })
                 put("messages", messages.toPiMessages())
                 put("stream", false)
-                put("reasoning", reasoning)
+                if (!omitReasoningEffort) put("reasoning", reasoning)
             },
         )
         return response.toSharedPiTurnResult(config)

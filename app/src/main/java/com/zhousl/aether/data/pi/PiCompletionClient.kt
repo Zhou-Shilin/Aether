@@ -18,6 +18,7 @@ class PiCompletionClient(
         systemPrompt: String,
         messages: List<LlmMessage>,
         disableReasoning: Boolean = false,
+        omitReasoningEffort: Boolean = false,
         stream: Boolean = false,
         thinkingLevelMap: Map<String, String> = emptyMap(),
         isReasoningModel: Boolean? = null,
@@ -38,7 +39,9 @@ class PiCompletionClient(
             put("system_prompt", systemPrompt)
             put("messages", messages.toPiJson())
             put("stream", stream)
-            put("reasoning", if (disableReasoning) "off" else settings.toPiThinkingLevel())
+            if (!omitReasoningEffort) {
+                put("reasoning", if (disableReasoning) "off" else settings.toPiThinkingLevel())
+            }
         }
         bridge.completeOnce(payload, onEvent).toPiCompletionResult().also { result ->
             if (

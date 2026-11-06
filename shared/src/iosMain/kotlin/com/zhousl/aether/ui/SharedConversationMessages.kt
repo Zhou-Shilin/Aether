@@ -669,6 +669,76 @@ internal sealed interface SharedAssistantResponseBlock {
     ) : SharedAssistantResponseBlock
 }
 
+private fun SharedAssistantResponseBlock.isVisibleCommentary(): Boolean = when (this) {
+    is SharedAssistantResponseBlock.Text -> text.isNotBlank()
+    is SharedAssistantResponseBlock.Status -> text.isNotBlank() || detail.isNotBlank()
+    is SharedAssistantResponseBlock.Reasoning,
+    is SharedAssistantResponseBlock.ToolGroup -> false
+}
+
+internal fun mergeAdjacentSharedReasoningWorkBlocks(
+    blocks: List<SharedAssistantResponseBlock>,
+): List<SharedAssistantResponseBlock> = buildList {
+    var index = 0
+    while (index < blocks.size) {
+        if (blocks[index].isVisibleCommentary()) {
+            add(blocks[index++])
+            continue
+        }
+        val segmentStart = index
+        while (
+            index < blocks.size &&
+            !blocks[index].isVisibleCommentary()
+        ) index++
+        val segment = blocks.subList(segmentStart, index)
+        val reasoningBlocks = segment.filterIsInstance<SharedAssistantResponseBlock.Reasoning>()
+        val tools = segment.flatMap { block ->
+            when (block) {
+                is SharedAssistantResponseBlock.Reasoning -> block.trace.toolInvocations
+                is SharedAssistantResponseBlock.ToolGroup -> block.tools
+                is SharedAssistantResponseBlock.Status,
+                is SharedAssistantResponseBlock.Text -> emptyList()
+            }
+        }.distinctBy(SharedChatToolInvocation::id)
+        if (reasoningBlocks.isEmpty()) {
+            if (segment.size == 1) {
+                addAll(segment)
+            } else if (tools.isNotEmpty()) {
+                add(SharedAssistantResponseBlock.ToolGroup(segment.first().id, tools))
+            }
+            continue
+        }
+        if (segment.size == 1) {
+            addAll(segment)
+            continue
+        }
+        val traces = reasoningBlocks.map(SharedAssistantResponseBlock.Reasoning::trace)
+        val startedAtMillis = (traces.map(SharedReasoningTrace::startedAtMillis) +
+            tools.map(SharedChatToolInvocation::startedAtMillis))
+            .filter { it > 0L }
+            .minOrNull() ?: traces.first().startedAtMillis
+        val completionTimes = traces.mapNotNull(SharedReasoningTrace::completedAtMillis) +
+            tools.mapNotNull(SharedChatToolInvocation::completedAtMillis)
+        val completedAtMillis = if (traces.all { it.completedAtMillis != null }) {
+            completionTimes.filter { it > 0L }.maxOrNull()
+        } else {
+            null
+        }
+        val latestStatusText = traces.asReversed().firstOrNull { it.latestStatusText.isNotBlank() }
+            ?.latestStatusText
+            ?: tools.lastOrNull()?.let(::sharedReasoningToolStatus).orEmpty()
+        val mergedTrace = traces.first().copy(
+            rawText = traces.map(SharedReasoningTrace::rawText).filter(String::isNotBlank).joinToString("\n"),
+            chunks = traces.flatMap(SharedReasoningTrace::chunks),
+            toolInvocations = tools,
+            latestStatusText = latestStatusText,
+            startedAtMillis = startedAtMillis,
+            completedAtMillis = completedAtMillis,
+        )
+        add(SharedAssistantResponseBlock.Reasoning(reasoningBlocks.first().id, mergedTrace))
+    }
+}
+
 internal fun completedReconnectStatus(status: String): String {
     val match = Regex("^Reconnecting\\.\\.\\.\\s*(.*)$", RegexOption.IGNORE_CASE).matchEntire(status.trim())
         ?: return status
@@ -1158,6 +1228,11 @@ internal fun SharedConversationMessage(
                 }
             }
         } else {
+            val message = if (message.responseBlocks.size > 1) {
+                message.copy(responseBlocks = mergeAdjacentSharedReasoningWorkBlocks(message.responseBlocks))
+            } else {
+                message
+            }
             val showAttachmentsAfterReply = com.zhousl.aether.data.ShowcaseCatalog.isSession(message.id)
             val finalTextBlockIndex = message.responseBlocks.indexOfLast { block ->
                 block is SharedAssistantResponseBlock.Text && block.text.isNotBlank()

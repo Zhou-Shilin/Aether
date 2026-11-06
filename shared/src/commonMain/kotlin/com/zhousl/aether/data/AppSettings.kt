@@ -15,6 +15,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
 
+const val DisabledAuxiliaryModelKey = "__none__"
+
 @Serializable
 enum class AgentModeAuthorizationMethod(
     val storageValue: String,

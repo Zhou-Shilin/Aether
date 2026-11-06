@@ -493,7 +493,19 @@ final class NativeSettingsModel: NSObject, ObservableObject, @preconcurrency Ios
     }
 
     func patch(_ values: [String: Any]) {
-        perform("update_settings", values)
+        var updatedValues = values
+        let titleKey = settingString("defaultTitleModelKey")
+        let namingKey = settingString("defaultNamingModelKey")
+        if titleKey.isEmpty, namingKey.isEmpty {
+            if let selectedTitle = values["defaultTitleModelKey"] as? String,
+               !selectedTitle.isEmpty, selectedTitle != "__none__" {
+                updatedValues["defaultNamingModelKey"] = selectedTitle
+            } else if let selectedNaming = values["defaultNamingModelKey"] as? String,
+                      !selectedNaming.isEmpty, selectedNaming != "__none__" {
+                updatedValues["defaultTitleModelKey"] = selectedNaming
+            }
+        }
+        perform("update_settings", updatedValues)
     }
 
     func perform(_ command: String, _ payload: [String: Any] = [:]) {
@@ -938,6 +950,7 @@ private struct NativeDefaultModelsView: View {
 
     private func selectedLabel(_ key: String, _ purpose: String) -> String {
         let selected = model.settingString(key)
+        if selected == "__none__" { return model.text("None", "无") }
         if selected.isEmpty {
             let automatic = model.snapshot["automaticModels"] as? [String: Any] ?? [:]
             let resolved = automatic[purpose] as? [String: Any] ?? [:]
@@ -962,6 +975,11 @@ private struct NativeModelSelector: View {
         List {
             Button { model.patch([settingKey: ""]) } label: {
                 modelRow(model.text("Automatic", "自动"), key: "")
+            }
+            if purpose == "title" || purpose == "naming" {
+                Button { model.patch([settingKey: "__none__"]) } label: {
+                    modelRow(model.text("None", "无"), key: "__none__")
+                }
             }
             ForEach(filtered, id: \.nativeID) { option in
                 Button { model.patch([settingKey: model.string(option, "key")]) } label: {

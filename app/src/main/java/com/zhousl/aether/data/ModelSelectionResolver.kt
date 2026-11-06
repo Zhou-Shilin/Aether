@@ -36,6 +36,7 @@ fun resolveDefaultTitleModelKey(
     settings: AppSettings,
     providerConfigs: List<LlmProviderConfig>,
 ): String {
+    if (settings.defaultTitleModelKey == DisabledAuxiliaryModelKey) return DisabledAuxiliaryModelKey
     val options = providerConfigs.availableModelOptions()
     return resolveStoredOrAutomaticModelKey(
         modelKey = settings.defaultTitleModelKey,
@@ -49,6 +50,7 @@ fun resolveDefaultNamingModelKey(
     settings: AppSettings,
     providerConfigs: List<LlmProviderConfig>,
 ): String {
+    if (settings.defaultNamingModelKey == DisabledAuxiliaryModelKey) return DisabledAuxiliaryModelKey
     val options = providerConfigs.availableModelOptions()
     return resolveStoredOrAutomaticModelKey(
         modelKey = settings.defaultNamingModelKey,

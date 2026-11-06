@@ -389,6 +389,7 @@
     <string name="settings_prioritize_sota_models">优先选择前沿模型</string>
     <string name="settings_prioritize_efficient_summary_models">优先选择高效总结模型</string>
     <string name="settings_automatic_model">自动选择</string>
+    <string name="settings_none">无</string>
     <string name="settings_automatic_model_with_name">自动选择 · %1$s</string>
     <string name="settings_no_providers_configured">未配置模型提供方</string>
     <string name="settings_add_provider_description">添加提供方以连接 LLM API。</string>

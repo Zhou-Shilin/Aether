@@ -199,6 +199,8 @@ import com.zhousl.aether.data.ProviderModelOption
 import com.zhousl.aether.data.AetherSettingsStore
 import com.zhousl.aether.data.AppSettings
 import com.zhousl.aether.data.AutomaticModelPurpose
+import com.zhousl.aether.data.DisabledAuxiliaryModelKey
+import com.zhousl.aether.data.lowestAvailableReasoningEffort
 import com.zhousl.aether.data.CurrentOnboardingVersion
 import com.zhousl.aether.data.OnboardingStarterPrompt
 import com.zhousl.aether.data.SharedAppDataManager
@@ -1683,6 +1685,7 @@ fun IosComposeApp(
             seedMessage: SharedChatMessage,
             fallbackConfig: LlmProviderConfig,
         ) {
+            if (sharedAppSettings.defaultTitleModelKey == DisabledAuxiliaryModelKey) return
             val titleInput = buildSharedTitleGenerationInput(seedMessage)
             if (titleInput.isBlank()) return
             val modelOptions = providerConfigs.availableModelOptions()
@@ -1708,13 +1711,18 @@ fun IosComposeApp(
             )
             val titleThinkingLevelMap = thinkingLevelClampsByProviderModel[titleThinkingKey].orEmpty()
             val titleIsReasoningModel = titleThinkingKey in reasoningModels
+            val titleReasoningEffort = lowestAvailableReasoningEffort(
+                thinkingLevelsByProviderModel[titleThinkingKey],
+                titleThinkingLevelMap,
+            )
             appScope.launch {
                 val result = runSharedAppCatching {
                     completionClient.completeOnce(
                         config = titleConfig,
                         messages = listOf(SharedPiChatMessage("user", titleInput)),
                         systemPrompt = SharedSessionTitleSystemPrompt,
-                        reasoning = "off",
+                        reasoning = titleReasoningEffort ?: "off",
+                        omitReasoningEffort = titleReasoningEffort == null,
                         timeoutMillis = sharedAppSettings.llmInactivityReconnectTimeoutSeconds
                             .coerceIn(30, 3_600) * 1_000,
                         thinkingLevelMap = titleThinkingLevelMap,
@@ -1742,6 +1750,7 @@ fun IosComposeApp(
             forceRemaining: Boolean,
             fallbackConfig: LlmProviderConfig,
         ) {
+            if (sharedAppSettings.defaultTitleModelKey == DisabledAuxiliaryModelKey) return
             if (!tracker.beginSummary(forceRemaining)) return
             var submission: SharedReasoningSummarySubmission? = null
             val now = platformCurrentTimeMillis()
@@ -1779,6 +1788,10 @@ fun IosComposeApp(
             val summaryThinkingLevelMap = thinkingLevelClampsByProviderModel[summaryThinkingKey]
                 .orEmpty()
             val summaryIsReasoningModel = summaryThinkingKey in reasoningModels
+            val summaryReasoningEffort = lowestAvailableReasoningEffort(
+                thinkingLevelsByProviderModel[summaryThinkingKey],
+                summaryThinkingLevelMap,
+            )
             appScope.launch {
                 try {
                     if (sessionStates[target.id] !== target) return@launch
@@ -1793,7 +1806,8 @@ fun IosComposeApp(
                                     )
                                 ),
                                 systemPrompt = SharedReasoningSummarySystemPrompt,
-                                reasoning = "off",
+                                reasoning = summaryReasoningEffort ?: "off",
+                                omitReasoningEffort = summaryReasoningEffort == null,
                                 timeoutMillis = sharedAppSettings.llmInactivityReconnectTimeoutSeconds
                                     .coerceIn(30, 3_600) * 1_000,
                                 thinkingLevelMap = summaryThinkingLevelMap,
@@ -4515,6 +4529,7 @@ internal fun resolveSharedStoredOrAutomaticModelKey(
     purpose: AutomaticModelPurpose,
     fallbackPurpose: AutomaticModelPurpose? = null,
 ): String = storedKey.takeIf { key -> options.any { it.key == key } }.orEmpty()
+    .let { key -> if (storedKey == DisabledAuxiliaryModelKey) DisabledAuxiliaryModelKey else key }
     .ifBlank { options.resolveAutomaticModelKey(purpose) }
     .ifBlank { fallbackPurpose?.let(options::resolveAutomaticModelKey).orEmpty() }
 

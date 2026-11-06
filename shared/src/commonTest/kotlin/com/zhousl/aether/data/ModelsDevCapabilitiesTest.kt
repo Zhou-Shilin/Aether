@@ -27,6 +27,14 @@ class ModelsDevCapabilitiesTest {
         }
     """.trimIndent()
 
+    @Test
+    fun auxiliaryModelsUseTheLowestAdvertisedEffortAndOmitUnknownEffort() {
+        assertEquals("minimal", lowestAvailableReasoningEffort(listOf("high", "low", "minimal")))
+        assertEquals("low", lowestAvailableReasoningEffort(listOf("high", "low")))
+        assertNull(lowestAvailableReasoningEffort(listOf("off"), mapOf("off" to "none")))
+        assertNull(lowestAvailableReasoningEffort(null))
+    }
+
     private fun option(piProviderId: String, modelId: String, baseUrl: String = "https://relay.example/v1") =
         listOf(
             LlmProviderConfig(

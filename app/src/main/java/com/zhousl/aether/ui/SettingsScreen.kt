@@ -149,6 +149,7 @@ import com.zhousl.aether.data.AgentModeAuthorizationState
 import com.zhousl.aether.data.AgentModeDisplayState
 import com.zhousl.aether.data.AgentWorkspaceMode
 import com.zhousl.aether.data.AutomaticModelPurpose
+import com.zhousl.aether.data.DisabledAuxiliaryModelKey
 import com.zhousl.aether.data.ChatUsageStatisticsSnapshot
 import com.zhousl.aether.data.AppLanguage
 import com.zhousl.aether.data.AppThemeMode
@@ -807,6 +808,7 @@ fun SettingsScreen(
                 selectedKey = defaultTitleModelKeyValue,
                 options = enabledModelOptions,
                 purpose = AutomaticModelPurpose.Title,
+                allowNone = true,
                 automaticLabel = enabledModelOptions.findModelOption(
                     enabledModelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Title)
                         .ifBlank { enabledModelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Chat) }
@@ -814,7 +816,12 @@ fun SettingsScreen(
                     ?: stringResource(R.string.settings_automatic_model),
                 automaticSubtitle = stringResource(R.string.settings_prioritize_sota_models),
                 onSelected = {
+                    val syncAutomaticPair = it.isNotBlank() &&
+                        it != DisabledAuxiliaryModelKey &&
+                        defaultTitleModelKeyValue.isBlank() &&
+                        defaultNamingModelKeyValue.isBlank()
                     defaultTitleModelKeyValue = it
+                    if (syncAutomaticPair) defaultNamingModelKeyValue = it
                     onSaveDefaultModelKeys(
                         defaultChatModelKeyValue,
                         defaultTitleModelKeyValue,
@@ -831,6 +838,7 @@ fun SettingsScreen(
                 selectedKey = defaultNamingModelKeyValue,
                 options = enabledModelOptions,
                 purpose = AutomaticModelPurpose.Naming,
+                allowNone = true,
                 automaticLabel = enabledModelOptions.findModelOption(
                     enabledModelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Naming)
                         .ifBlank { enabledModelOptions.resolveAutomaticModelKey(AutomaticModelPurpose.Chat) }
@@ -838,7 +846,12 @@ fun SettingsScreen(
                     ?: stringResource(R.string.settings_automatic_model),
                 automaticSubtitle = stringResource(R.string.settings_prioritize_sota_models),
                 onSelected = {
+                    val syncAutomaticPair = it.isNotBlank() &&
+                        it != DisabledAuxiliaryModelKey &&
+                        defaultTitleModelKeyValue.isBlank() &&
+                        defaultNamingModelKeyValue.isBlank()
                     defaultNamingModelKeyValue = it
+                    if (syncAutomaticPair) defaultTitleModelKeyValue = it
                     onSaveDefaultModelKeys(
                         defaultChatModelKeyValue,
                         defaultTitleModelKeyValue,
@@ -2467,6 +2480,8 @@ private fun DefaultModelsPage(
                 subtitle = if (defaultTitleModelKey.isBlank()) {
                     automaticTitleLabel?.let { stringResource(R.string.settings_automatic_model_with_name, it) }
                         ?: stringResource(R.string.settings_automatic_model)
+                } else if (defaultTitleModelKey == DisabledAuxiliaryModelKey) {
+                    stringResource(R.string.settings_none)
                 } else {
                     modelOptions.findModelOption(defaultTitleModelKey)?.fullLabel.orEmpty()
                 },
@@ -2479,6 +2494,8 @@ private fun DefaultModelsPage(
                 subtitle = if (defaultNamingModelKey.isBlank()) {
                     automaticNamingLabel?.let { stringResource(R.string.settings_automatic_model_with_name, it) }
                         ?: stringResource(R.string.settings_automatic_model)
+                } else if (defaultNamingModelKey == DisabledAuxiliaryModelKey) {
+                    stringResource(R.string.settings_none)
                 } else {
                     modelOptions.findModelOption(defaultNamingModelKey)?.fullLabel.orEmpty()
                 },
@@ -2585,6 +2602,7 @@ private fun ModelSelectionListPage(
     selectedKey: String,
     options: List<ProviderModelOption>,
     purpose: AutomaticModelPurpose,
+    allowNone: Boolean = false,
     automaticLabel: String,
     automaticSubtitle: String,
     onSelected: (String) -> Unit,
@@ -2643,6 +2661,17 @@ private fun ModelSelectionListPage(
                     )
                 }
             }
+            if (allowNone) {
+                Spacer(Modifier.height(12.dp))
+                SettingsCardGroup {
+                    ModelSelectionListRow(
+                        title = stringResource(R.string.settings_none),
+                        subtitle = "",
+                        selected = selectedKey == DisabledAuxiliaryModelKey,
+                        onClick = { onSelected(DisabledAuxiliaryModelKey) },
+                    )
+                }
+            }
             return@SubPageScaffold
         }
 
@@ -2658,9 +2687,18 @@ private fun ModelSelectionListPage(
             ModelSelectionListRow(
                 title = automaticLabel,
                 subtitle = automaticSubtitle,
-                selected = selectedOption == null,
+                selected = selectedKey.isBlank(),
                 onClick = { onSelected("") },
             )
+            if (allowNone) {
+                CardDivider()
+                ModelSelectionListRow(
+                    title = stringResource(R.string.settings_none),
+                    subtitle = "",
+                    selected = selectedKey == DisabledAuxiliaryModelKey,
+                    onClick = { onSelected(DisabledAuxiliaryModelKey) },
+                )
+            }
             filteredOptions.forEach { option ->
                 CardDivider()
                 ModelSelectionListRow(
