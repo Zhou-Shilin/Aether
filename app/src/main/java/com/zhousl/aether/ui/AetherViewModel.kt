@@ -3963,6 +3963,7 @@ class AetherViewModel(
             field("settings") { snapshot.settings.toJson() }
             field("provider_configs") { JSONArray(serializeProviderConfigs(snapshot.providerConfigs)) }
             field("sessions") { extensionSessionSummaries(snapshot.sessions) }
+            field("custom_messages") { extensionCustomMessages(activeSession?.messages.orEmpty()) }
             field("installed_extensions") {
                 JSONArray().apply {
                     snapshot.installedPiExtensions.forEach { extension ->

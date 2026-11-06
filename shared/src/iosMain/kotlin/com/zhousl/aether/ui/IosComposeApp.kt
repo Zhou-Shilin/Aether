@@ -2397,6 +2397,13 @@ fun IosComposeApp(
                                 },
                             )
                         }
+                        result.customMessages.forEach { custom ->
+                            val id = "aether-custom-${custom.id}"
+                            if (target.messages.none { it.id == id }) target.messages.add(SharedChatMessage(
+                                id = id, fromUser = false, text = custom.text,
+                                customType = custom.type, customPayloadJson = custom.payloadJson,
+                            ))
+                        }
                         if (
                             result.errorMessage.isBlank() &&
                             shouldMarkOnboardingCompleted(
