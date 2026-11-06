@@ -230,6 +230,9 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 fun AetherApp(
     viewModel: AetherViewModel = viewModel(),
     onNotificationPermissionRequested: () -> Unit = {},
+    hostedAppId: String? = null,
+    isHostedWindow: Boolean = false,
+    onHostedClose: () -> Unit = {},
 ) {
     val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
     val context = LocalContext.current
@@ -237,6 +240,15 @@ fun AetherApp(
     val effectiveLanguage = applicationLanguage ?: uiState.settings.language
     val appRuntime = remember(context) {
         (context.applicationContext as AetherApplication).runtime
+    }
+    val selectedModelAccess = remember(viewModel, appRuntime) {
+        com.zhousl.aether.data.SelectedModelAccess(
+            appRuntime.piKernelBridge, appRuntime.settingsRepository, viewModel::selectedExtensionModel, viewModel::extensionModelCatalog,
+        )
+    }
+    val hostedRevision by appRuntime.hostedApps.revision.collectAsStateWithLifecycle()
+    val hostedApp = remember(hostedAppId, hostedRevision) {
+        hostedAppId?.let { appRuntime.hostedApps.windowApp(it) }
     }
     val extensionManager = appRuntime.aetherAppExtensionManager
     val extensionState = extensionManager.state.collectAsStateWithLifecycle().value
@@ -283,15 +295,31 @@ fun AetherApp(
 
     LaunchedEffect(extensionManager, context) {
         extensionManager.notifications.collect { notification ->
-            Toast.makeText(context, notification.message, Toast.LENGTH_SHORT).show()
+            val activity = context as? androidx.activity.ComponentActivity
+            if (activity == null || activity.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+                Toast.makeText(context, notification.message, Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
     DisposableEffect(extensionManager, viewModel) {
-        extensionManager.setHostHandler(viewModel::handleAetherExtensionHostCall)
-        onDispose {
-            extensionManager.clearHostHandler()
+        val releaseBindings = (context.applicationContext as AetherApplication).uiSession.acquire {
+            extensionManager.setHostHandler(viewModel::handleAetherExtensionHostCall)
+            val releaseModelAccess = selectedModelAccess.register(appRuntime.modKernel)
+            val releaseHostedEvents = appRuntime.hostedApps.bindEvents { event, data ->
+                if (event !in extensionManager.state.value.snapshot.eventNames) extensionManager.refresh(org.json.JSONObject()).getOrThrow()
+                require(event in extensionManager.state.value.snapshot.eventNames) { "Enable the Apps extension to handle web-app capabilities." }
+                extensionManager.dispatchEvent(event, data, org.json.JSONObject()).getOrThrow()
+                Unit
+            }
+            val release: () -> Unit = {
+                releaseHostedEvents()
+                releaseModelAccess()
+                extensionManager.clearHostHandler()
+            }
+            release
         }
+        onDispose { releaseBindings() }
     }
 
     LaunchedEffect(uiState.currentScreen) {
@@ -322,27 +350,36 @@ fun AetherApp(
                 color = MaterialTheme.colorScheme.background,
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    AetherExtensionComponentHost(
-                        target = AetherExtensionComponentAppContent,
-                        modifier = Modifier.fillMaxSize(),
-                    ) {
-                        AetherAppContent(
-                                viewModel = viewModel,
-                                uiState = uiState,
-                                language = effectiveLanguage,
-                                nativeModState = nativeModState,
-                                onNotificationPermissionRequested = onNotificationPermissionRequested,
-                                drawerOpenedEventRegistered =
-                                    "drawer.opened" in extensionState.snapshot.eventNames,
-                                onDrawerOpened = {
-                                    extensionManager.emitEvent(
-                                        event = "drawer.opened",
-                                        context = extensionContext,
-                                    )
-                                },
-                        )
+                    if (!isHostedWindow) {
+                        AetherExtensionComponentHost(
+                            target = AetherExtensionComponentAppContent,
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            AetherAppContent(
+                                    viewModel = viewModel,
+                                    uiState = uiState,
+                                    language = effectiveLanguage,
+                                    nativeModState = nativeModState,
+                                    onNotificationPermissionRequested = onNotificationPermissionRequested,
+                                    drawerOpenedEventRegistered =
+                                        "drawer.opened" in extensionState.snapshot.eventNames,
+                                    onDrawerOpened = {
+                                        extensionManager.emitEvent(
+                                            event = "drawer.opened",
+                                            context = extensionContext,
+                                        )
+                                    },
+                            )
+                        }
+                        AetherExtensionOverlaySlot(Modifier.fillMaxSize())
                     }
-                    AetherExtensionOverlaySlot(Modifier.fillMaxSize())
+                    if (isHostedWindow) {
+                        if (hostedApp != null) HostedAppsOverlay(appRuntime.hostedApps, hostedApp, onHostedClose)
+                        else {
+                            BackHandler(onBack = onHostedClose)
+                            Text("This app is unavailable. Open Apps in Aether to review its installation and hosting settings.", Modifier.padding(24.dp))
+                        }
+                    }
                 }
             }
             piExtensionUiRequest?.let { request ->

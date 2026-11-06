@@ -47,6 +47,7 @@ import com.zhousl.aether.data.LocalRuntimeId
 import com.zhousl.aether.data.ProviderModelOption
 import com.zhousl.aether.data.PersistedChatState
 import com.zhousl.aether.data.PersistedChatWriteIntent
+import com.zhousl.aether.data.withModelOption
 import com.zhousl.aether.data.availableModelOptions
 import com.zhousl.aether.data.McpServerConfig
 import com.zhousl.aether.data.normalizeLlmInactivityReconnectTimeoutSeconds
@@ -222,6 +223,8 @@ class AetherViewModel(
 
     private var pendingVirtualDisplayMethod: AgentModeAuthorizationMethod? = null
     private val phoneUsePermissionPolicy = PhoneUsePermissionRequestPolicy()
+
+    private val coreServiceReleases = mutableListOf<() -> Unit>()
 
     init {
         registerCoreModServices()
@@ -482,6 +485,34 @@ class AetherViewModel(
             val catalogResult = ProviderModelCatalogClient.fetchPublicThinkingCatalog(options)
             applyThinkingCatalog(catalogResult, updateState = requestKey == lastModelCatalogRequestKey)
         }
+    }
+
+    /** App requests reuse the visible session/draft selection, not a second login or model default. */
+    fun selectedExtensionModel(preference: org.json.JSONObject = org.json.JSONObject()): com.zhousl.aether.data.SelectedAiConfiguration {
+        val state = _uiState.value
+        val preferred = state.sessions.firstOrNull { it.id == state.currentSessionId }
+            ?.selectedModelKey?.ifBlank { state.draftSelectedModelKey } ?: state.draftSelectedModelKey
+        val options = state.providerConfigs.availableModelOptions()
+        val wanted = preference.optString("modelKey").ifBlank { preferred }
+        val option = options.firstOrNull { it.key == wanted }
+            ?: options.firstOrNull { wanted.isBlank() && it.providerConfigId == state.settings.providerConfigId && it.modelId == state.settings.modelId }
+            ?: error("Choose an available provider/model in Aether. Extension requests do not select a fallback.")
+        var selected = state.settings.withModelOption(option)
+        val effort = preference.optString("thinkingLevel")
+        if (effort.isNotBlank()) {
+            val levels = state.thinkingLevelsByProviderModel[thinkingCatalogKey(option.piProviderId, option.modelId)]
+            require(levels?.contains(effort) == true) { "This thinking level is not in Aether's known supported levels. Refresh its model catalog first." }
+            selected = selected.copy(reasoningEffort = effort)
+        }
+        return com.zhousl.aether.data.SelectedAiConfiguration(selected, selected.toCatalogPiModelConfig())
+    }
+
+    fun extensionModelCatalog(): org.json.JSONObject {
+        val state = _uiState.value
+        return org.json.JSONObject().put("models", org.json.JSONArray(state.providerConfigs.availableModelOptions().map { option ->
+            org.json.JSONObject().put("key", option.key).put("label", option.providerName + " / " + option.modelId)
+                .put("thinkingLevels", org.json.JSONArray(state.thinkingLevelsByProviderModel[thinkingCatalogKey(option.piProviderId, option.modelId)].orEmpty()))
+        }))
     }
 
     /** Pi model config carrying the models.dev capabilities currently known for this model. */
@@ -3371,8 +3402,14 @@ class AetherViewModel(
         submitCurrentMessage(SessionFollowUpMode.Steer)
     }
 
+    override fun onCleared() {
+        coreServiceReleases.forEach { it() }
+        coreServiceReleases.clear()
+        super.onCleared()
+    }
+
     private fun registerCoreModServices() {
-        modKernel.services.register(
+        coreServiceReleases += modKernel.services.register(
             id = "skills",
             owner = "aether-core",
             description = "Inspect and mutate installed skills, current selection, and new-chat defaults.",
@@ -3385,7 +3422,7 @@ class AetherViewModel(
             ),
             handler = { method, args -> handleSkillsModService(method, args) },
         )
-        modKernel.services.register(
+        coreServiceReleases += modKernel.services.register(
             id = "state",
             owner = "aether-core",
             description = "Read the public Aether state tree and apply supported state transactions.",
