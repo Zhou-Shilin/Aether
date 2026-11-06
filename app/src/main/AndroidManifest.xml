@@ -65,6 +65,14 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".HostedAppActivity"
+            android:exported="true"
+            android:documentLaunchMode="intoExisting"
+            android:taskAffinity="${applicationId}.webapps"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.Aether" />
+
         <receiver
             android:name=".termux.TermuxResultReceiver"
             android:exported="false" />

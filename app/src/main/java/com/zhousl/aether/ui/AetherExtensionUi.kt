@@ -1,10 +1,13 @@
 package com.zhousl.aether.ui
 
+import androidx.activity.compose.BackHandler
 import android.annotation.SuppressLint
 import android.graphics.Typeface
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -36,6 +39,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Code
@@ -50,6 +54,15 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material.icons.rounded.WarningAmber
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -69,6 +82,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -368,7 +382,7 @@ private fun AetherExtensionView(
 }
 
 @Composable
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 private fun AetherExtensionNode(
     node: JSONObject,
     extensionId: String,
@@ -389,6 +403,51 @@ private fun AetherExtensionNode(
     }
 
     when (type.lowercase()) {
+        "screen" -> {
+            BackHandler {
+                if (node.optBoolean("enabled", true)) {
+                    val back = node.optString("backAction").ifBlank { node.optString("closeAction") }
+                    if (back.isNotBlank()) controller.onAction(extensionId, back, JSONObject())
+                }
+            }
+            val scrollState = remember(node.optString("id")) { ScrollState(0) }
+            Surface(modifier = resolvedModifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = {
+                    TopAppBar(title = { Text(node.optString("title"), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        navigationIcon = {
+                            node.optString("backAction").takeIf(String::isNotBlank)?.let { back ->
+                                IconButton(enabled = node.optBoolean("enabled", true), onClick = { controller.onAction(extensionId, back, JSONObject()) }) {
+                                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                                }
+                            }
+                        }, actions = {
+                            node.optString("closeAction").takeIf(String::isNotBlank)?.let { close ->
+                                IconButton(enabled = node.optBoolean("enabled", true), onClick = { controller.onAction(extensionId, close, JSONObject()) }) {
+                                    Icon(Icons.Rounded.Close, contentDescription = "Close Apps")
+                                }
+                            }
+                        }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background))
+                }) { padding ->
+                    Column(Modifier.fillMaxSize().padding(padding).verticalScroll(scrollState).padding(horizontal = 20.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        renderChildren(node.optJSONArray("children"), extensionId, nativeContent)
+                    }
+                }
+            }
+        }
+        "listitem" -> {
+            val enabled = node.optBoolean("enabled", true)
+            val dispatch = { if (enabled && action.isNotBlank()) controller.onAction(extensionId, action, actionArgs) }
+            val itemModifier = if (node.has("selected")) resolvedModifier.selectable(selected = node.optBoolean("selected"), enabled = enabled, role = Role.RadioButton, onClick = dispatch)
+                else if (action.isNotBlank()) resolvedModifier.clickable(enabled = enabled, role = Role.Button, onClick = dispatch) else resolvedModifier
+            ListItem(modifier = itemModifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)),
+                headlineContent = { Text(node.optString("label"), maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                supportingContent = node.optString("subtitle").takeIf(String::isNotBlank)?.let { subtitle -> { Text(subtitle, maxLines = 2, overflow = TextOverflow.Ellipsis) } },
+                leadingContent = node.optString("icon").takeIf(String::isNotBlank)?.let { icon -> { Icon(extensionIcon(icon), contentDescription = null, tint = MaterialTheme.colorScheme.primary) } },
+                trailingContent = {
+                    if (node.has("selected")) RadioButton(selected = node.optBoolean("selected"), onClick = null, enabled = enabled)
+                    else if (action.isNotBlank()) Icon(Icons.Rounded.ChevronRight, contentDescription = null)
+                }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow))
+        }
         "text",
         "code" -> {
             val text = node.optString("text")
@@ -476,41 +535,31 @@ private fun AetherExtensionNode(
             nativeContent?.invoke()
         }
 
-        "button" -> Button(
-            onClick = {
-                if (action.isNotBlank()) {
-                    controller.onAction(extensionId, action, actionArgs)
+        "button" -> {
+            val click = { if (action.isNotBlank()) controller.onAction(extensionId, action, actionArgs) }
+            val content: @Composable RowScope.() -> Unit = {
+                node.optString("icon").takeIf(String::isNotBlank)?.let { icon ->
+                    Icon(extensionIcon(icon), contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
                 }
-            },
-            enabled = node.optBoolean("enabled", true),
-            modifier = resolvedModifier,
-            shape = RoundedCornerShape(node.optDouble("radius", 18.0).dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = when (node.optString("tone")) {
-                    "neutral", "secondary" -> AetherSurfaceHigher
-                    "danger", "error" -> MaterialTheme.colorScheme.errorContainer
-                    else -> AetherPrimary
-                },
-                contentColor = when (node.optString("tone")) {
-                    "neutral", "secondary" -> AetherOnSurface
-                    "danger", "error" -> MaterialTheme.colorScheme.onErrorContainer
-                    else -> AetherOnPrimary
-                },
-            ),
-        ) {
-            node.optString("icon").takeIf(String::isNotBlank)?.let { icon ->
-                Icon(
-                    imageVector = extensionIcon(icon),
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(8.dp))
+                Text(node.optString("label", node.optString("text")), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Text(
-                text = node.optString("label", node.optString("text")),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            val enabled = node.optBoolean("enabled", true)
+            val shape = RoundedCornerShape(node.optDouble("radius", 24.0).dp)
+            when (node.optString("variant")) {
+                "text" -> TextButton(onClick = click, enabled = enabled, modifier = resolvedModifier, shape = shape, content = content)
+                "outlined" -> OutlinedButton(onClick = click, enabled = enabled, modifier = resolvedModifier, shape = shape, content = content)
+                else -> Button(onClick = click, enabled = enabled, modifier = resolvedModifier, shape = shape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = when (node.optString("tone")) {
+                            "neutral", "secondary" -> MaterialTheme.colorScheme.secondaryContainer
+                            "danger", "error" -> MaterialTheme.colorScheme.errorContainer
+                            else -> MaterialTheme.colorScheme.primary
+                        }, contentColor = when (node.optString("tone")) {
+                            "neutral", "secondary" -> MaterialTheme.colorScheme.onSecondaryContainer
+                            "danger", "error" -> MaterialTheme.colorScheme.onErrorContainer
+                            else -> MaterialTheme.colorScheme.onPrimary
+                        }), content = content)
+            }
         }
 
         "iconbutton" -> IconButton(

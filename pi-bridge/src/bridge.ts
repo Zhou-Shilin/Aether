@@ -1554,6 +1554,25 @@ function normalizeMessages(rawMessages: unknown): Context["messages"] {
 }
 
 function buildContext(payload: JsonObject): Context {
+  if (payload.structured_context !== undefined) {
+    // Trusted extension context: no coding-agent resources, auth or tool execution is inherited.
+    const raw = asObject(payload.structured_context);
+    if (JSON.stringify(raw).length > 900_000 || !Array.isArray(raw.messages) || raw.messages.length > 128) {
+      throw new Error("Extension context exceeds its declared budget.");
+    }
+    if (raw.messages.some((message) => !["system", "user", "assistant", "toolResult"].includes(asString(asObject(message).role)))) {
+      throw new Error("Unsupported structured message role.");
+    }
+    const tools = raw.tools === undefined ? [] : raw.tools;
+    if (!Array.isArray(tools) || tools.length > 16 || JSON.stringify(tools).length > 65_536 || tools.some((tool) => !/^[_a-zA-Z][_a-zA-Z0-9]{0,63}$/.test(asString(asObject(tool).name)))) {
+      throw new Error("Extension tool declaration budget exceeded.");
+    }
+    return {
+      ...(typeof raw.systemPrompt === "string" ? { systemPrompt: raw.systemPrompt } : {}),
+      messages: raw.messages as Context["messages"],
+      tools: tools as NonNullable<Context["tools"]>,
+    };
+  }
   return {
     systemPrompt: asString(payload.system_prompt),
     messages: normalizeMessages(payload.messages),
@@ -1672,6 +1691,9 @@ function streamOptionsFor(
   const reasoning = thinkingLevel && thinkingLevel !== "off"
     ? clampThinkingLevel(model, thinkingLevel)
     : undefined;
+  if (payload.structured_context !== undefined && thinkingLevel && thinkingLevel !== "off" && (!model.reasoning || reasoning !== thinkingLevel)) {
+    throw new Error("The selected model cannot honor this Aether reasoning effort. Review the host selection; no effort fallback was used.");
+  }
   if (reasoning) {
     options.reasoning = reasoning as SimpleStreamOptions["reasoning"];
   }
