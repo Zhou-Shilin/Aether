@@ -1218,6 +1218,8 @@ export default function (pi: ExtensionAPI) {
     description: "Echo text through a Pi extension.",
     parameters: Type.Object({ text: Type.String() }),
     async execute(_id, params) {
+      pi.sendMessage({ customType: "test-visual", content: "Generated chart", display: true,
+        details: { id: "artifact-id" } }, { triggerTurn: false });
       return {
         content: [{ type: "text", text: \`extension:\${params.text}:started=\${started}\` }],
         details: {},
@@ -1256,6 +1258,9 @@ export default function (pi: ExtensionAPI) {
   assert.equal(toolEnd.payload.output_json, "extension:hello:started=true");
   const completion = await run;
   assert.equal(completion.assistant_text, "extension finished");
+  assert.equal(completion.custom_messages.length, 1);
+  assert.equal(completion.custom_messages[0].customType, "test-visual");
+  assert.deepEqual(completion.custom_messages[0].details, { id: "artifact-id" });
   // The turn total must sum every request: the tool call round trip plus the
   // final answer.
   assert.equal(completion.usage.request_count, 2);

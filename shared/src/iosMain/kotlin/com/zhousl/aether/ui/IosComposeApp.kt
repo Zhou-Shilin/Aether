@@ -106,7 +106,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -2396,6 +2395,13 @@ fun IosComposeApp(
                                     0L
                                 },
                             )
+                        }
+                        result.customMessages.forEach { custom ->
+                            val id = "aether-custom-${custom.id}"
+                            if (target.messages.none { it.id == id }) target.messages.add(SharedChatMessage(
+                                id = id, fromUser = false, text = custom.text,
+                                customType = custom.type, customPayloadJson = custom.payloadJson,
+                            ))
                         }
                         if (
                             result.errorMessage.isBlank() &&
@@ -6328,7 +6334,7 @@ private fun SharedAdaptiveConversationLayout(
             }
         }
     } else {
-        ModalNavigationDrawer(
+        ExtensionGestureDrawer(
             drawerState = drawerState,
             drawerContent = drawerContent,
             content = content,

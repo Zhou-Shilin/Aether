@@ -10,6 +10,7 @@ data class AetherAgentTurnResult(
     val runtime: String = "",
     val cwd: String = "",
     val piEntryIds: List<String> = emptyList(),
+    val customMessages: List<com.zhousl.aether.data.pi.PiDisplayMessage> = emptyList(),
 )
 
 data class AgentToolEvent(

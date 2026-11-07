@@ -478,6 +478,11 @@ class PiAgentRunner(
                             runtime = completion.runtime,
                             cwd = completion.cwd,
                             piEntryIds = appendedPiEntryIds.toList(),
+                            customMessages = response.optJSONArray("custom_messages")?.let { entries ->
+                                (0 until entries.length()).mapNotNull { index ->
+                                    parsePiDisplayMessage(entries.optJSONObject(index)?.toString().orEmpty())
+                                }
+                            }.orEmpty(),
                         )
                     } finally {
                         pollingJob.cancelAndJoin()

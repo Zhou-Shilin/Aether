@@ -836,6 +836,7 @@ private fun AssistantMessageBlock(
     onDelete: () -> Unit,
     sessionTotalTokens: Long?,
 ) {
+    if (InlineExtensionMessage(message)) return
     val shouldFoldWorkBeforeFinalText = message.text.isNotBlank() &&
         (message.reasoningTrace != null ||
             message.thoughtDurationMillis != null ||
@@ -1214,6 +1215,7 @@ private fun AssistantGroupMessageContent(
     onOpenAttachment: (ChatAttachment) -> Unit,
     onOpenLink: (String) -> Unit,
 ) {
+    if (InlineExtensionMessage(message)) return
     val showAttachmentsAfterReply = com.zhousl.aether.data.ShowcaseCatalog.isSession(message.id)
     val context = LocalContext.current
     val replayToolInvocations = message.replayToolInvocations()
@@ -4598,3 +4600,12 @@ private data class AgentModeReplayTimeline(
     val interleavedTextMessageIds: Set<String>,
     val firstFrameMessageIndex: Int,
 )
+
+@Composable
+private fun InlineExtensionMessage(message: ChatMessage): Boolean {
+    val custom = LocalAetherExtensionUiController.current?.snapshot?.customMessages
+        ?.firstOrNull { it.id == message.id } ?: return false
+    val tree = custom.tree ?: return false
+    AetherExtensionView(tree, custom.extensionId, Modifier.fillMaxWidth())
+    return true
+}

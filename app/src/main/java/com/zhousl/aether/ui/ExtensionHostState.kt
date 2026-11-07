@@ -22,3 +22,20 @@ internal fun extensionSessionSummaries(sessions: List<ChatSession>): JSONArray =
 
 internal fun extensionStateRootKey(path: String): String? =
     path.trim().trim('/').replace('/', '.').split('.').firstOrNull(String::isNotBlank)
+
+/** Only explicitly tagged extension messages enter the rendering context. */
+internal fun extensionCustomMessages(messages: List<ChatMessage>): JSONArray = JSONArray().apply {
+    messages.forEach { message ->
+        if (!message.assistantActionsHidden ||
+            !message.providerPayloadJson.startsWith("{\"aether_custom_type\":")) return@forEach
+        val envelope = runCatching { JSONObject(message.providerPayloadJson) }.getOrNull() ?: return@forEach
+        val type = envelope.optString("aether_custom_type")
+        if (type.isBlank()) return@forEach
+        put(JSONObject().apply {
+            put("id", message.id)
+            put("type", type)
+            put("text", message.text)
+            put("payload", envelope.optJSONObject("aether_custom_payload") ?: JSONObject())
+        })
+    }
+}

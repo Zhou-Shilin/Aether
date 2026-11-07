@@ -319,7 +319,7 @@ private fun AetherScriptExtensionComponentHost(
 }
 
 @Composable
-private fun AetherExtensionView(
+internal fun AetherExtensionView(
     value: Any?,
     extensionId: String,
     modifier: Modifier = Modifier,
@@ -928,6 +928,7 @@ private fun AetherExtensionWebView(
             }
         },
         modifier = modifier
+            .extensionWebGestureRegion()
             .fillMaxWidth()
             .height(node.optDouble("height", 240.0).dp)
             .clip(RoundedCornerShape(node.optDouble("radius", 20.0).dp)),

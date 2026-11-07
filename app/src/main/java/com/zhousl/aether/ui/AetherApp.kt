@@ -72,7 +72,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -186,6 +185,7 @@ private fun AetherUiState.toAetherExtensionContext(): JSONObject {
         put("session_id", currentSessionId)
         put("session_title", activeSession?.title.orEmpty())
         put("message_count", activeSession?.messages?.size ?: 0)
+        put("custom_messages", extensionCustomMessages(activeSession?.messages.orEmpty()))
         put("draft_input", draftInput)
         put("is_running", execution?.isRunning == true)
         put("is_editing", editingMessageId != null)
@@ -781,7 +781,7 @@ private fun AetherAppContent(
         }
     }
 
-    ModalNavigationDrawer(
+    ExtensionGestureDrawer(
         drawerState = drawerState,
         gesturesEnabled = uiState.currentScreen == AppScreen.Chat,
         scrimColor = AetherScrim,

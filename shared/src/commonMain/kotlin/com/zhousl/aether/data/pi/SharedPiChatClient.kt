@@ -67,6 +67,7 @@ data class SharedPiTurnResult(
     val piSessionFile: String = "",
     val piRuntime: String = "",
     val piEntryIds: List<String> = emptyList(),
+    val customMessages: List<PiDisplayMessage> = emptyList(),
 )
 
 data class SharedPiUsage(
@@ -371,6 +372,8 @@ class SharedPiChatClient(
             onDeveloperRoleUnsupportedDetected(config.id)
         }
         return SharedPiTurnResult(
+            customMessages = (this["custom_messages"] as? JsonArray).orEmpty()
+                .mapNotNull { (it as? JsonObject)?.let(::piDisplayMessage) },
             assistantText = string("assistant_text"),
             reasoningText = string("reasoning_text"),
             provider = string("provider"),

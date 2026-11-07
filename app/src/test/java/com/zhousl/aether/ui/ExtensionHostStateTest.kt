@@ -54,4 +54,29 @@ class ExtensionHostStateTest {
         assertEquals("settings", extensionStateRootKey("..settings.theme"))
         assertNull(extensionStateRootKey(" / "))
     }
+
+    @Test
+    fun onlyTaggedCustomMessagesReachRenderContext() {
+        val ordinary = ChatMessage(id = "ordinary", author = MessageAuthor.Agent,
+            text = "Normal answer", providerPayloadJson = "private provider payload")
+        val custom = ChatMessage(id = "custom", author = MessageAuthor.Agent,
+            text = "Force lab", assistantActionsHidden = true,
+            providerPayloadJson = """{"aether_custom_type":"aether-visual","aether_custom_payload":{"id":"artifact"}}""")
+        val result = extensionCustomMessages(listOf(ordinary, custom))
+        assertEquals(1, result.length())
+        assertEquals("custom", result.getJSONObject(0).getString("id"))
+        assertEquals("artifact", result.getJSONObject(0).getJSONObject("payload").getString("id"))
+        assertFalse(result.toString().contains("private provider payload"))
+    }
+
+    @Test
+    fun piCustomDisplayMessageRetainsIdentityAndIgnoresHiddenEntries() {
+        val shown = com.zhousl.aether.data.pi.parsePiDisplayMessage(
+            """{"id":"pi-entry","type":"custom_message","customType":"aether-visual","display":true,"content":"Triangle","details":{"id":"artifact"}}""")!!
+        assertEquals("pi-entry", shown.id)
+        assertEquals("Triangle", shown.text)
+        assertTrue(shown.payloadJson.contains("artifact"))
+        assertNull(com.zhousl.aether.data.pi.parsePiDisplayMessage(
+            """{"id":"hidden","type":"custom_message","customType":"internal","display":false}"""))
+    }
 }

@@ -228,6 +228,7 @@ interface AgentSessionState {
   outputDurationMillis: number;
   toolArgsById: Map<string, unknown>;
   lastAccessedAt: number;
+  displayMessages: JsonObject[];
 }
 
 // Pi reports usage per API call; one Aether turn can issue several calls
@@ -2806,6 +2807,7 @@ async function createNativeAgentSession(
     outputDurationMillis: 0,
     toolArgsById: new Map<string, unknown>(),
     lastAccessedAt: Date.now(),
+    displayMessages: [],
   } satisfies AgentSessionState;
   const customTools = [
     ...nativeToolDefinitions(state),
@@ -2947,6 +2949,7 @@ function nativeSessionPayload(state: AgentSessionState): JsonObject {
     session_id: state.session.sessionId,
     session_file: state.session.sessionFile ?? "",
     session_leaf_id: state.session.sessionManager.getLeafId() ?? "",
+    custom_messages: state.displayMessages,
     runtime: state.runtime,
     cwd: state.runtime === "termux" ? state.termuxWorkspaceDirectory : state.workspaceDirectory,
     is_idle: state.session.isIdle,
@@ -3102,6 +3105,8 @@ async function runNativeAgentPrompt(
   images: ImageContent[],
   resetUsage = true,
 ): Promise<AssistantMessage> {
+  const previousEntries = new Set(state.session.sessionManager.getBranch().map(entry => entry.id));
+  state.displayMessages = [];
   state.currentRequestId = id;
   state.lastAccessedAt = Date.now();
   if (resetUsage) resetTurnUsage(state);
@@ -3112,6 +3117,12 @@ async function runNativeAgentPrompt(
       state.session.prompt(text, { images: images.length > 0 ? images : undefined }),
     );
     await state.session.waitForIdle();
+    // Pi defers triggerTurn:false display messages until the tool turn settles.
+    // Read the committed active branch, rather than relying on event delivery order.
+    state.displayMessages = state.session.sessionManager.getBranch()
+      .filter(entry => !previousEntries.has(entry.id) && entry.type === "custom_message" && entry.display)
+      .map(entry => entry as unknown as JsonObject)
+      .filter(entry => JSON.stringify(entry).length <= 32768);
     const message = latestAssistantMessage(state.session.messages);
     if (!message) throw new Error(`Pi session ${state.sessionId} has no assistant response.`);
     return message;
@@ -3169,6 +3180,7 @@ async function runNativeAgentTurn(id: string, payload: JsonObject): Promise<Json
     session_id: state.session.sessionId,
     session_file: state.session.sessionFile ?? "",
     session_leaf_id: state.session.sessionManager.getLeafId() ?? "",
+    custom_messages: state.displayMessages,
     runtime: state.runtime,
     cwd: state.runtime === "termux" ? state.termuxWorkspaceDirectory : state.workspaceDirectory,
     session_reused: reused,

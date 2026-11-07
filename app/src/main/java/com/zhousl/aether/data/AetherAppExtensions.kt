@@ -115,6 +115,12 @@ data class AetherAppExtensionError(
     val message: String,
 )
 
+data class AetherAppExtensionCustomMessage(
+    val id: String,
+    val extensionId: String,
+    val tree: Any?,
+)
+
 data class AetherAppExtensionSnapshot(
     val apiVersion: Int = 2,
     val version: Long = 0L,
@@ -124,6 +130,7 @@ data class AetherAppExtensionSnapshot(
     val composerMenuItems: List<AetherAppExtensionComposerMenuItem> = emptyList(),
     val settings: List<AetherAppExtensionSettingsPage> = emptyList(),
     val messageTypes: List<AetherAppExtensionMessageType> = emptyList(),
+    val customMessages: List<AetherAppExtensionCustomMessage> = emptyList(),
     val toolTitles: List<AetherAppExtensionToolTitle> = emptyList(),
     val eventNames: Set<String> = emptySet(),
     val errors: List<AetherAppExtensionError> = emptyList(),
@@ -217,8 +224,8 @@ class AetherAppExtensionManager(
     }
 
     fun start(context: JSONObject = JSONObject()) {
-        latestContextJson = context.toString()
         if (!started.compareAndSet(false, true)) return
+        latestContextJson = context.toString()
         subscriptionJob = scope.launch {
             while (true) {
                 try {
@@ -581,6 +588,13 @@ internal fun parseAetherAppExtensionSnapshot(json: JSONObject?): AetherAppExtens
                 extensionName = item.optString("extension_name"),
                 title = item.optString("title"),
                 icon = item.optString("icon").ifBlank { "extension" },
+            )
+        },
+        customMessages = json.optJSONArray("custom_messages").objects().map { item ->
+            AetherAppExtensionCustomMessage(
+                id = item.optString("id"),
+                extensionId = item.optString("extension_id"),
+                tree = item.opt("tree"),
             )
         },
         toolTitles = json.optJSONArray("tool_titles").objects().map { item ->

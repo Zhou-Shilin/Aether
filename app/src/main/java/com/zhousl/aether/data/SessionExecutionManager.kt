@@ -881,6 +881,12 @@ class SessionExecutionManager(
                     )
                     appendAgentMessage(
                         sessionId = handle.sessionId,
+                        customMessages = turnResult.customMessages.map { custom ->
+                            ChatMessage(id = "aether-custom-${custom.id}", author = MessageAuthor.Agent,
+                                text = custom.text, createdAtMillis = turnCompletedAtMillis, assistantActionsHidden = true,
+                                providerPayloadJson = JSONObject().put("aether_custom_type", custom.type)
+                                    .put("aether_custom_payload", JSONObject(custom.payloadJson)).toString())
+                        },
                         blocks = ensureAssistantResponseFinalText(
                             blocks = responseBlocks,
                             finalText = turnResult.assistantText,
@@ -1135,6 +1141,7 @@ class SessionExecutionManager(
         statusDetail: String = "",
         handle: SessionExecutionHandle? = null,
         baseMessages: List<ChatMessage> = handle?.retainedMessagesSnapshot().orEmpty(),
+        customMessages: List<ChatMessage> = emptyList(),
     ): CompletionSummary {
         var sessionTitle = resolveSessionTitle(sessionId)
         var replySummary = blocks.lastOrNull()
@@ -1174,7 +1181,7 @@ class SessionExecutionManager(
                 currentMessages.filterNot { it.responseGroupId == identity.responseGroupId }
             } ?: currentMessages
             val updatedSession = session.withDerivedMessages(
-                messagesWithoutCheckpoint + appendedMessages
+                messagesWithoutCheckpoint + appendedMessages + customMessages
             )
             handle?.replaceRetainedMessages(updatedSession.messages)
             sessionTitle = updatedSession.title
