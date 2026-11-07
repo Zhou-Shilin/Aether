@@ -16,15 +16,25 @@ class ProviderConfigFormTest {
     @Test
     fun catalogIncludesEveryPiBuiltInProviderAndCustomEndpoint() {
         assertEquals(35, PiProviderCatalog.builtInProviders.size)
-        assertEquals(36, PiProviderCatalog.providers.size)
+        assertEquals(37, PiProviderCatalog.providers.size)
 
         val customProviders = PiProviderCatalog.providers.filterNot { it.isBuiltIn }
-        assertEquals(1, customProviders.size)
-        assertEquals("openai-compatible", customProviders.single().id)
+        assertEquals(listOf("openai-compatible", "requesty"), customProviders.map { it.id })
         assertEquals(
             listOf("openai", "openai-compatible"),
             PiProviderCatalog.providers.take(2).map { it.id },
         )
+    }
+
+    @Test
+    fun requestyPrefillsItsOpenAiCompatibleEndpoint() {
+        val state = ProviderFormState.fromConfig(null)
+
+        state.applyProviderDefaults(PiProviderCatalog.resolve("requesty"))
+
+        assertEquals("https://router.requesty.ai/v1", state.baseUrl)
+        assertTrue(state.selectedDefinition.requiresBaseUrl)
+        assertFalse(state.buildConfig().compatibilityMode)
     }
 
     @Test

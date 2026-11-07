@@ -159,6 +159,42 @@ class ProviderModelCatalogClientTest {
     }
 
     @Test
+    fun requestyListsManagedModelsBeforeFullCatalog() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .addHeader("Content-Type", "application/json")
+                .setBody("""{"data":[{"id":"claude-sonnet-4-5"}]}""")
+        )
+        server.enqueue(
+            MockResponse()
+                .addHeader("Content-Type", "application/json")
+                .setBody("""{"data":[{"id":"openai/gpt-4o-mini"},{"id":"claude-sonnet-4-5"}]}""")
+        )
+        server.start()
+
+        try {
+            val result = ProviderModelCatalogClient.fetchModels(
+                LlmProviderConfig(
+                    providerId = "requesty",
+                    name = "Requesty",
+                    piProviderId = "requesty",
+                    apiKey = "test-key",
+                    baseUrl = server.url("/v1").toString(),
+                    modelId = "",
+                )
+            )
+
+            assertEquals(null, result.error)
+            assertEquals(listOf("claude-sonnet-4-5", "openai/gpt-4o-mini"), result.models)
+            assertEquals("/v1/models/managed", server.takeRequest().path)
+            assertEquals("/v1/models", server.takeRequest().path)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun failedProviderRequestFallsBackToModelsDev() = runBlocking {
         val server = MockWebServer()
         server.enqueue(
