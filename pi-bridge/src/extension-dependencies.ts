@@ -120,20 +120,27 @@ function runNpmInstall(packageRoot: string): Promise<void> {
 }
 
 /** Install runtime dependencies once for a copied package. */
-export async function ensureExtensionPackageDependencies(packageRoot: string): Promise<void> {
+export async function ensureExtensionPackageDependencies(
+  packageRoot: string,
+  onProgress?: (phase: string) => void,
+): Promise<boolean> {
   const resolvedRoot = path.resolve(packageRoot);
   const manifest = readManifest(resolvedRoot);
-  if (!manifest || !hasRuntimeDependencies(manifest)) return;
+  if (!manifest || !hasRuntimeDependencies(manifest)) return false;
 
   const nodeModules = path.join(resolvedRoot, "node_modules");
   const marker = path.join(nodeModules, INSTALL_MARKER_NAME);
   const fingerprint = dependencyFingerprint(manifest);
   // A node_modules directory can be left behind by an interrupted npm run.
   // Only a marker for the current manifest proves the tree is complete.
-  if (fs.existsSync(marker) && fs.readFileSync(marker, "utf8").trim() === fingerprint) return;
+  if (fs.existsSync(marker) && fs.readFileSync(marker, "utf8").trim() === fingerprint) return false;
 
+  onProgress?.("installing");
   const activeInstall = pendingInstalls.get(resolvedRoot);
-  if (activeInstall) return activeInstall;
+  if (activeInstall) {
+    await activeInstall;
+    return true;
+  }
   const install = (async () => {
     await runNpmInstall(resolvedRoot);
     fs.mkdirSync(nodeModules, { recursive: true });
@@ -142,6 +149,7 @@ export async function ensureExtensionPackageDependencies(packageRoot: string): P
   pendingInstalls.set(resolvedRoot, install);
   try {
     await install;
+    return true;
   } finally {
     if (pendingInstalls.get(resolvedRoot) === install) pendingInstalls.delete(resolvedRoot);
   }

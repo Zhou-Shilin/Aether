@@ -119,5 +119,36 @@ class PiExtensionCatalogTest {
                 types = listOf("theme"),
             ),
         )
+        assertEquals(
+            PiPackageCompatibilityIssue.Platform,
+            detectPiPackageCompatibility(
+                name = "pi-claude-bridge",
+                description = "Pi extension that uses Claude Code as a model provider.",
+                types = listOf("extension"),
+            ),
+        )
+    }
+
+    @Test
+    fun matchesPreinstalledImportedExtensionsInDiscoverCatalog() {
+        val catalogEntry = PiExtensionCatalogEntry(
+            name = "pi-web-access",
+            source = "npm:pi-web-access",
+            description = "Web search and extraction.",
+            author = "nicobailon",
+            monthlyDownloads = 1_000_000L,
+            packageUrl = "https://pi.dev/packages/pi-web-access",
+            npmUrl = "",
+            repositoryUrl = "",
+            types = listOf("extension"),
+        )
+        val preinstalled = InstalledPiExtension(
+            id = "import:aether:/root/.aether/extensions/pi-web-access",
+            name = "pi-web-access",
+            source = "Imported",
+            installedPath = "/data/user/0/com.baimoqilin.aether/files/runtimes/alpine/rootfs/root/.aether/extensions/pi-web-access",
+            kind = PiExtensionInstallKind.Imported,
+        )
+        assertTrue(isCatalogEntryInstalled(catalogEntry, listOf(preinstalled)))
     }
 }

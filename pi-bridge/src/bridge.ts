@@ -3519,15 +3519,19 @@ async function installedExtensionPackagesPayload(): Promise<JsonObject> {
 
 async function reloadAllExtensionSessions(
   payload: JsonObject = {},
+  requestId?: string,
 ): Promise<JsonObject> {
   const loadOptions = nativeExtensionLoadOptionsFromPayload(payload);
+  const progress = requestId
+    ? (phase: string) => writeEvent(requestId, "extension_reload_progress", { phase })
+    : undefined;
   // Preinstalled packages can provide both Pi and Aether entrypoints. Resolve
   // their npm dependencies before reloading native Pi sessions so both loaders
   // observe the same ready package tree.
   const skipAetherExtensions = asBoolean(payload.skip_aether_extensions, false);
   const aetherReload = skipAetherExtensions
     ? { reloaded: false, errors: [] }
-    : await loadAetherAppExtensions(process.cwd(), loadOptions);
+    : await loadAetherAppExtensions(process.cwd(), loadOptions, progress);
   const results: JsonObject[] = [];
   for (const state of [...agentSessions.values()]) {
     const { signature: extensionSignature } = await resolveNativeExtensionSet(
@@ -3798,7 +3802,7 @@ async function handleRequest(request: BridgeRequest): Promise<void> {
       writeResponse(id, await updateExtensionPackage(id, payload));
       return;
     case "reload_all_extensions":
-      writeResponse(id, await reloadAllExtensionSessions(payload));
+      writeResponse(id, await reloadAllExtensionSessions(payload, id));
       return;
     case "reload_aether_extensions":
       writeResponse(id, await reloadAetherAppExtensionsRequest(id, payload));

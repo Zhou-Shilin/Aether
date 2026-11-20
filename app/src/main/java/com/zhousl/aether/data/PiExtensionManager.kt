@@ -12,6 +12,7 @@ import java.nio.file.Files
 import java.util.Base64
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 import java.util.zip.ZipInputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -31,6 +32,9 @@ private const val MaxExtensionEntryBytes = 16L * 1024L * 1024L
 private const val MaxExtensionZipEntries = 4096
 private const val MaxExtensionBackupEntries = 8192
 private const val ExtensionDependencyInstallTimeoutMillis = 5L * 60L * 1000L
+private const val ExtensionToggleReloadTimeoutMillis = 60_000L
+private const val ExtensionEnableReloadTimeoutMillis = 180_000L
+private const val ExtensionCatalogTimeoutSeconds = 15L
 private val ExtensionFilePattern = Regex(""".*\.(?:[cm]?[jt]s)$""", RegexOption.IGNORE_CASE)
 private val ExtensionIndexNames = setOf(
     "index.ts",
@@ -240,6 +244,28 @@ internal fun parsePiPackageDetails(
     )
 }
 
+internal fun normalizePiPackageName(raw: String): String =
+    raw.trim()
+        .removePrefix("npm:")
+        .substringAfterLast('/')
+        .substringBefore('@')
+        .lowercase(Locale.US)
+
+internal fun isCatalogEntryInstalled(
+    entry: PiExtensionCatalogEntry,
+    installedExtensions: List<InstalledPiExtension>,
+): Boolean {
+    val targetName = normalizePiPackageName(entry.name)
+    val targetSource = entry.source.trim().lowercase(Locale.US)
+    return installedExtensions.any { installed ->
+        val installedSource = installed.source.trim().lowercase(Locale.US)
+        val installedName = normalizePiPackageName(installed.name)
+        val installedDirName = installed.installedPath.substringAfterLast('/').lowercase(Locale.US)
+        (installed.kind == PiExtensionInstallKind.Package && installedSource == targetSource) ||
+            (targetName.isNotBlank() && (installedName == targetName || installedDirName == targetName))
+    }
+}
+
 internal fun detectPiPackageCompatibility(
     name: String,
     description: String,
@@ -256,20 +282,27 @@ internal fun detectPiPackageCompatibility(
         "terminal ui",
         "live overlay",
         "status bar",
+        "statusline",
+        "status-line",
         "powerline footer",
         "custom footer",
         "custom header",
         "keyboard shortcut",
+        "keybinding",
         "clickable tui",
         "tui click",
         "tui overlay",
         "plan review with annotations",
+        "interactive plan review",
         "structured questionnaire",
         "webview window",
         "local browser ui",
         "micro-ui",
         "ctx.ui",
         "registershortcut",
+        "tmux",
+        "ghostty",
+        "kitty terminal",
     )
     if (
         interactiveUiSignals.any(text::contains) ||
@@ -286,8 +319,15 @@ internal fun detectPiPackageCompatibility(
         "darwin only",
         "requires macos",
         "requires windows",
+        "apple silicon",
+        "osascript",
+        "applescript",
         "x64 only",
         "amd64 only",
+        "desktop only",
+        "requires claude code",
+        "uses claude code",
+        "vscode extension",
     )
     if (platformSignals.any(text::contains)) {
         return PiPackageCompatibilityIssue.Platform
@@ -304,16 +344,35 @@ class PiExtensionManager(
     private val piKernelBridge: PiKernelBridge,
     private val skillManager: AgentSkillManager,
     private val stateRepository: PiExtensionStateRepository,
-    private val httpClient: OkHttpClient = OkHttpClient(),
+    private val httpClient: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(ExtensionCatalogTimeoutSeconds, TimeUnit.SECONDS)
+        .readTimeout(ExtensionCatalogTimeoutSeconds, TimeUnit.SECONDS)
+        .callTimeout(ExtensionCatalogTimeoutSeconds * 2, TimeUnit.SECONDS)
+        .build(),
 ) {
     private val appContext = context.applicationContext
+
+    private fun isExtensionDisabled(
+        extension: InstalledPiExtension,
+        disabledIds: Set<String>,
+        disabledOptions: PiExtensionLoadOptions,
+    ): Boolean {
+        val baseName = extension.installedPath.substringAfterLast('/').trim()
+        return extension.id in disabledIds ||
+            (extension.installedPath.isNotBlank() && extension.installedPath in disabledOptions.disabledExtensionPaths) ||
+            (baseName.isNotBlank() && (
+                disabledIds.any { it.substringAfterLast('/') == baseName } ||
+                    disabledOptions.disabledExtensionPaths.any { it.substringAfterLast('/') == baseName }
+                ))
+    }
 
     suspend fun listImported(): Result<List<InstalledPiExtension>> = withContext(Dispatchers.IO) {
         runCatching {
             val disabledIds = stateRepository.disabledExtensionIds.first()
+            val disabledOptions = stateRepository.loadOptions()
             listImportedExtensions()
                 .map { extension ->
-                    extension.copy(isEnabled = extension.id !in disabledIds)
+                    extension.copy(isEnabled = !isExtensionDisabled(extension, disabledIds, disabledOptions))
                 }
                 .distinctBy(InstalledPiExtension::id)
                 .sortedBy { it.name.lowercase(Locale.US) }
@@ -424,12 +483,7 @@ class PiExtensionManager(
             val disabledOptions = stateRepository.loadOptions()
             (installedPackages + listImportedExtensions())
                 .map { extension ->
-                    val baseName = extension.installedPath.substringAfterLast('/')
-                    val isExplicitlyDisabled = extension.id in disabledIds ||
-                        extension.installedPath in disabledOptions.disabledExtensionPaths ||
-                        disabledIds.any { it.substringAfterLast('/') == baseName } ||
-                        disabledOptions.disabledExtensionPaths.any { it.substringAfterLast('/') == baseName }
-                    extension.copy(isEnabled = !isExplicitlyDisabled)
+                    extension.copy(isEnabled = !isExtensionDisabled(extension, disabledIds, disabledOptions))
                 }
                 .distinctBy(InstalledPiExtension::id)
                 .sortedBy { it.name.lowercase(Locale.US) }
@@ -460,8 +514,12 @@ class PiExtensionManager(
         }
     }
 
-    suspend fun remove(extension: InstalledPiExtension): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun remove(
+        extension: InstalledPiExtension,
+        onProgress: suspend (String) -> Unit = {},
+    ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
+            onProgress("saving")
             stateRepository.setEnabled(extension.id, enabled = true)
             when (extension.kind) {
                 PiExtensionInstallKind.Package -> {
@@ -472,18 +530,27 @@ class PiExtensionManager(
                     require(response.optBoolean("removed")) {
                         "No installed Pi extension matched ${extension.source}."
                     }
+                    onProgress("reloading")
                     requireExtensionReloadSucceeded(
-                        piKernelBridge.reloadAllExtensions(stateRepository.loadOptions())
+                        piKernelBridge.reloadAllExtensions(
+                            loadOptions = stateRepository.loadOptions(),
+                            timeoutMillis = ExtensionToggleReloadTimeoutMillis,
+                        )
                     )
                 }
 
                 PiExtensionInstallKind.Imported -> {
                     removeImportedExtension(extension.installedPath)
+                    onProgress("reloading")
                     requireExtensionReloadSucceeded(
-                        piKernelBridge.reloadAllExtensions(stateRepository.loadOptions())
+                        piKernelBridge.reloadAllExtensions(
+                            loadOptions = stateRepository.loadOptions(),
+                            timeoutMillis = ExtensionToggleReloadTimeoutMillis,
+                        )
                     )
                 }
             }
+            onProgress("refreshing")
             Unit
         }
     }
@@ -491,12 +558,30 @@ class PiExtensionManager(
     suspend fun setEnabled(
         extension: InstalledPiExtension,
         enabled: Boolean,
+        onProgress: suspend (String) -> Unit = {},
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
+            onProgress("saving")
             stateRepository.setEnabled(extension.id, enabled)
-            requireExtensionReloadSucceeded(
-                piKernelBridge.reloadAllExtensions(stateRepository.loadOptions())
-            )
+            try {
+                onProgress("reloading")
+                requireExtensionReloadSucceeded(
+                    piKernelBridge.reloadAllExtensions(
+                        loadOptions = stateRepository.loadOptions(),
+                        timeoutMillis = if (enabled) {
+                            ExtensionEnableReloadTimeoutMillis
+                        } else {
+                            ExtensionToggleReloadTimeoutMillis
+                        },
+                        onProgress = onProgress,
+                    )
+                )
+            } catch (throwable: Throwable) {
+                // Roll back persisted state if reload failed or was cancelled.
+                runCatching { stateRepository.setEnabled(extension.id, !enabled) }
+                throw throwable
+            }
+            onProgress("refreshing")
             Unit
         }
     }
@@ -643,18 +728,29 @@ class PiExtensionManager(
         requireExtensionReloadSucceeded(piKernelBridge.reloadAllExtensions(loadOptions))
     }
 
-    suspend fun importFromUri(uri: Uri): Result<InstalledPiExtension> = withContext(Dispatchers.IO) {
+    suspend fun importFromUri(
+        uri: Uri,
+        onProgress: suspend (String) -> Unit = {},
+    ): Result<InstalledPiExtension> = withContext(Dispatchers.IO) {
         runCatching {
+            onProgress("preparing")
             val displayName = queryDisplayName(uri)
             val importRoot = alpineRuntime.ensureGuestDirectory(AetherExtensionGuestDirectory)
             val transaction = if (displayName.endsWith(".zip", ignoreCase = true)) {
+                onProgress("installing")
                 importZip(uri, displayName, importRoot)
             } else {
+                onProgress("saving")
                 importExtensionFile(uri, displayName, importRoot)
             }
             try {
+                onProgress("reloading")
                 requireExtensionReloadSucceeded(
-                    piKernelBridge.reloadAllExtensions(stateRepository.loadOptions())
+                    piKernelBridge.reloadAllExtensions(
+                        loadOptions = stateRepository.loadOptions(),
+                        timeoutMillis = ExtensionEnableReloadTimeoutMillis,
+                        onProgress = onProgress,
+                    )
                 )
                 val installed = importedExtension(transaction.destination, "aether")
                     ?: error(
@@ -662,6 +758,7 @@ class PiExtensionManager(
                     )
                 transaction.commit()
                 alpineRuntime.clearPreinstalledExtensionRemoved(transaction.destination.name)
+                onProgress("refreshing")
                 installed
             } catch (throwable: Throwable) {
                 val rollbackFailure = runCatching {
@@ -671,7 +768,10 @@ class PiExtensionManager(
                 if (rollbackFailure == null) {
                     runCatching {
                         requireExtensionReloadSucceeded(
-                            piKernelBridge.reloadAllExtensions(stateRepository.loadOptions())
+                            piKernelBridge.reloadAllExtensions(
+                                loadOptions = stateRepository.loadOptions(),
+                                timeoutMillis = ExtensionToggleReloadTimeoutMillis,
+                            )
                         )
                     }.exceptionOrNull()?.let(throwable::addSuppressed)
                 }

@@ -1169,6 +1169,7 @@ async function loadAetherAppExtensionsUnlocked(
     disabledExtensionPaths?: string[];
     disabledPackageSources?: string[];
   } = {},
+  onProgress?: (phase: string) => void,
 ): Promise<AetherAppExtensionLoadResult> {
   const previous = runtime;
   const candidate = createEmptyRuntime(cwd);
@@ -1182,7 +1183,8 @@ async function loadAetherAppExtensionsUnlocked(
       const packageRoot = packageRootForExtensionPath(descriptor.path, AETHER_EXTENSION_ROOT);
       if (packageRoot && !installedDependencyRoots.has(packageRoot)) {
         installedDependencyRoots.add(packageRoot);
-        await ensureExtensionPackageDependencies(packageRoot);
+        const installedDeps = await ensureExtensionPackageDependencies(packageRoot, onProgress);
+        if (installedDeps) onProgress?.("reloading");
       }
       if (descriptor.compatibilityError) {
         throw new Error(descriptor.compatibilityError);
@@ -1237,8 +1239,9 @@ export async function loadAetherAppExtensions(
     disabledExtensionPaths?: string[];
     disabledPackageSources?: string[];
   } = {},
+  onProgress?: (phase: string) => void,
 ): Promise<AetherAppExtensionLoadResult> {
-  return withRuntimeLock(() => loadAetherAppExtensionsUnlocked(cwd, loadOptions));
+  return withRuntimeLock(() => loadAetherAppExtensionsUnlocked(cwd, loadOptions, onProgress));
 }
 
 async function renderRegisteredView(

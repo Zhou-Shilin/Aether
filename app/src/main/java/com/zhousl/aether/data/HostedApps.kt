@@ -115,6 +115,14 @@ class HostedApps(
     private val pending = ConcurrentHashMap<String, CompletableDeferred<JSONObject>>()
     private val preferences = context.getSharedPreferences("hosted-apps", Context.MODE_PRIVATE)
     private fun enabled() = preferences.getBoolean("enabled", true)
+    fun isHostingEnabled(): Boolean = enabled()
+    fun setHostingEnabled(value: Boolean) {
+        preferences.edit().putBoolean("enabled", value).apply()
+        if (!value) close() else _revision.value++
+    }
+    fun installedApps(): List<HostedApp> = runCatching {
+        list().sortedBy { it.label.lowercase() }
+    }.getOrDefault(emptyList())
 
     private data class Upload(val appId: String, val metadata: JSONObject, val file: File, val bytes: Long, val digest: String, val created: Long)
 
