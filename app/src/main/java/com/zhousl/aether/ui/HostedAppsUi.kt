@@ -2,33 +2,29 @@ package com.zhousl.aether.ui
 
 import android.annotation.SuppressLint
 import android.net.Uri
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.webkit.WebChromeClient
-import android.webkit.ValueCallback
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.ui.platform.LocalContext
-import kotlinx.coroutines.CancellableContinuation
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlin.coroutines.resume
-import com.zhousl.aether.data.DocumentExports
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -36,22 +32,28 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import com.zhousl.aether.data.DocumentExports
 import com.zhousl.aether.data.HostedApp
 import com.zhousl.aether.data.HostedApps
+import com.zhousl.aether.ui.theme.AetherOutline
+import com.zhousl.aether.ui.theme.AetherSurface
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.net.URLConnection
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONObject
+import kotlin.coroutines.resume
 
 /** Owns a bounded WebView directly, not the extension renderer's height fallback.
  * Stable app-specific HTTPS origins scope extension capability requests.
@@ -86,8 +88,8 @@ fun HostedAppsOverlay(manager: HostedApps, selected: HostedApp, onClose: () -> U
     fun cssColor(color: Color) = String.format("#%06X", color.toArgb() and 0xFFFFFF)
     val theme = JSONObject().put("primary", cssColor(colors.primary)).put("onPrimary", cssColor(colors.onPrimary))
         .put("container", cssColor(colors.primaryContainer)).put("onContainer", cssColor(colors.onPrimaryContainer))
-        .put("background", cssColor(colors.background)).put("surface", cssColor(colors.surfaceContainerLow))
-        .put("text", cssColor(colors.onSurface)).put("muted", cssColor(colors.onSurfaceVariant)).put("line", cssColor(colors.outlineVariant))
+        .put("background", cssColor(colors.background)).put("surface", cssColor(AetherSurface))
+        .put("text", cssColor(colors.onSurface)).put("muted", cssColor(colors.onSurfaceVariant)).put("line", cssColor(AetherOutline))
         .put("errorContainer", cssColor(colors.errorContainer)).put("onErrorContainer", cssColor(colors.onErrorContainer))
     var webViewReady by remember(manager) { mutableStateOf(false) }
     LaunchedEffect(manager) {
@@ -134,7 +136,7 @@ fun HostedAppsOverlay(manager: HostedApps, selected: HostedApp, onClose: () -> U
     }
     key(selected.id, selected.version) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
             if (status.isNotBlank()) Text(status, Modifier.fillMaxWidth().padding(12.dp), style = MaterialTheme.typography.bodySmall)
             if (!webViewReady) return@Column
             if (!compatible) {
@@ -200,11 +202,23 @@ fun HostedAppsOverlay(manager: HostedApps, selected: HostedApp, onClose: () -> U
                         val job = scope.launch(start = CoroutineStart.LAZY) {
                             try {
                                 val args = input.optJSONObject("args") ?: JSONObject()
-                                val result = when (input.optString("op")) {
-                                    "export.begin", "export.chunk", "export.finish", "export.cancel" -> exports.invoke(input.getString("op").removePrefix("export."), args)
-                                    "app.info" -> selected.json().put("managed", true).put("protocol", 1).put("storage", "shared-project-folder").put("theme", theme)
-                                    else -> if(input.optString("op").startsWith("files.")) manager.fileRequest(selected, input.getString("op").removePrefix("files."), args)
-                                        else manager.extensionRequest(selected, input.optString("op"), args)
+                                val op = input.optString("op")
+                                val streamSink: ((String, JSONObject) -> Unit)? = if (args.optBoolean("stream", false)) {
+                                    { event, data ->
+                                        scope.launch {
+                                            runCatching {
+                                                respond(JSONObject().put("stream", true).put("event", event).put("data", data))
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    null
+                                }
+                                val result = when (op) {
+                                    "export.begin", "export.chunk", "export.finish", "export.cancel" -> exports.invoke(op.removePrefix("export."), args)
+                                    "app.info" -> selected.json().put("managed", true).put("protocol", 1).put("streaming", true).put("storage", "shared-project-folder").put("theme", theme)
+                                    else -> if (op.startsWith("files.")) manager.fileRequest(selected, op.removePrefix("files."), args)
+                                        else manager.extensionRequest(selected, op, args, onStreamDelta = streamSink)
                                 }
                                 require(result.toString().toByteArray().size <= 1024 * 1024) { "App reply exceeds the 1 MiB response budget." }
                                 respond(JSONObject().put("ok", true).put("result", result))

@@ -1,27 +1,27 @@
 package com.zhousl.aether.data
 
 import android.content.Context
-import android.content.Intent
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
 import android.graphics.BitmapFactory
 import android.graphics.drawable.Icon
 import android.util.Base64
+import android.webkit.WebStorage
 import com.zhousl.aether.HostedAppActivity
 import java.io.File
 import java.security.MessageDigest
 import java.util.UUID
-import java.util.zip.ZipInputStream
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.withTimeout
 import java.util.concurrent.ConcurrentHashMap
+import java.util.zip.ZipInputStream
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -31,16 +31,28 @@ import org.json.JSONObject
  * request/reply channel: scoped data files and reviewed capabilities, with no
  * install, source-folder or host-configuration authority.
  */
-class HostedApps(private val context: Context, kernel: AetherModKernel, documents: SharedDocuments) {
+class HostedApps(
+    private val context: Context,
+    kernel: AetherModKernel,
+    documents: SharedDocuments,
+    private val diagnosticLogger: AetherDiagnosticLogger = AetherDiagnosticLogger.NoOp,
+) {
     private val fileAccess = HostedFileAccess(context, documents)
     private val root = File(context.filesDir, "hosted-apps-v1")
     private val installLock = Mutex()
     private val uploads = mutableMapOf<String, Upload>()
     // Initialized only when a hosted app is requested, never for ordinary Aether use.
+    @Volatile
     private var webViewStartup: CompletableDeferred<Unit>? = null
+
     @androidx.annotation.MainThread
     fun prepareWebView(): CompletableDeferred<Unit> {
-        webViewStartup?.let { return it }
+        webViewStartup?.let { existing ->
+            if (!existing.isCompleted || !existing.isCancelled) {
+                val failed = existing.isCompleted && runCatching { existing.getCompletionExceptionOrNull() != null }.getOrDefault(false)
+                if (!failed) return existing
+            }
+        }
         val ready = CompletableDeferred<Unit>()
         webViewStartup = ready
         val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
@@ -54,16 +66,34 @@ class HostedApps(private val context: Context, kernel: AetherModKernel, document
                     }
                     override fun onError(error: androidx.webkit.WebViewStartupException) {
                         executor.shutdown()
+                        diagnosticLogger.exception(
+                            category = "hosted_apps",
+                            event = "webview_startup_failed",
+                            throwable = error,
+                        )
+                        if (webViewStartup === ready) webViewStartup = null
                         ready.completeExceptionally(error)
                     }
                 })
-        } catch (error: Exception) { executor.shutdown(); ready.completeExceptionally(error) }
+        } catch (error: Exception) {
+            executor.shutdown()
+            diagnosticLogger.exception(
+                category = "hosted_apps",
+                event = "webview_startup_exception",
+                throwable = error,
+            )
+            if (webViewStartup === ready) webViewStartup = null
+            ready.completeExceptionally(error)
+        }
         return ready
     }
+
     private val _revision = MutableStateFlow(0L)
     val revision = _revision.asStateFlow()
     private val windows = ConcurrentHashMap<String, Int>()
     private val closedWindows = ConcurrentHashMap.newKeySet<String>()
+    private val streamSinks = ConcurrentHashMap<String, (String, JSONObject) -> Unit>()
+
     fun windowApp(id: String): HostedApp? = if (enabled() && id !in closedWindows) read(id) else null
     fun resumeWindow(id: String) {
         if (enabled() && read(id) != null && closedWindows.remove(id)) _revision.value++
@@ -76,6 +106,11 @@ class HostedApps(private val context: Context, kernel: AetherModKernel, document
             if (windows.keys.none { it.startsWith("${app.id}:") }) fileAccess.invalidate(app.id)
         }
     }
+
+    fun emitStreamDelta(requestId: String, event: String, data: JSONObject) {
+        streamSinks[requestId]?.invoke(event, data)
+    }
+
     @Volatile private var events: (suspend (String, JSONObject) -> Unit)? = null
     private val pending = ConcurrentHashMap<String, CompletableDeferred<JSONObject>>()
     private val preferences = context.getSharedPreferences("hosted-apps", Context.MODE_PRIVATE)
@@ -90,7 +125,7 @@ class HostedApps(private val context: Context, kernel: AetherModKernel, document
         kernel.services.register(
             id = "hosted_apps", owner = "aether-core", priority = -10_000,
             description = "Host local static assets with origin-bound extension requests.",
-            methods = listOf("capabilities", "list", "begin", "chunk", "commit", "cancel", "open", "close", "pin", "reply", "setEnabled", "configureData").map {
+            methods = listOf("capabilities", "list", "begin", "chunk", "commit", "cancel", "open", "close", "uninstall", "pin", "reply", "setEnabled", "configureData").map {
                 AetherModServiceMethod(it, mutatesState = it !in setOf("capabilities", "list"))
             },
             handler = { method, args -> invoke(method, args) },
@@ -99,27 +134,54 @@ class HostedApps(private val context: Context, kernel: AetherModKernel, document
 
     fun bindEvents(handler: suspend (String, JSONObject) -> Unit): () -> Unit {
         events = handler
-        return { if (events === handler) { events = null; pending.values.forEach { it.cancel() }; pending.clear() } }
+        return {
+            if (events === handler) {
+                events = null
+                streamSinks.clear()
+                pending.values.forEach { it.cancel() }
+                pending.clear()
+            }
+        }
     }
-    suspend fun extensionRequest(app: HostedApp, method: String, args: JSONObject): JSONObject {
+
+    suspend fun extensionRequest(
+        app: HostedApp,
+        method: String,
+        args: JSONObject,
+        onStreamDelta: ((String, JSONObject) -> Unit)? = null,
+    ): JSONObject {
         require(enabled() && windows.containsKey("${app.id}:${app.version}") && read(app.id)?.version == app.version) { "This hosted app is no longer active." }
         require(Regex("^[a-z][a-zA-Z0-9_.-]{0,79}$").matches(method))
         val emit = events ?: error("The extension bridge is not ready.")
         require(pending.size < 16)
         val id = UUID.randomUUID().toString(); val result = CompletableDeferred<JSONObject>(); pending[id] = result
+        if (onStreamDelta != null) streamSinks[id] = onStreamDelta
         try {
             emit("hosted_apps.request", JSONObject().put("requestId", id).put("app", app.json()).put("method", method).put("args", args))
             return withTimeout(125_000) { result.await() }
         } finally {
             pending.remove(id)
+            streamSinks.remove(id)
             if (!result.isCompleted) withContext(NonCancellable) { runCatching { emit("hosted_apps.cancel", JSONObject().put("requestId", id)) } }
         }
     }
 
     suspend fun invoke(method: String, args: JSONObject): JSONObject = when (method) {
-        "capabilities" -> JSONObject().put("supported", androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.WEB_MESSAGE_LISTENER) && enabled()).put("protocol", 1).put("extensionGateway", 1).put("enabled", enabled())
+        "capabilities" -> JSONObject()
+            .put("supported", androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.WEB_MESSAGE_LISTENER) && enabled())
+            .put("protocol", 1)
+            .put("extensionGateway", 1)
+            .put("enabled", enabled())
             .put("reason", "Requires an origin-checked Android System WebView bridge; no insecure fallback is enabled.")
-            .put("documentWindows", 1).put("nativeUiVersion", 1).put("directFiles", 1).put("staticAssets", true).put("nativeAi", false).put("extensionCapabilities", true).put("browserInstallRequired", false)
+            .put("documentWindows", 1)
+            .put("nativeUiVersion", 1)
+            .put("directFiles", 1)
+            .put("staticAssets", true)
+            .put("nativeAi", false)
+            .put("streaming", true)
+            .put("uninstall", true)
+            .put("extensionCapabilities", true)
+            .put("browserInstallRequired", false)
             .put("pinConfirmationRequired", true)
         "configureData" -> fileAccess.configure(validId(args.getString("id")), args.optString("tree"), args.getBoolean("enabled"))
         "reply" -> {
@@ -132,24 +194,74 @@ class HostedApps(private val context: Context, kernel: AetherModKernel, document
         }
         "setEnabled" -> { preferences.edit().putBoolean("enabled", args.getBoolean("enabled")).apply(); close(); JSONObject().put("enabled", enabled()) }
         "list" -> withContext(Dispatchers.IO) { JSONObject().put("apps", JSONArray(list().map { it.json() })) }
-        "open" -> withContext(Dispatchers.Main.immediate) { require(enabled()) { "Enable native hosting in Apps first." }; val app = read(validId(args.getString("id"))) ?: error("Hosted app is not installed."); closedWindows.remove(app.id); _revision.value++; prepareWebView(); context.startActivity(HostedAppActivity.intent(context, app)); updatePinnedShortcut(app); app.json() }
-        "close" -> { close(); JSONObject().put("ok", true) }
+        "open" -> withContext(Dispatchers.Main.immediate) {
+            require(enabled()) { "Enable native hosting in Apps first." }
+            val app = read(validId(args.getString("id"))) ?: error("Hosted app is not installed.")
+            closedWindows.remove(app.id)
+            _revision.value++
+            prepareWebView()
+            context.startActivity(HostedAppActivity.intent(context, app))
+            updatePinnedShortcut(app)
+            app.json()
+        }
+        "close" -> {
+            val targetId = args.optString("id").trim()
+            if (targetId.isNotEmpty()) close(validId(targetId)) else close()
+            JSONObject().put("ok", true)
+        }
+        "uninstall" -> uninstall(validId(args.getString("id")))
         "pin" -> withContext(Dispatchers.Main.immediate) { pin(validId(args.getString("id"))) }
         "begin", "chunk", "commit", "cancel" -> withContext(Dispatchers.IO) { installLock.withLock { install(method, args) } }
         else -> error("Unknown hosted_apps method.")
     }
 
-    fun close() { closedWindows.addAll(windows.keys.map { it.substringBefore(':') }); windows.clear(); fileAccess.invalidate(); _revision.value++ }
+    fun close(appId: String? = null) {
+        if (appId != null) {
+            closedWindows.add(appId)
+            windows.keys.removeAll { it.startsWith("$appId:") }
+            fileAccess.invalidate(appId)
+        } else {
+            closedWindows.addAll(windows.keys.map { it.substringBefore(':') })
+            windows.clear()
+            fileAccess.invalidate()
+        }
+        _revision.value++
+    }
+
+    suspend fun uninstall(id: String): JSONObject {
+        validId(id)
+        val existed = withContext(Dispatchers.IO) {
+            installLock.withLock {
+                require(uploads.values.none { it.appId == id }) { "Cancel the active installation before uninstalling this app." }
+                close(id)
+                fileAccess.clearGrant(id)
+                val directory = File(root, id)
+                val hadApp = directory.exists()
+                if (hadApp) {
+                    require(directory.deleteRecursively()) { "Could not remove hosted app files." }
+                }
+                hadApp
+            }
+        }
+        val origin = "https://$id.apps.aether.invalid"
+        withContext(Dispatchers.Main.immediate) {
+            runCatching { WebStorage.getInstance().deleteOrigin(origin) }
+            runCatching {
+                context.getSystemService(ShortcutManager::class.java)
+                    ?.disableShortcuts(listOf("hosted.$id"), "App was removed from Aether.")
+            }
+        }
+        _revision.value++
+        return JSONObject().put("uninstalled", true).put("id", id).put("existed", existed)
+    }
+
     suspend fun fileRequest(app: HostedApp, method: String, args: JSONObject): JSONObject {
         require(enabled() && windows.containsKey("${app.id}:${app.version}") && read(app.id)?.version == app.version) { "This hosted app is no longer active." }
         return fileAccess.invoke(app.id, method, args)
     }
+
     fun accepts(urlHost: String?): Boolean = urlHost?.endsWith(".apps.aether.invalid") == true
-    fun appForHost(host: String?): HostedApp? {
-        if (!accepts(host)) return null
-        val id = host!!.removeSuffix(".apps.aether.invalid")
-        return if (ID.matches(id)) read(id) else null
-    }
+
     fun read(id: String): HostedApp? = runCatching {
         validId(id)
         val record = JSONObject(File(root, "$id/record.json").readText())
@@ -158,7 +270,9 @@ class HostedApps(private val context: Context, kernel: AetherModKernel, document
         require(File(directory, "index.html").isFile)
         HostedApp(id, record.getString("label"), version, directory)
     }.getOrNull()
+
     private fun list(): List<HostedApp> = root.listFiles().orEmpty().filter { ID.matches(it.name) }.mapNotNull { read(it.name) }
+
     private fun writeRecord(id: String, record: JSONObject) {
         val directory = File(root, id).apply { mkdirs() }
         val stage = File(directory, ".record-${UUID.randomUUID()}")
@@ -251,29 +365,47 @@ class HostedApps(private val context: Context, kernel: AetherModKernel, document
         return read(upload.appId)!!.json().put("installed", true).put("dataCleared", false)
     }
 
+    private fun loadAppIcon(app: HostedApp): Icon {
+        var icon = Icon.createWithResource(context, context.applicationInfo.icon)
+        val bitmapFile = File(app.assets, "icon-192.png")
+        if (bitmapFile.isFile && bitmapFile.length() <= 1024 * 1024) {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(bitmapFile.path, bounds)
+            if (bounds.outWidth in 1..1024 && bounds.outHeight in 1..1024) {
+                BitmapFactory.decodeFile(
+                    bitmapFile.path,
+                    BitmapFactory.Options().apply { inSampleSize = maxOf(1, maxOf(bounds.outWidth, bounds.outHeight) / 192) },
+                )?.let { icon = Icon.createWithBitmap(it) }
+            }
+        }
+        return icon
+    }
+
     fun pin(id: String): JSONObject {
         val app = read(id) ?: error("Hosted app is not installed.")
         val manager = context.getSystemService(ShortcutManager::class.java)
         if (manager?.isRequestPinShortcutSupported != true) return JSONObject().put("requested", false).put("reason", "Launcher pinning is unavailable; the app remains in Apps.")
         val intent = HostedAppActivity.intent(context, app)
-        val bitmapFile = File(app.assets, "icon-192.png")
-        var icon = Icon.createWithResource(context, context.applicationInfo.icon)
-        if (bitmapFile.isFile && bitmapFile.length() <= 1024 * 1024) {
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeFile(bitmapFile.path, bounds)
-            if (bounds.outWidth in 1..1024 && bounds.outHeight in 1..1024) {
-                BitmapFactory.decodeFile(bitmapFile.path, BitmapFactory.Options().apply { inSampleSize = maxOf(1, maxOf(bounds.outWidth, bounds.outHeight) / 192) })?.let { icon = Icon.createWithBitmap(it) }
-            }
-        }
-        val shortcut = ShortcutInfo.Builder(context, "hosted.${app.id}").setShortLabel(app.label).setLongLabel(app.label).setIcon(icon).setIntent(intent).build()
+        val shortcut = ShortcutInfo.Builder(context, "hosted.${app.id}")
+            .setShortLabel(app.label)
+            .setLongLabel(app.label)
+            .setIcon(loadAppIcon(app))
+            .setIntent(intent)
+            .build()
         return JSONObject().put("requested", manager.requestPinShortcut(shortcut, null)).put("confirmationRequired", true)
     }
+
     private fun updatePinnedShortcut(app: HostedApp) {
         val shortcuts = context.getSystemService(ShortcutManager::class.java)
         if (shortcuts?.pinnedShortcuts?.any { it.id == "hosted.${app.id}" } == true) {
-            shortcuts.updateShortcuts(listOf(ShortcutInfo.Builder(context, "hosted.${app.id}")
-                .setShortLabel(app.label).setLongLabel(app.label)
-                .setIntent(HostedAppActivity.intent(context, app)).build()))
+            shortcuts.updateShortcuts(listOf(
+                ShortcutInfo.Builder(context, "hosted.${app.id}")
+                    .setShortLabel(app.label)
+                    .setLongLabel(app.label)
+                    .setIcon(loadAppIcon(app))
+                    .setIntent(HostedAppActivity.intent(context, app))
+                    .build()
+            ))
         }
     }
 

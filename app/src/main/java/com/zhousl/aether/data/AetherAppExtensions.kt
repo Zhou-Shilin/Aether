@@ -284,6 +284,17 @@ class AetherAppExtensionManager(
             }
         }.onFailure(::recordFailure)
 
+    suspend fun ensureLoaded(context: JSONObject = currentContext()): Result<AetherAppExtensionSnapshot> {
+        if (!started.get()) {
+            start(context)
+        }
+        return if (_state.value.snapshot.version == 0L) {
+            reload(context)
+        } else {
+            refresh(context)
+        }
+    }
+
     fun invokeAction(
         extensionId: String,
         action: String,
@@ -429,16 +440,31 @@ class AetherAppExtensionManager(
                     }
                     return
                 }
-                val result = runCatching {
-                    val handler = hostHandler
-                        ?: error("The Aether UI host is not attached.")
-                    handler(method, args)
+                // Dispatch host calls concurrently so long-running services (e.g. model_access.complete
+                // or document pickers) do not head-of-line block subscribeAetherExtensions events.
+                scope.launch {
+                    val result = runCatching {
+                        val handler = hostHandler
+                            ?: error("The Aether UI host is not attached.")
+                        handler(method, args)
+                    }
+                    runCatching {
+                        bridge.sendAetherHostResult(
+                            callId = callId,
+                            result = result.getOrDefault(JSONObject()),
+                            error = result.exceptionOrNull()?.message.orEmpty(),
+                        )
+                    }.onFailure { throwable ->
+                        if (throwable is CancellationException) throw throwable
+                        diagnosticLogger.exception(
+                            category = "aether_extension",
+                            event = "host_result_send_failed",
+                            throwable = throwable,
+                            level = "warn",
+                            details = mapOf("method" to method, "call_id" to callId),
+                        )
+                    }
                 }
-                bridge.sendAetherHostResult(
-                    callId = callId,
-                    result = result.getOrDefault(JSONObject()),
-                    error = result.exceptionOrNull()?.message.orEmpty(),
-                )
             }
         }
     }

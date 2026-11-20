@@ -3,18 +3,19 @@ package com.zhousl.aether
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.net.Uri
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import com.zhousl.aether.data.DocumentChooser
+import com.zhousl.aether.ui.AetherApp
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
-import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.enableEdgeToEdge
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
-import com.zhousl.aether.ui.AetherApp
 
 open class MainActivity : AppCompatActivity() {
     protected open val hostedAppId: String? get() = null
@@ -23,11 +24,11 @@ open class MainActivity : AppCompatActivity() {
     private var fileReply: CancellableContinuation<Uri?>? = null
     private val folderPicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri -> folderReply?.let { if (it.isActive) it.resume(uri) }; folderReply = null }
     private val filePicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> fileReply?.let { if (it.isActive) it.resume(uri) }; fileReply = null }
-    private val documentChooser: suspend (Boolean) -> Uri? = { tree ->
+    private val documentChooser: DocumentChooser = { tree, mimeTypes ->
         suspendCancellableCoroutine { continuation ->
             check(folderReply == null && fileReply == null) { "A document picker is already open." }
             if (tree) { folderReply = continuation; folderPicker.launch(null) }
-            else { fileReply = continuation; filePicker.launch(arrayOf("application/zip", "application/octet-stream")) }
+            else { fileReply = continuation; filePicker.launch(mimeTypes) }
             continuation.invokeOnCancellation { if (tree) folderReply = null else fileReply = null }
         }
     }
@@ -39,7 +40,7 @@ open class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         androidx.lifecycle.ViewModelProvider(this).get(AetherWindowLease::class.java)
-        (application as AetherApplication).runtime.sharedDocuments.choose = documentChooser
+        (application as AetherApplication).runtime.sharedDocuments.registerChooser(documentChooser)
         (application as AetherApplication).runtime.hostedApps.let { host ->
             hostedAppId?.let { host.resumeWindow(it); host.prepareWebView() }
         }
@@ -63,14 +64,14 @@ open class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        (application as AetherApplication).runtime.sharedDocuments.let { if (it.choose === documentChooser) it.choose = null }
+        (application as AetherApplication).runtime.sharedDocuments.unregisterChooser(documentChooser)
         folderReply?.cancel(); fileReply?.cancel()
         super.onDestroy()
     }
 
     override fun onResume() {
         super.onResume()
-        (application as AetherApplication).runtime.sharedDocuments.choose = documentChooser
+        (application as AetherApplication).runtime.sharedDocuments.registerChooser(documentChooser)
         (application as AetherApplication).runtime.nativeModManager.notifyUiStable()
     }
 

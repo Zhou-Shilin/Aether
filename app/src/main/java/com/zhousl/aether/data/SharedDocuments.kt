@@ -16,17 +16,43 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
+typealias DocumentChooser = suspend (tree: Boolean, mimeTypes: Array<String>) -> Uri?
+
 /** Generic SAF adapter only. Project layout, records, builds and policies live in
  * the script extension. No broad storage permission or hard-coded shared path. */
-class SharedDocuments(private val context: Context, kernel: AetherModKernel) {
+class SharedDocuments(
+    private val context: Context,
+    kernel: AetherModKernel,
+    private val diagnosticLogger: AetherDiagnosticLogger = AetherDiagnosticLogger.NoOp,
+) {
     private val resolver = context.contentResolver
     private val journals = File(context.filesDir, "document-write-journals").apply { mkdirs() }
     private val lock = Mutex()
+    private val chooserLock = Any()
+    private val choosers = mutableListOf<DocumentChooser>()
+    private val sessionFileUris = LinkedHashSet<String>()
     private data class Read(val tree: String, val input: InputStream, var offset: Long = 0, var touched: Long = System.currentTimeMillis())
     private val reads = mutableMapOf<String, Read>()
     private val writes = mutableMapOf<String, Write>()
     private data class Write(val tree: String, val path: String, val expected: String?, val bytes: Long, val file: File)
-    var choose: (suspend (Boolean) -> Uri?)? = null
+
+    fun registerChooser(chooser: DocumentChooser) {
+        synchronized(chooserLock) {
+            choosers.removeAll { it === chooser }
+            choosers.add(chooser)
+        }
+    }
+
+    fun unregisterChooser(chooser: DocumentChooser) {
+        synchronized(chooserLock) {
+            choosers.removeAll { it === chooser }
+        }
+    }
+
+    private fun activeChooser(): DocumentChooser? = synchronized(chooserLock) {
+        choosers.lastOrNull()
+    }
+
     init {
         context.cacheDir.listFiles().orEmpty().filter { it.name.startsWith("shared-write-") && it.name.endsWith(".tmp") }.forEach { it.delete() }
         kernel.services.register("documents", "aether-core", priority = -10_000,
@@ -34,16 +60,47 @@ class SharedDocuments(private val context: Context, kernel: AetherModKernel) {
             methods = listOf("chooseTree", "chooseFile", "stat", "list", "read", "readFile", "openRead", "readNext", "closeRead", "beginWrite", "chunk", "commit", "cancel", "mkdir", "remove").map { AetherModServiceMethod(it) },
             handler = { method, args -> invoke(method, args) })
     }
+
     private fun granted(text: String): Uri {
         val uri = Uri.parse(text)
-        require(uri.scheme == "content" && resolver.persistedUriPermissions.any { it.uri == uri && it.isReadPermission }) { "Choose the project folder again to restore access." }
+        val hasPersisted = uri.scheme == "content" &&
+            resolver.persistedUriPermissions.any { it.uri == uri && it.isReadPermission }
+        val hasSessionGrant = uri.scheme == "content" && synchronized(chooserLock) {
+            text in sessionFileUris
+        }
+        require(hasPersisted || hasSessionGrant) { "Choose the project folder again to restore access." }
         return uri
     }
+
+    private fun rememberSessionFileUri(uri: Uri) {
+        synchronized(chooserLock) {
+            val text = uri.toString()
+            sessionFileUris.remove(text)
+            sessionFileUris.add(text)
+            while (sessionFileUris.size > 64) {
+                sessionFileUris.remove(sessionFileUris.first())
+            }
+        }
+    }
+
+    private fun parseMimeTypes(args: JSONObject): Array<String> {
+        val requested = args.optJSONArray("mimeTypes") ?: return DEFAULT_FILE_MIME_TYPES
+        val valid = mutableListOf<String>()
+        for (i in 0 until requested.length().coerceAtMost(32)) {
+            val mime = requested.optString(i).trim()
+            if (mime.isNotEmpty() && mime.length <= 128 && '/' in mime && mime.none { it.code < 32 }) {
+                valid += mime
+            }
+        }
+        return if (valid.isEmpty()) DEFAULT_FILE_MIME_TYPES else valid.toTypedArray()
+    }
+
     private fun parts(path: String): List<String> {
         if (path.isEmpty()) return emptyList()
         require(path.length <= 2048 && !path.contains('\\') && !path.contains('\u0000'))
         return path.split('/').also { require(it.all { name -> name.isNotBlank() && name != "." && name != ".." && name.length <= 200 && name.none { ch -> ch.code < 32 } }) }
     }
+
     private fun children(tree: Uri, parent: Uri): List<JSONObject> {
         val result = mutableListOf<JSONObject>()
         resolver.query(Docs.buildChildDocumentsUriUsingTree(tree, Docs.getDocumentId(parent)), arrayOf(Docs.Document.COLUMN_DOCUMENT_ID, Docs.Document.COLUMN_DISPLAY_NAME, Docs.Document.COLUMN_MIME_TYPE, Docs.Document.COLUMN_SIZE), null, null, null)?.use { cursor ->
@@ -54,6 +111,7 @@ class SharedDocuments(private val context: Context, kernel: AetherModKernel) {
         }
         return result
     }
+
     private fun resolve(tree: Uri, path: String, create: Boolean = false): Uri? {
         var parent = Docs.buildDocumentUriUsingTree(tree, Docs.getTreeDocumentId(tree))
         for (name in parts(path)) {
@@ -64,15 +122,27 @@ class SharedDocuments(private val context: Context, kernel: AetherModKernel) {
         }
         return parent
     }
+
     private fun digest(uri: Uri): String = (if (uri.scheme == "file") File(uri.path!!).inputStream() else resolver.openInputStream(uri)!!).use { input ->
         val hash = MessageDigest.getInstance("SHA-256"); val buffer = ByteArray(65536); var total = 0L
         while (true) { val n = input.read(buffer); if (n < 0) break; total += n; require(total <= 32L * 1024 * 1024); hash.update(buffer, 0, n) }
         hash.digest().joinToString("") { "%02x".format(it) }
     }
+
     private fun recover(treeText: String) {
         for (file in journals.listFiles().orEmpty().filter { it.extension == "json" }) {
-            val value = JSONObject(file.readText())
-            if (value.getString("tree") != treeText) continue
+            val value = runCatching { JSONObject(file.readText()) }.getOrElse { error ->
+                diagnosticLogger.exception(
+                    category = "shared_documents",
+                    event = "corrupt_journal_skipped",
+                    throwable = error,
+                    level = "warn",
+                    details = mapOf("journal" to file.name),
+                )
+                file.delete()
+                continue
+            }
+            if (value.optString("tree") != treeText) continue
             val tree = granted(treeText); val pieces = parts(value.getString("path"))
             val parent = resolve(tree, pieces.dropLast(1).joinToString("/")) ?: error("Interrupted write parent is unavailable; no files were reset.")
             val entries = children(tree, parent)
@@ -89,12 +159,27 @@ class SharedDocuments(private val context: Context, kernel: AetherModKernel) {
             file.delete()
         }
     }
+
     suspend fun invoke(method: String, args: JSONObject): JSONObject {
         if (method == "chooseTree" || method == "chooseFile") return withContext(Dispatchers.Main.immediate) {
-            val uri = (choose ?: error("The native document picker is not ready."))(method == "chooseTree")
+            val isTree = method == "chooseTree"
+            val mimeTypes = if (isTree) DEFAULT_FILE_MIME_TYPES else parseMimeTypes(args)
+            val uri = (activeChooser() ?: error("The native document picker is not ready."))(isTree, mimeTypes)
                 ?: return@withContext JSONObject().put("cancelled", true)
-            val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or if (method == "chooseTree") Intent.FLAG_GRANT_WRITE_URI_PERMISSION else 0
-            resolver.takePersistableUriPermission(uri, flags)
+            val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or if (isTree) Intent.FLAG_GRANT_WRITE_URI_PERMISSION else 0
+            if (isTree) {
+                resolver.takePersistableUriPermission(uri, flags)
+            } else {
+                runCatching { resolver.takePersistableUriPermission(uri, flags) }.onFailure { error ->
+                    diagnosticLogger.exception(
+                        category = "shared_documents",
+                        event = "file_persistable_permission_unavailable",
+                        throwable = error,
+                        level = "info",
+                    )
+                }
+                rememberSessionFileUri(uri)
+            }
             JSONObject().put("uri", uri.toString())
         }
         return withContext(Dispatchers.IO) { lock.withLock {
@@ -132,23 +217,24 @@ class SharedDocuments(private val context: Context, kernel: AetherModKernel) {
                         val tree = granted(w.tree); val current = resolve(tree, w.path)
                         require((current?.let(::digest)) == w.expected) { "File changed externally; replacement stopped and its bytes were retained." }
                         val pieces = parts(w.path); val parent = resolve(tree, pieces.dropLast(1).joinToString("/"), true)!!
+                        val nextDigest = digest(Uri.fromFile(w.file))
                         val staged = Docs.createDocument(resolver, parent, "application/octet-stream", ".aether-write-$token") ?: error("Could not stage shared file.")
                         var previous: Uri? = null; var installed = false
                         val journal = File(journals, "$token.json")
                         try {
                             resolver.openOutputStream(staged, "w")!!.use { output -> w.file.inputStream().use { it.copyTo(output, 65536) } }
-                            require(digest(staged) == digest(Uri.fromFile(w.file))) { "Shared file write failed verification." }
-                            journal.writeText(JSONObject().put("tree", w.tree).put("path", w.path).put("previous", ".aether-previous-$token").put("stage", ".aether-write-$token").put("expected", w.expected ?: "").put("next", digest(Uri.fromFile(w.file))).toString())
+                            require(digest(staged) == nextDigest) { "Shared file write failed verification." }
+                            journal.writeText(JSONObject().put("tree", w.tree).put("path", w.path).put("previous", ".aether-previous-$token").put("stage", ".aether-write-$token").put("expected", w.expected ?: "").put("next", nextDigest).toString())
                             // Keep the previous bytes on the shared volume until the new
                             // document has its final name. Failed replacement restores them.
                             if (current != null) previous = Docs.renameDocument(resolver, current, ".aether-previous-$token") ?: error("Could not preserve previous shared file.")
-                            val target = Docs.renameDocument(resolver, staged, pieces.last()) ?: error("Could not commit shared file.")
+                            Docs.renameDocument(resolver, staged, pieces.last()) ?: error("Could not commit shared file.")
                             installed = true
                             // Failure to remove an old owned revision must not report a
                             // failed write after commit. An interrupted provider retains it.
                             previous?.let { runCatching { Docs.deleteDocument(resolver, it) } }
                             journal.delete(); writes.remove(token); w.file.delete()
-                            return@withLock JSONObject().put("version", digest(target)).put("bytes", w.bytes)
+                            return@withLock JSONObject().put("version", nextDigest).put("bytes", w.bytes)
                         } finally {
                             if (!installed) {
                                 val restored = previous == null || runCatching { Docs.renameDocument(resolver, previous, pieces.last()) != null }.getOrDefault(false)
@@ -210,7 +296,10 @@ class SharedDocuments(private val context: Context, kernel: AetherModKernel) {
                 "read" -> {
                     val offset = args.optLong("offset"); require(offset in 0..32L * 1024 * 1024)
                     val buffer = ByteArray(args.optInt("limit", 65536).coerceIn(1, 65536)); var count = 0
-                    resolver.openInputStream(uri)!!.use { input -> var remaining = offset; while (remaining > 0) { val skipped = input.skip(remaining); require(skipped > 0) { "Read offset is outside the document." }; remaining -= skipped }; while (count < buffer.size) { val n = input.read(buffer, count, buffer.size - count); if (n < 0) break; count += n } }
+                    resolver.openInputStream(uri)!!.use { input ->
+                        skipFully(input, offset)
+                        while (count < buffer.size) { val n = input.read(buffer, count, buffer.size - count); if (n < 0) break; count += n }
+                    }
                     JSONObject().put("base64", Base64.encodeToString(buffer.copyOf(count), Base64.NO_WRAP)).put("bytes", count)
                 }
                 "remove" -> {
@@ -220,5 +309,24 @@ class SharedDocuments(private val context: Context, kernel: AetherModKernel) {
                 else -> error("Unknown document operation.")
             }
         } }
+    }
+
+    companion object {
+        val DEFAULT_FILE_MIME_TYPES = arrayOf("application/zip", "application/octet-stream")
+
+        internal fun skipFully(input: InputStream, bytesToSkip: Long) {
+            var remaining = bytesToSkip
+            val discard = ByteArray(8192)
+            while (remaining > 0) {
+                val skipped = input.skip(remaining)
+                if (skipped > 0) {
+                    remaining -= skipped
+                } else {
+                    val read = input.read(discard, 0, minOf(remaining, discard.size.toLong()).toInt())
+                    require(read > 0) { "Read offset is outside the document." }
+                    remaining -= read
+                }
+            }
+        }
     }
 }

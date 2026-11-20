@@ -515,7 +515,7 @@ function requestAetherHost(method: string, args: JsonObject): Promise<JsonObject
         elapsed_ms: elapsedMillis(startedAt),
       });
       reject(new Error(`Aether host call timed out: ${method}`));
-    }, 2 * 60 * 1000);
+    }, 150_000);
     pendingAetherHostCalls.set(callId, { resolve, reject, timeout });
   });
 }

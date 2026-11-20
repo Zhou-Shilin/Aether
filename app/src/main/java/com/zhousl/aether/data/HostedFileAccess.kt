@@ -26,7 +26,18 @@ class HostedFileAccess(private val context: Context, private val documents: Shar
     private data class Write(val path: String, val bytes: Long)
     private data class Session(val appId: String, val tree: String, val identity: String, val generation: Long,
         var touched: Long = SystemClock.elapsedRealtime(), val readers: MutableSet<String> = mutableSetOf(), val writes: MutableMap<String, Write> = mutableMapOf())
+    private data class SpaceCache(
+        val tree: String,
+        val generation: Long,
+        val fileSizes: MutableMap<String, Long> = mutableMapOf(),
+        val directories: MutableSet<String> = mutableSetOf(),
+        var totalBytes: Long = 0L,
+    ) {
+        val nodeCount: Int get() = fileSizes.size + directories.size
+    }
+
     private val sessions = mutableMapOf<String, Session>()
+    private val spaceCaches = mutableMapOf<String, SpaceCache>()
     private fun file(id: String) = File(context.filesDir, "hosted-apps-v1/${HostedApps.validId(id)}/data-access.json")
     private fun grant(id: String): JSONObject {
         val source = file(id)
@@ -50,10 +61,19 @@ class HostedFileAccess(private val context: Context, private val documents: Shar
         if (appId != null) generations[appId] = before
         else generations.replaceAll { _, _ -> before }
         cleanupScope.launch { lock.withLock {
+            if (appId != null) spaceCaches.remove(appId) else spaceCaches.clear()
             val expired = sessions.filterValues { (appId == null || it.appId == appId) && it.generation < before }.keys.toList()
             expired.forEach { sessions.remove(it)?.let { session -> release(session) } }
         } }
     }
+    suspend fun clearGrant(id: String) = withContext(Dispatchers.IO) { lock.withLock {
+        HostedApps.validId(id)
+        generations[id] = sequence.incrementAndGet()
+        spaceCaches.remove(id)
+        val obsolete = sessions.filterValues { it.appId == id }.keys.toList()
+        obsolete.forEach { sessions.remove(it)?.let { session -> release(session) } }
+        file(id).delete()
+    } }
     suspend fun configure(id: String, tree: String, enabled: Boolean): JSONObject = withContext(Dispatchers.IO) { lock.withLock {
         HostedApps.validId(id)
         require(tree.length <= 4096 && (!enabled || android.net.Uri.parse(tree).scheme == "content"))
@@ -62,6 +82,7 @@ class HostedFileAccess(private val context: Context, private val documents: Shar
         val staged = File(target.parentFile, ".data-access-${UUID.randomUUID()}")
         staged.writeText(JSONObject().put("tree", tree).put("enabled", enabled).toString())
         require(staged.renameTo(target)) { "Could not save the app data grant." }
+        spaceCaches.remove(id)
         val obsolete = sessions.filterValues { it.appId == id && (!enabled || it.tree != tree) }.keys.toList()
         obsolete.forEach { sessions.remove(it)?.let { session -> release(session) } }
         JSONObject().put("configured", true)
@@ -72,10 +93,15 @@ class HostedFileAccess(private val context: Context, private val documents: Shar
         val manifest = JSONObject(String(android.util.Base64.decode(record.getString("base64"), android.util.Base64.NO_WRAP), Charsets.UTF_8))
         require(manifest.optString("id") == id && manifest.optString("format") == "aether-web-app" && manifest.optInt("version") == 1 && manifest.optJSONObject("capabilities")?.optBoolean("storage") == true) { "The shared project no longer requests data access." }
     }
-    /** A generous physical ceiling supplements the SDK's stricter logical quotas.
-     * It allows safe staged replacements without deleting the authoritative old record. */
-    private suspend fun checkSpace(session: Session, write: Write) {
-        var bytes = 0L; var nodes = 0
+
+    /** Populates the physical space cache once per (appId, tree, generation) and updates
+     * it incrementally on subsequent commits/removals instead of walking SAF on every write. */
+    private suspend fun ensureSpaceCache(session: Session): SpaceCache {
+        val existing = spaceCaches[session.appId]
+        if (existing != null && existing.tree == session.tree && existing.generation == session.generation) {
+            return existing
+        }
+        val cache = SpaceCache(tree = session.tree, generation = session.generation)
         suspend fun walk(prefix: String) {
             require(prefix.count { it == '/' } < 64) { "App data directory is too deep." }
             var offset = 0
@@ -83,18 +109,69 @@ class HostedFileAccess(private val context: Context, private val documents: Shar
                 val page = call(session, "list", JSONObject().put("path", prefix).put("offset", offset))
                 val entries = page.optJSONArray("entries")
                 if (entries != null) for (index in 0 until entries.length()) {
-                    val entry = entries.getJSONObject(index); require(++nodes <= 4096) { "App data file budget reached; nothing was deleted." }
+                    val entry = entries.getJSONObject(index)
+                    require(cache.nodeCount < MAX_DATA_NODES) { "App data file budget reached; nothing was deleted." }
                     val name = entry.getString("name"); val next = path(session.appId, "$prefix/$name")
-                    if (entry.optBoolean("directory")) walk(next)
-                    else if (next != write.path) bytes += entry.getLong("bytes")
-                    require(bytes + write.bytes <= 256L * 1048576) { "App data size budget reached; nothing was deleted." }
+                    if (entry.optBoolean("directory")) {
+                        cache.directories.add(next)
+                        walk(next)
+                    } else {
+                        val size = entry.getLong("bytes").coerceAtLeast(0L)
+                        cache.fileSizes[next] = size
+                        cache.totalBytes += size
+                    }
+                    require(cache.totalBytes <= MAX_DATA_BYTES) { "App data size budget reached; nothing was deleted." }
                 }
                 offset += 100
             } while (page.optBoolean("more"))
         }
         walk("${session.appId}/data")
-        require(bytes + write.bytes <= 256L * 1048576)
+        spaceCaches[session.appId] = cache
+        return cache
     }
+
+    private fun parentDirectories(appId: String, filePath: String): List<String> {
+        val dataRoot = "$appId/data"
+        val segments = filePath.split('/')
+        if (segments.size <= 3) return emptyList()
+        val result = mutableListOf<String>()
+        var current = dataRoot
+        for (i in 2 until segments.lastIndex) {
+            current = "$current/${segments[i]}"
+            result.add(current)
+        }
+        return result
+    }
+
+    private suspend fun checkSpace(session: Session, write: Write) {
+        val cache = ensureSpaceCache(session)
+        val previousSize = cache.fileSizes[write.path] ?: 0L
+        val projectedBytes = (cache.totalBytes - previousSize) + write.bytes
+        require(projectedBytes <= MAX_DATA_BYTES) { "App data size budget reached; nothing was deleted." }
+        val newFileCount = if (cache.fileSizes.containsKey(write.path)) 0 else 1
+        val newDirs = parentDirectories(session.appId, write.path).count { it !in cache.directories }
+        require(cache.nodeCount + newFileCount + newDirs <= MAX_DATA_NODES) { "App data file budget reached; nothing was deleted." }
+    }
+
+    private fun recordCommitInCache(session: Session, write: Write) {
+        val cache = spaceCaches[session.appId] ?: return
+        if (cache.tree != session.tree || cache.generation != session.generation) return
+        val previousSize = cache.fileSizes.put(write.path, write.bytes) ?: 0L
+        cache.totalBytes = (cache.totalBytes - previousSize + write.bytes).coerceAtLeast(0L)
+        cache.directories.addAll(parentDirectories(session.appId, write.path))
+    }
+
+    private fun recordRemoveInCache(session: Session, removedPath: String) {
+        val cache = spaceCaches[session.appId] ?: return
+        if (cache.tree != session.tree || cache.generation != session.generation) return
+        val previousSize = cache.fileSizes.remove(removedPath)
+        if (previousSize != null) {
+            cache.totalBytes = (cache.totalBytes - previousSize).coerceAtLeast(0L)
+        } else {
+            cache.directories.remove(removedPath)
+        }
+    }
+
     suspend fun invoke(appId: String, method: String, args: JSONObject): JSONObject = withContext(Dispatchers.IO) { lock.withLock {
         val expired = sessions.filterValues { SystemClock.elapsedRealtime() - it.touched > 120000 }.keys.toList()
         expired.forEach { sessions.remove(it)?.let { session -> release(session) } }
@@ -124,15 +201,26 @@ class HostedFileAccess(private val context: Context, private val documents: Shar
             }
             else -> error("Unsupported app file operation.")
         }
-        if (method == "beginWrite") require(body.getLong("bytes") in 0..32L * 1048576)
-        if (method == "commit") checkSpace(session, session.writes.getValue(body.getString("transfer")))
+        if (method == "beginWrite") require(body.getLong("bytes") in 0..32L * 1024 * 1024)
+        val pendingWrite = if (method == "commit") session.writes.getValue(body.getString("transfer")) else null
+        if (pendingWrite != null) checkSpace(session, pendingWrite)
         val result = call(session, method, body)
         when (method) {
             "openRead" -> session.readers.add(result.getString("reader"))
             "closeRead" -> session.readers.remove(body.getString("reader"))
             "beginWrite" -> session.writes[result.getString("transfer")] = Write(body.getString("path"), body.getLong("bytes"))
-            "commit", "cancel" -> session.writes.remove(body.getString("transfer"))
+            "commit" -> {
+                session.writes.remove(body.getString("transfer"))
+                if (pendingWrite != null) recordCommitInCache(session, pendingWrite)
+            }
+            "cancel" -> session.writes.remove(body.getString("transfer"))
+            "remove" -> recordRemoveInCache(session, body.getString("path"))
         }
         result
     } }
+
+    companion object {
+        private const val MAX_DATA_NODES = 4096
+        private const val MAX_DATA_BYTES = 256L * 1048576
+    }
 }

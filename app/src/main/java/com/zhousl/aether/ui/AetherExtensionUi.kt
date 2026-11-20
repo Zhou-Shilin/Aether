@@ -423,7 +423,7 @@ private fun AetherExtensionNode(
                         }, actions = {
                             node.optString("closeAction").takeIf(String::isNotBlank)?.let { close ->
                                 IconButton(enabled = node.optBoolean("enabled", true), onClick = { controller.onAction(extensionId, close, JSONObject()) }) {
-                                    Icon(Icons.Rounded.Close, contentDescription = "Close Apps")
+                                    Icon(Icons.Rounded.Close, contentDescription = "Close")
                                 }
                             }
                         }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background))
@@ -442,11 +442,11 @@ private fun AetherExtensionNode(
             ListItem(modifier = itemModifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)),
                 headlineContent = { Text(node.optString("label"), maxLines = 2, overflow = TextOverflow.Ellipsis) },
                 supportingContent = node.optString("subtitle").takeIf(String::isNotBlank)?.let { subtitle -> { Text(subtitle, maxLines = 2, overflow = TextOverflow.Ellipsis) } },
-                leadingContent = node.optString("icon").takeIf(String::isNotBlank)?.let { icon -> { Icon(extensionIcon(icon), contentDescription = null, tint = MaterialTheme.colorScheme.primary) } },
+                leadingContent = node.optString("icon").takeIf(String::isNotBlank)?.let { icon -> { Icon(extensionIcon(icon), contentDescription = null, tint = AetherPrimary) } },
                 trailingContent = {
                     if (node.has("selected")) RadioButton(selected = node.optBoolean("selected"), onClick = null, enabled = enabled)
                     else if (action.isNotBlank()) Icon(Icons.Rounded.ChevronRight, contentDescription = null)
-                }, colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow))
+                }, colors = ListItemDefaults.colors(containerColor = AetherSurface))
         }
         "text",
         "code" -> {
@@ -544,20 +544,20 @@ private fun AetherExtensionNode(
                 Text(node.optString("label", node.optString("text")), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             val enabled = node.optBoolean("enabled", true)
-            val shape = RoundedCornerShape(node.optDouble("radius", 24.0).dp)
+            val shape = RoundedCornerShape(node.optDouble("radius", 18.0).dp)
             when (node.optString("variant")) {
                 "text" -> TextButton(onClick = click, enabled = enabled, modifier = resolvedModifier, shape = shape, content = content)
                 "outlined" -> OutlinedButton(onClick = click, enabled = enabled, modifier = resolvedModifier, shape = shape, content = content)
                 else -> Button(onClick = click, enabled = enabled, modifier = resolvedModifier, shape = shape,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = when (node.optString("tone")) {
-                            "neutral", "secondary" -> MaterialTheme.colorScheme.secondaryContainer
+                            "neutral", "secondary" -> AetherSurfaceHigher
                             "danger", "error" -> MaterialTheme.colorScheme.errorContainer
-                            else -> MaterialTheme.colorScheme.primary
+                            else -> AetherPrimary
                         }, contentColor = when (node.optString("tone")) {
-                            "neutral", "secondary" -> MaterialTheme.colorScheme.onSecondaryContainer
+                            "neutral", "secondary" -> AetherOnSurface
                             "danger", "error" -> MaterialTheme.colorScheme.onErrorContainer
-                            else -> MaterialTheme.colorScheme.onPrimary
+                            else -> AetherOnPrimary
                         }), content = content)
             }
         }

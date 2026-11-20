@@ -118,6 +118,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -487,31 +488,48 @@ class AetherViewModel(
         }
     }
 
-    /** App requests reuse the visible session/draft selection, not a second login or model default. */
-    fun selectedExtensionModel(preference: org.json.JSONObject = org.json.JSONObject()): com.zhousl.aether.data.SelectedAiConfiguration {
+    /** App requests reuse the visible session/draft selection, falling back to persisted
+     * settings on cold start before UI state finishes hydrating. No second login or fallback model. */
+    suspend fun selectedExtensionModel(preference: org.json.JSONObject = org.json.JSONObject()): com.zhousl.aether.data.SelectedAiConfiguration {
         val state = _uiState.value
+        val providerConfigs = state.providerConfigs.ifEmpty { settingsRepository.providerConfigs.first() }
+        val baseSettings = if (state.providerConfigs.isEmpty()) settingsRepository.settings.first() else state.settings
         val preferred = state.sessions.firstOrNull { it.id == state.currentSessionId }
-            ?.selectedModelKey?.ifBlank { state.draftSelectedModelKey } ?: state.draftSelectedModelKey
-        val options = state.providerConfigs.availableModelOptions()
-        val wanted = preference.optString("modelKey").ifBlank { preferred }
+            ?.selectedModelKey?.ifBlank { state.draftSelectedModelKey }
+            ?: state.draftSelectedModelKey.ifBlank { baseSettings.defaultChatModelKey }
+        val options = providerConfigs.availableModelOptions()
+        val wanted = preference.optString("modelKey").ifBlank { preferred.ifBlank { baseSettings.defaultChatModelKey } }
         val option = options.firstOrNull { it.key == wanted }
-            ?: options.firstOrNull { wanted.isBlank() && it.providerConfigId == state.settings.providerConfigId && it.modelId == state.settings.modelId }
+            ?: options.firstOrNull { wanted.isBlank() && it.providerConfigId == baseSettings.providerConfigId && it.modelId == baseSettings.modelId }
             ?: error("Choose an available provider/model in Aether. Extension requests do not select a fallback.")
-        var selected = state.settings.withModelOption(option)
+        var selected = baseSettings.withModelOption(option)
+        val modelKey = thinkingCatalogKey(option.piProviderId, option.modelId)
+        val thinkingLevelsMap = state.thinkingLevelsByProviderModel.ifEmpty { settingsRepository.loadThinkingCatalogCache() }
+        val thinkingLevelClampsMap = state.thinkingLevelClampsByProviderModel.ifEmpty { settingsRepository.loadThinkingLevelMapsCache() }
+        val reasoningModelsSet = state.reasoningModels.ifEmpty { settingsRepository.loadReasoningModelsCache() }
+        val modelLimitsMap = state.modelLimitsByProviderModel.ifEmpty { settingsRepository.loadModelLimitsCache() }
         val effort = preference.optString("thinkingLevel")
         if (effort.isNotBlank()) {
-            val levels = state.thinkingLevelsByProviderModel[thinkingCatalogKey(option.piProviderId, option.modelId)]
+            val levels = thinkingLevelsMap[modelKey]
             require(levels?.contains(effort) == true) { "This thinking level is not in Aether's known supported levels. Refresh its model catalog first." }
             selected = selected.copy(reasoningEffort = effort)
         }
-        return com.zhousl.aether.data.SelectedAiConfiguration(selected, selected.toCatalogPiModelConfig())
+        val piConfig = selected.toPiModelConfig(
+            thinkingLevelMap = thinkingLevelClampsMap[modelKey].orEmpty(),
+            isReasoningModel = modelKey in reasoningModelsSet,
+            modelsDevThinkingLevels = thinkingLevelsMap[modelKey],
+            modelsDevLimits = modelLimitsMap[modelKey],
+        )
+        return com.zhousl.aether.data.SelectedAiConfiguration(selected, piConfig)
     }
 
-    fun extensionModelCatalog(): org.json.JSONObject {
+    suspend fun extensionModelCatalog(): org.json.JSONObject {
         val state = _uiState.value
-        return org.json.JSONObject().put("models", org.json.JSONArray(state.providerConfigs.availableModelOptions().map { option ->
+        val providerConfigs = state.providerConfigs.ifEmpty { settingsRepository.providerConfigs.first() }
+        val thinkingLevelsMap = state.thinkingLevelsByProviderModel.ifEmpty { settingsRepository.loadThinkingCatalogCache() }
+        return org.json.JSONObject().put("models", org.json.JSONArray(providerConfigs.availableModelOptions().map { option ->
             org.json.JSONObject().put("key", option.key).put("label", option.providerName + " / " + option.modelId)
-                .put("thinkingLevels", org.json.JSONArray(state.thinkingLevelsByProviderModel[thinkingCatalogKey(option.piProviderId, option.modelId)].orEmpty()))
+                .put("thinkingLevels", org.json.JSONArray(thinkingLevelsMap[thinkingCatalogKey(option.piProviderId, option.modelId)].orEmpty()))
         }))
     }
 
@@ -1637,7 +1655,8 @@ class AetherViewModel(
     fun refreshUsageStatisticsSnapshots() {
         viewModelScope.launch {
             val snapshots = withContext(Dispatchers.IO) {
-                runtime.chatRepository.getUsageStatisticsSnapshot()
+                runtime.chatRepository.getUsageStatisticsSnapshot() +
+                    runtime.extensionUsageLedger.snapshots()
             }
             _uiState.update { it.copy(usageStatisticsSnapshots = snapshots) }
         }

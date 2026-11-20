@@ -6,6 +6,9 @@ import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.zhousl.aether.data.HostedApp
 import com.zhousl.aether.data.HostedApps
 import java.io.File
@@ -13,23 +16,33 @@ import java.io.File
 /** One generic activity; its data URI identifies the app's reusable document task. */
 class HostedAppActivity : MainActivity() {
     override val isHostedWindow = true
+    private var currentHostedAppId by mutableStateOf<String?>(null)
     override val hostedAppId: String?
-        get() = appId(this, intent)
+        get() = currentHostedAppId
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        hostedAppId?.let { (application as AetherApplication).runtime.hostedApps.resumeWindow(it) }
+        currentHostedAppId = appId(this, intent)
+        currentHostedAppId?.let { (application as AetherApplication).runtime.hostedApps.resumeWindow(it) }
         super.onCreate(savedInstanceState)
-        val app = hostedAppId?.let { (application as AetherApplication).runtime.hostedApps.windowApp(it) }
-        if (app != null) {
-            title = app.label
-            val file = File(app.assets, "icon-192.png")
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            if (file.isFile) BitmapFactory.decodeFile(file.path, bounds)
-            val icon = if (file.length() <= 1048576 && bounds.outWidth in 1..1024 && bounds.outHeight in 1..1024)
-                BitmapFactory.decodeFile(file.path) else null
-            @Suppress("DEPRECATION")
-            setTaskDescription(ActivityManager.TaskDescription(app.label, icon))
-        }
+        applyTaskDescription(currentHostedAppId)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        currentHostedAppId = appId(this, intent)
+        super.onNewIntent(intent)
+        applyTaskDescription(currentHostedAppId)
+    }
+
+    private fun applyTaskDescription(id: String?) {
+        val app = id?.let { (application as AetherApplication).runtime.hostedApps.windowApp(it) } ?: return
+        title = app.label
+        val file = File(app.assets, "icon-192.png")
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        if (file.isFile) BitmapFactory.decodeFile(file.path, bounds)
+        val icon = if (file.length() <= 1048576 && bounds.outWidth in 1..1024 && bounds.outHeight in 1..1024)
+            BitmapFactory.decodeFile(file.path) else null
+        @Suppress("DEPRECATION")
+        setTaskDescription(ActivityManager.TaskDescription(app.label, icon))
     }
 
     companion object {
@@ -43,6 +56,6 @@ class HostedAppActivity : MainActivity() {
         fun intent(context: Context, app: HostedApp): Intent = Intent(context, HostedAppActivity::class.java)
             .setAction(Intent.ACTION_VIEW)
             .setData(Uri.Builder().scheme("aether-app").authority(context.packageName).appendPath(app.id).build())
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS)
     }
 }
