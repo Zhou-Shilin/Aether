@@ -47,6 +47,7 @@ import com.zhousl.aether.data.LocalRuntimeId
 import com.zhousl.aether.data.ProviderModelOption
 import com.zhousl.aether.data.PersistedChatState
 import com.zhousl.aether.data.PersistedChatWriteIntent
+import com.zhousl.aether.data.withModelOption
 import com.zhousl.aether.data.availableModelOptions
 import com.zhousl.aether.data.McpServerConfig
 import com.zhousl.aether.data.normalizeLlmInactivityReconnectTimeoutSeconds
@@ -117,6 +118,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -207,6 +209,8 @@ class AetherViewModel(
     private var settingsSaveJob: Job? = null
     private var developerAlpineSetupPreviewJob: Job? = null
     private var piExtensionRefreshGeneration: Long = 0
+    private var piExtensionCatalogRefreshGeneration: Long = 0
+    private var piExtensionOperationJob: Job? = null
     private var didRefreshAlpineAfterSettingsLoad = false
 
     val uiState: StateFlow<AetherUiState> = _uiState.asStateFlow()
@@ -222,6 +226,8 @@ class AetherViewModel(
 
     private var pendingVirtualDisplayMethod: AgentModeAuthorizationMethod? = null
     private val phoneUsePermissionPolicy = PhoneUsePermissionRequestPolicy()
+
+    private val coreServiceReleases = mutableListOf<() -> Unit>()
 
     init {
         registerCoreModServices()
@@ -482,6 +488,51 @@ class AetherViewModel(
             val catalogResult = ProviderModelCatalogClient.fetchPublicThinkingCatalog(options)
             applyThinkingCatalog(catalogResult, updateState = requestKey == lastModelCatalogRequestKey)
         }
+    }
+
+    /** App requests reuse the visible session/draft selection, falling back to persisted
+     * settings on cold start before UI state finishes hydrating. No second login or fallback model. */
+    suspend fun selectedExtensionModel(preference: org.json.JSONObject = org.json.JSONObject()): com.zhousl.aether.data.SelectedAiConfiguration {
+        val state = _uiState.value
+        val providerConfigs = state.providerConfigs.ifEmpty { settingsRepository.providerConfigs.first() }
+        val baseSettings = if (state.providerConfigs.isEmpty()) settingsRepository.settings.first() else state.settings
+        val preferred = state.sessions.firstOrNull { it.id == state.currentSessionId }
+            ?.selectedModelKey?.ifBlank { state.draftSelectedModelKey }
+            ?: state.draftSelectedModelKey.ifBlank { baseSettings.defaultChatModelKey }
+        val options = providerConfigs.availableModelOptions()
+        val wanted = preference.optString("modelKey").ifBlank { preferred.ifBlank { baseSettings.defaultChatModelKey } }
+        val option = options.firstOrNull { it.key == wanted }
+            ?: options.firstOrNull { wanted.isBlank() && it.providerConfigId == baseSettings.providerConfigId && it.modelId == baseSettings.modelId }
+            ?: error("Choose an available provider/model in Aether. Extension requests do not select a fallback.")
+        var selected = baseSettings.withModelOption(option)
+        val modelKey = thinkingCatalogKey(option.piProviderId, option.modelId)
+        val thinkingLevelsMap = state.thinkingLevelsByProviderModel.ifEmpty { settingsRepository.loadThinkingCatalogCache() }
+        val thinkingLevelClampsMap = state.thinkingLevelClampsByProviderModel.ifEmpty { settingsRepository.loadThinkingLevelMapsCache() }
+        val reasoningModelsSet = state.reasoningModels.ifEmpty { settingsRepository.loadReasoningModelsCache() }
+        val modelLimitsMap = state.modelLimitsByProviderModel.ifEmpty { settingsRepository.loadModelLimitsCache() }
+        val effort = preference.optString("thinkingLevel")
+        if (effort.isNotBlank()) {
+            val levels = thinkingLevelsMap[modelKey]
+            require(levels?.contains(effort) == true) { "This thinking level is not in Aether's known supported levels. Refresh its model catalog first." }
+            selected = selected.copy(reasoningEffort = effort)
+        }
+        val piConfig = selected.toPiModelConfig(
+            thinkingLevelMap = thinkingLevelClampsMap[modelKey].orEmpty(),
+            isReasoningModel = modelKey in reasoningModelsSet,
+            modelsDevThinkingLevels = thinkingLevelsMap[modelKey],
+            modelsDevLimits = modelLimitsMap[modelKey],
+        )
+        return com.zhousl.aether.data.SelectedAiConfiguration(selected, piConfig)
+    }
+
+    suspend fun extensionModelCatalog(): org.json.JSONObject {
+        val state = _uiState.value
+        val providerConfigs = state.providerConfigs.ifEmpty { settingsRepository.providerConfigs.first() }
+        val thinkingLevelsMap = state.thinkingLevelsByProviderModel.ifEmpty { settingsRepository.loadThinkingCatalogCache() }
+        return org.json.JSONObject().put("models", org.json.JSONArray(providerConfigs.availableModelOptions().map { option ->
+            org.json.JSONObject().put("key", option.key).put("label", option.providerName + " / " + option.modelId)
+                .put("thinkingLevels", org.json.JSONArray(thinkingLevelsMap[thinkingCatalogKey(option.piProviderId, option.modelId)].orEmpty()))
+        }))
     }
 
     /** Pi model config carrying the models.dev capabilities currently known for this model. */
@@ -1606,7 +1657,8 @@ class AetherViewModel(
     fun refreshUsageStatisticsSnapshots() {
         viewModelScope.launch {
             val snapshots = withContext(Dispatchers.IO) {
-                runtime.chatRepository.getUsageStatisticsSnapshot()
+                runtime.chatRepository.getUsageStatisticsSnapshot() +
+                    runtime.extensionUsageLedger.snapshots()
             }
             _uiState.update { it.copy(usageStatisticsSnapshots = snapshots) }
         }
@@ -2885,7 +2937,29 @@ class AetherViewModel(
 
     fun refreshPiExtensions() {
         viewModelScope.launch {
-            refreshPiExtensionState(loadCatalog = true)
+            refreshInstalledPiExtensions()
+        }
+        viewModelScope.launch {
+            refreshPiExtensionCatalog(force = false)
+        }
+    }
+
+    fun refreshPiExtensionCatalog(force: Boolean = true) {
+        if (!force && (_uiState.value.piExtensionCatalog.isNotEmpty() || _uiState.value.isLoadingPiExtensionCatalog)) {
+            return
+        }
+        val generation = ++piExtensionCatalogRefreshGeneration
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingPiExtensionCatalog = true, piExtensionCatalogError = "") }
+            val catalogResult = piExtensionManager.fetchCatalog()
+            if (generation != piExtensionCatalogRefreshGeneration) return@launch
+            _uiState.update { current ->
+                current.copy(
+                    piExtensionCatalog = catalogResult.getOrDefault(current.piExtensionCatalog),
+                    isLoadingPiExtensionCatalog = false,
+                    piExtensionCatalogError = catalogResult.exceptionOrNull()?.userFacingMessage().orEmpty(),
+                )
+            }
         }
     }
 
@@ -2925,7 +2999,12 @@ class AetherViewModel(
     }
 
     fun installPiExtensionPackage(source: String) {
-        performPiExtensionOperation(source) {
+        val label = source.removePrefix("npm:")
+        performPiExtensionOperation(
+            operationSource = source,
+            operationLabel = label,
+            operationKind = "install",
+        ) {
             piExtensionManager.installPackage(source) { phase ->
                 _uiState.update { it.copy(piExtensionOperationPhase = phase) }
             }
@@ -2933,7 +3012,12 @@ class AetherViewModel(
     }
 
     fun updatePiExtensionPackage(source: String) {
-        performPiExtensionOperation(source) {
+        val label = source.removePrefix("npm:")
+        performPiExtensionOperation(
+            operationSource = source,
+            operationLabel = label,
+            operationKind = "update",
+        ) {
             piExtensionManager.updatePackage(source) { phase ->
                 _uiState.update { it.copy(piExtensionOperationPhase = phase) }
             }
@@ -2941,8 +3025,14 @@ class AetherViewModel(
     }
 
     fun removePiExtension(extension: InstalledPiExtension) {
-        performPiExtensionOperation(extension.id) {
-            piExtensionManager.remove(extension)
+        performPiExtensionOperation(
+            operationSource = extension.id,
+            operationLabel = extension.name,
+            operationKind = "remove",
+        ) {
+            piExtensionManager.remove(extension) { phase ->
+                _uiState.update { it.copy(piExtensionOperationPhase = phase) }
+            }
         }
     }
 
@@ -2950,6 +3040,7 @@ class AetherViewModel(
         extension: InstalledPiExtension,
         enabled: Boolean,
     ) {
+        if (_uiState.value.piExtensionOperationSource.isNotBlank()) return
         piExtensionRefreshGeneration += 1
         _uiState.update { current ->
             current.copy(
@@ -2958,83 +3049,204 @@ class AetherViewModel(
                 },
             )
         }
-        performPiExtensionOperation(extension.id) {
-            piExtensionManager.setEnabled(extension, enabled)
+        performPiExtensionOperation(
+            operationSource = extension.id,
+            operationLabel = extension.name,
+            operationKind = if (enabled) "enable" else "disable",
+            onRollback = {
+                _uiState.update { current ->
+                    current.copy(
+                        installedPiExtensions = current.installedPiExtensions.map { installed ->
+                            if (installed.id == extension.id) installed.copy(isEnabled = !enabled) else installed
+                        },
+                    )
+                }
+            },
+        ) {
+            piExtensionManager.setEnabled(extension, enabled) { phase ->
+                _uiState.update { it.copy(piExtensionOperationPhase = phase) }
+            }
         }
+    }
+
+    fun cancelPiExtensionOperation() {
+        val activeJob = piExtensionOperationJob ?: return
+        activeJob.cancel()
+        piExtensionOperationJob = null
     }
 
     fun importPiExtension(
         uri: Uri,
         onComplete: (Boolean) -> Unit = {},
     ) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(piExtensionOperationSource = "import") }
-            val result = piExtensionManager.importFromUri(uri)
-            result
-                .onSuccess { extension ->
-                    emitTransientMessage(
-                        uiString(R.string.message_pi_extension_imported, extension.name)
-                    )
-                }
-                .onFailure { throwable ->
-                    emitTransientMessage(
-                        uiString(
-                            R.string.message_pi_extension_operation_failed,
-                            throwable.userFacingMessage(),
-                        )
-                    )
-                }
-            refreshPiExtensionState(loadCatalog = false)
-            _uiState.update { it.copy(piExtensionOperationSource = "", piExtensionOperationPhase = "") }
-            onComplete(result.isSuccess)
+        if (_uiState.value.piExtensionOperationSource.isNotBlank()) return
+        _uiState.update {
+            it.copy(
+                piExtensionOperationSource = "import",
+                piExtensionOperationLabel = "",
+                piExtensionOperationKind = "import",
+                piExtensionOperationPhase = "preparing",
+            )
         }
+        piExtensionOperationJob = viewModelScope.launch {
+            var succeeded = false
+            try {
+                val result = piExtensionManager.importFromUri(uri) { phase ->
+                    _uiState.update { it.copy(piExtensionOperationPhase = phase) }
+                }
+                result
+                    .onSuccess { extension ->
+                        succeeded = true
+                        emitTransientMessage(
+                            uiString(R.string.message_pi_extension_imported, extension.name)
+                        )
+                    }
+                    .onFailure { throwable ->
+                        if (throwable is CancellationException) throw throwable
+                        emitTransientMessage(
+                            uiString(
+                                R.string.message_pi_extension_operation_failed,
+                                throwable.userFacingMessage(),
+                            )
+                        )
+                    }
+            } catch (_: CancellationException) {
+                emitTransientMessage(uiString(R.string.message_pi_extension_operation_cancelled))
+            } finally {
+                piExtensionOperationJob = null
+                try {
+                    refreshInstalledPiExtensions()
+                    aetherAppExtensionManager.refresh()
+                } finally {
+                    _uiState.update {
+                        it.copy(
+                            piExtensionOperationSource = "",
+                            piExtensionOperationLabel = "",
+                            piExtensionOperationKind = "",
+                            piExtensionOperationPhase = "",
+                        )
+                    }
+                }
+                onComplete(succeeded)
+            }
+        }
+    }
+
+    fun openHostedApp(appId: String) {
+        viewModelScope.launch {
+            runCatching {
+                runtime.hostedApps.invoke("open", JSONObject().put("id", appId))
+            }.onFailure { failure ->
+                emitTransientMessage(UiText.Raw(failure.userFacingMessage()))
+            }
+        }
+    }
+
+    fun pinHostedApp(appId: String) {
+        viewModelScope.launch {
+            runCatching {
+                val result = runtime.hostedApps.invoke("pin", JSONObject().put("id", appId))
+                if (result.optBoolean("requested")) {
+                    emitTransientMessage(uiString(R.string.settings_hosted_app_pin_requested))
+                } else {
+                    val reason = result.optString("reason")
+                    if (reason.isNotBlank()) {
+                        emitTransientMessage(UiText.Raw(reason))
+                    } else {
+                        emitTransientMessage(uiString(R.string.settings_hosted_app_pin_unavailable))
+                    }
+                }
+            }.onFailure { failure ->
+                emitTransientMessage(UiText.Raw(failure.userFacingMessage()))
+            }
+        }
+    }
+
+    fun uninstallHostedApp(appId: String) {
+        viewModelScope.launch {
+            runCatching {
+                runtime.hostedApps.uninstall(appId)
+                emitTransientMessage(uiString(R.string.settings_hosted_app_removed))
+            }.onFailure { failure ->
+                emitTransientMessage(UiText.Raw(failure.userFacingMessage()))
+            }
+        }
+    }
+
+    fun setHostedAppsEnabled(enabled: Boolean) {
+        runtime.hostedApps.setHostingEnabled(enabled)
+    }
+
+    private suspend fun refreshPiExtensionState(loadCatalog: Boolean) {
+        refreshInstalledPiExtensions()
+        if (loadCatalog) refreshPiExtensionCatalog(force = true)
     }
 
     private fun performPiExtensionOperation(
         operationSource: String,
+        operationLabel: String,
+        operationKind: String,
+        onRollback: () -> Unit = {},
         operation: suspend () -> Result<Unit>,
     ) {
         if (_uiState.value.piExtensionOperationSource.isNotBlank()) return
-        _uiState.update { it.copy(piExtensionOperationSource = operationSource, piExtensionOperationPhase = "preparing") }
-        viewModelScope.launch {
+        _uiState.update {
+            it.copy(
+                piExtensionOperationSource = operationSource,
+                piExtensionOperationLabel = operationLabel,
+                piExtensionOperationKind = operationKind,
+                piExtensionOperationPhase = "preparing",
+            )
+        }
+        piExtensionOperationJob = viewModelScope.launch {
             try {
                 operation().getOrThrow()
                 emitTransientMessage(uiString(R.string.message_pi_extension_updated))
-            } catch (failure: CancellationException) {
-                throw failure
+            } catch (_: CancellationException) {
+                onRollback()
+                emitTransientMessage(uiString(R.string.message_pi_extension_operation_cancelled))
             } catch (failure: Exception) {
+                onRollback()
                 emitTransientMessage(uiString(R.string.message_pi_extension_operation_failed, failure.userFacingMessage()))
             } finally {
+                piExtensionOperationJob = null
                 try {
-                    refreshPiExtensionState(loadCatalog = false)
+                    _uiState.update { it.copy(piExtensionOperationPhase = "refreshing") }
+                    refreshInstalledPiExtensions()
+                    aetherAppExtensionManager.refresh()
                 } finally {
-                    _uiState.update { it.copy(piExtensionOperationSource = "", piExtensionOperationPhase = "") }
+                    _uiState.update {
+                        it.copy(
+                            piExtensionOperationSource = "",
+                            piExtensionOperationLabel = "",
+                            piExtensionOperationKind = "",
+                            piExtensionOperationPhase = "",
+                        )
+                    }
                 }
             }
         }
     }
 
-    private suspend fun refreshPiExtensionState(loadCatalog: Boolean) {
+    private suspend fun refreshInstalledPiExtensions() {
         val generation = ++piExtensionRefreshGeneration
         _uiState.update { it.copy(isLoadingPiExtensions = true) }
+        // Fast local scan first so the Installed list appears immediately without waiting on pi-bridge.
+        if (!_uiState.value.hasLoadedInstalledPiExtensions) {
+            val fastImported = piExtensionManager.listImported()
+            if (generation == piExtensionRefreshGeneration && fastImported.isSuccess) {
+                publishImportedPiExtensions(fastImported)
+            }
+        }
         val installedResult = piExtensionManager.listInstalled()
         runtime.nativeModManager.refreshDiscovery()
-        val catalogResult = if (loadCatalog) {
-            piExtensionManager.fetchCatalog()
-        } else {
-            null
-        }
         if (generation != piExtensionRefreshGeneration) return
         _uiState.update { current ->
             current.copy(
                 installedPiExtensions = installedResult.getOrDefault(current.installedPiExtensions),
                 piExtensionInstalledError = installedResult.exceptionOrNull()?.userFacingMessage().orEmpty(),
                 hasLoadedInstalledPiExtensions = true,
-                piExtensionCatalog = catalogResult?.getOrDefault(current.piExtensionCatalog)
-                    ?: current.piExtensionCatalog,
                 isLoadingPiExtensions = false,
-                piExtensionCatalogError = catalogResult?.exceptionOrNull()?.userFacingMessage()
-                    ?: if (loadCatalog) "" else current.piExtensionCatalogError,
             )
         }
         installedResult.exceptionOrNull()?.let { throwable ->
@@ -3371,8 +3583,14 @@ class AetherViewModel(
         submitCurrentMessage(SessionFollowUpMode.Steer)
     }
 
+    override fun onCleared() {
+        coreServiceReleases.forEach { it() }
+        coreServiceReleases.clear()
+        super.onCleared()
+    }
+
     private fun registerCoreModServices() {
-        modKernel.services.register(
+        coreServiceReleases += modKernel.services.register(
             id = "skills",
             owner = "aether-core",
             description = "Inspect and mutate installed skills, current selection, and new-chat defaults.",
@@ -3385,7 +3603,7 @@ class AetherViewModel(
             ),
             handler = { method, args -> handleSkillsModService(method, args) },
         )
-        modKernel.services.register(
+        coreServiceReleases += modKernel.services.register(
             id = "state",
             owner = "aether-core",
             description = "Read the public Aether state tree and apply supported state transactions.",

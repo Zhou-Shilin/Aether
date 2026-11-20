@@ -12,7 +12,7 @@
 | [聊天与会话](conversation.md) | 新建与历史、模型选择、输入与附件、跟进、暂停、分支、上下文管理 |
 | [回复、思考与工具呈现](response-presentation.md) | 消息排版、思考与工具的两种呈现、折叠、详情、动画、预览 |
 | [设置、模型与应用数据](settings.md) | 应用偏好、模型服务与默认模型、后台运行、统计、备份、隐私与更新 |
-| [Skills 与扩展](extensions.md) | 技能、扩展包、扩展界面、MCP、联网研究与子代理 |
+| [Skills 与扩展](extensions.md) | 技能、扩展包、轻应用、扩展界面、MCP、联网研究与子代理 |
 | [工作空间与本地环境](workspace.md) | Alpine、Termux、工作目录、终端、文件、浏览器与 Agent 的电脑 |
 | [Phone Use](phone-use.md) | 手机应用操作、授权、前台反馈、屏上引导与虚拟显示 |
 | [定时任务](scheduled-tasks.md) | 任务管理、计划编辑、触发时机与结果会话 |

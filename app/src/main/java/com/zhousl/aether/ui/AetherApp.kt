@@ -149,6 +149,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -227,10 +228,144 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 }
 
 @Composable
+private fun BindAetherExtensionSession(
+    viewModel: AetherViewModel,
+    appRuntime: com.zhousl.aether.AetherAppRuntime,
+) {
+    val context = LocalContext.current
+    val extensionManager = appRuntime.aetherAppExtensionManager
+    val selectedModelAccess = remember(viewModel, appRuntime) {
+        com.zhousl.aether.data.SelectedModelAccess(
+            bridge = appRuntime.piKernelBridge,
+            repository = appRuntime.settingsRepository,
+            selection = viewModel::selectedExtensionModel,
+            catalog = viewModel::extensionModelCatalog,
+            diagnosticLogger = appRuntime.diagnosticLogger,
+            usageLedger = appRuntime.extensionUsageLedger,
+            onStreamEvent = appRuntime.hostedApps::emitStreamDelta,
+        )
+    }
+
+    LaunchedEffect(extensionManager, context) {
+        extensionManager.notifications.collect { notification ->
+            val activity = context as? androidx.activity.ComponentActivity
+            if (activity == null || activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                Toast.makeText(context, notification.message, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    DisposableEffect(extensionManager, viewModel, selectedModelAccess) {
+        val releaseBindings = (context.applicationContext as AetherApplication).uiSession.acquire {
+            extensionManager.setHostHandler(viewModel::handleAetherExtensionHostCall)
+            val releaseModelAccess = selectedModelAccess.register(appRuntime.modKernel)
+            val releaseHostedEvents = appRuntime.hostedApps.bindEvents { event, data ->
+                if (event !in extensionManager.state.value.snapshot.eventNames) {
+                    extensionManager.ensureLoaded(JSONObject()).getOrThrow()
+                }
+                require(event in extensionManager.state.value.snapshot.eventNames) {
+                    "Enable the Apps extension to handle web-app capabilities."
+                }
+                extensionManager.dispatchEvent(event, data, JSONObject()).getOrThrow()
+                Unit
+            }
+            val release: () -> Unit = {
+                releaseHostedEvents()
+                releaseModelAccess()
+                extensionManager.clearHostHandler()
+            }
+            release
+        }
+        onDispose { releaseBindings() }
+    }
+}
+
+@Composable
+private fun HostedAppWindowRoot(
+    viewModel: AetherViewModel,
+    hostedAppId: String?,
+    onHostedClose: () -> Unit,
+) {
+    val context = LocalContext.current
+    val appRuntime = remember(context) {
+        (context.applicationContext as AetherApplication).runtime
+    }
+    val extensionManager = appRuntime.aetherAppExtensionManager
+    val applicationLanguage = AetherLocaleManager.currentApplicationLanguage()
+    val themeMode by remember(viewModel) {
+        viewModel.uiState.map { it.settings.themeMode }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = viewModel.uiState.value.settings.themeMode)
+    val settingsLanguage by remember(viewModel) {
+        viewModel.uiState.map { it.settings.language }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = viewModel.uiState.value.settings.language)
+    val alpineReady by remember(viewModel) {
+        viewModel.uiState.map { it.alpineSetupState.isReady }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = viewModel.uiState.value.alpineSetupState.isReady)
+    val effectiveLanguage = applicationLanguage ?: settingsLanguage
+    val hostedRevision by appRuntime.hostedApps.revision.collectAsStateWithLifecycle()
+    val hostedApp = remember(hostedAppId, hostedRevision) {
+        hostedAppId?.let { appRuntime.hostedApps.windowApp(it) }
+    }
+    val piExtensionUiRequest = extensionManager.piUiRequest.collectAsStateWithLifecycle().value
+
+    BindAetherExtensionSession(viewModel = viewModel, appRuntime = appRuntime)
+
+    LaunchedEffect(extensionManager, alpineReady) {
+        if (alpineReady) {
+            extensionManager.start(JSONObject())
+        }
+    }
+
+    AetherTheme(
+        themeMode = themeMode,
+        language = effectiveLanguage,
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background,
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                if (hostedApp != null) {
+                    HostedAppsOverlay(appRuntime.hostedApps, hostedApp, onHostedClose)
+                } else {
+                    BackHandler(onBack = onHostedClose)
+                    Text(
+                        "This app is unavailable. Open Apps in Aether to review its installation and hosting settings.",
+                        Modifier
+                            .statusBarsPadding()
+                            .navigationBarsPadding()
+                            .padding(24.dp),
+                    )
+                }
+            }
+        }
+        piExtensionUiRequest?.let { request ->
+            PiExtensionUiDialog(
+                request = request,
+                onResult = { value ->
+                    extensionManager.respondToPiExtensionUiRequest(request.callId, value)
+                },
+            )
+        }
+    }
+}
+
+@Composable
 fun AetherApp(
     viewModel: AetherViewModel = viewModel(),
     onNotificationPermissionRequested: () -> Unit = {},
+    hostedAppId: String? = null,
+    isHostedWindow: Boolean = false,
+    onHostedClose: () -> Unit = {},
 ) {
+    if (isHostedWindow) {
+        HostedAppWindowRoot(
+            viewModel = viewModel,
+            hostedAppId = hostedAppId,
+            onHostedClose = onHostedClose,
+        )
+        return
+    }
     val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
     val context = LocalContext.current
     val applicationLanguage = AetherLocaleManager.currentApplicationLanguage()
@@ -281,18 +416,7 @@ fun AetherApp(
         extensionManager.updateContext(extensionContext)
     }
 
-    LaunchedEffect(extensionManager, context) {
-        extensionManager.notifications.collect { notification ->
-            Toast.makeText(context, notification.message, Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    DisposableEffect(extensionManager, viewModel) {
-        extensionManager.setHostHandler(viewModel::handleAetherExtensionHostCall)
-        onDispose {
-            extensionManager.clearHostHandler()
-        }
-    }
+    BindAetherExtensionSession(viewModel = viewModel, appRuntime = appRuntime)
 
     LaunchedEffect(uiState.currentScreen) {
         if (uiState.currentScreen == AppScreen.Settings) {
@@ -1081,9 +1205,11 @@ private fun AetherAppContent(
                     nativeModState = nativeModState,
                     piExtensionCatalog = uiState.piExtensionCatalog,
                     isLoadingPiExtensions = uiState.isLoadingPiExtensions,
+                    isLoadingPiExtensionCatalog = uiState.isLoadingPiExtensionCatalog,
                     piExtensionCatalogError = uiState.piExtensionCatalogError,
                     piExtensionInstalledError = uiState.piExtensionInstalledError,
                     piExtensionOperationSource = uiState.piExtensionOperationSource,
+                    piExtensionOperationLabel = uiState.piExtensionOperationLabel,
                     piExtensionOperationPhase = uiState.piExtensionOperationPhase,
                     selectedPiPackageDetails = uiState.selectedPiPackageDetails,
                     selectedPiPackageSource = uiState.selectedPiPackageSource,
@@ -1118,11 +1244,17 @@ private fun AetherAppContent(
                     onToggleSkillEnabled = viewModel::setSkillEnabled,
                     onRemoveSkill = viewModel::removeSkill,
                     onRefreshPiExtensions = viewModel::refreshPiExtensions,
+                    onRefreshPiExtensionCatalog = { viewModel.refreshPiExtensionCatalog(force = true) },
+                    onCancelPiExtensionOperation = viewModel::cancelPiExtensionOperation,
                     onInstallPiExtensionPackage = viewModel::installPiExtensionPackage,
                     onLoadPiPackageDetails = viewModel::loadPiPackageDetails,
                      onUpdatePiExtensionPackage = viewModel::updatePiExtensionPackage,
                      onRemovePiExtension = viewModel::removePiExtension,
                      onSetPiExtensionEnabled = viewModel::setPiExtensionEnabled,
+                     onOpenHostedApp = viewModel::openHostedApp,
+                     onPinHostedApp = viewModel::pinHostedApp,
+                     onUninstallHostedApp = viewModel::uninstallHostedApp,
+                     onSetHostedAppsEnabled = viewModel::setHostedAppsEnabled,
                      onImportPiExtension = {
                         piExtensionImportPicker.launch(
                             arrayOf(

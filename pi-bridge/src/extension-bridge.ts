@@ -297,8 +297,9 @@ async function handleRequest(request: BridgeRequest): Promise<void> {
       ));
       return;
     case "reload_all_extensions": {
+      const progress = (phase: string) => writeEvent(id, "extension_reload_progress", { phase });
       const aetherReload = await runOperation(id, () =>
-        loadAetherAppExtensions(process.cwd(), loadOptions(payload))
+        loadAetherAppExtensions(process.cwd(), loadOptions(payload), progress)
       );
       writeResponse(id, {
         succeeded: true,

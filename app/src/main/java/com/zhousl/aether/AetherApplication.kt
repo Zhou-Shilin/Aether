@@ -13,6 +13,7 @@ import com.zhousl.aether.data.AgentModeController
 import com.zhousl.aether.data.AgentSkillManager
 import com.zhousl.aether.data.AetherAppExtensionManager
 import com.zhousl.aether.data.AetherModKernel
+import com.zhousl.aether.data.HostedApps
 import com.zhousl.aether.data.AetherDiagnosticLogger
 import com.zhousl.aether.data.AetherToolExecutor
 import com.zhousl.aether.data.ChatRepository
@@ -48,6 +49,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class AetherApplication : Application() {
+    val uiSession by lazy(LazyThreadSafetyMode.NONE) { AetherUiSession() }
     val runtime: AetherAppRuntime by lazy(LazyThreadSafetyMode.NONE) {
         AetherAppRuntime(this)
     }
@@ -110,6 +112,9 @@ class AetherAppRuntime(
     val settingsRepository = SettingsRepository(application)
     val piExtensionStateRepository = PiExtensionStateRepository(application)
     val modKernel = AetherModKernel()
+    val sharedDocuments = com.zhousl.aether.data.SharedDocuments(application, modKernel, diagnosticLogger)
+    val hostedApps = HostedApps(application, modKernel, sharedDocuments, diagnosticLogger)
+    val extensionUsageLedger = com.zhousl.aether.data.ExtensionUsageLedger(application)
     val chatRepository = ChatRepository(application)
     val extensionsRepository = AgentExtensionsRepository(application)
     val scheduledTaskRepository = ScheduledTaskRepository(application)

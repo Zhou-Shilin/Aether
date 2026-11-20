@@ -405,9 +405,9 @@ dividers, and spacers are not treated as setting values. This interface only
 covers Settings Pages registered through `aether.extensions`; compatible Pi
 Extension configuration files remain regular files managed by the Agent.
 
-Extensions have exactly one native page registration API: `registerSettings`.
-There is no `registerPage`, `registerSettingsPage`, drawer-page, or full-screen
-page API. Extensions cannot create pages outside the native Settings flow.
+Settings entries are registered through `registerSettings`. On Android,
+extensions can also build full-screen overlay flows inside `app.overlay` using
+the `screen` and `listItem` declarative UI primitives (see below).
 
 `registerSettings` supports either the legacy flat `sections` form or optional
 `categories`. When categories are present, Aether first shows a native list of
@@ -694,3 +694,49 @@ The previous `sessions[].messages` field is no longer included; use conversation
 export when full history is needed. iOS contexts already omit conversation
 history. On both platforms `state.get(path)` returns `{ path, value }` and builds
 only the requested top-level state field.
+
+### Hosted Apps platform hooks (Android)
+
+Android provides generic host services (`hosted_apps`, `documents`, and
+`model_access`) and declarative UI primitives so an independently installed
+extension can host editable local static web apps without a localhost server or
+separate provider login:
+
+- `screen`: `id`, `title`, `children`, `backAction`, `closeAction`, `enabled`.
+  Renders a Material 3 scaffold with a fixed app bar, full-screen surface, and a
+  scrolling body. A changed screen ID starts at the top; Android Back dispatches
+  the supplied action. Disabled state blocks navigation during bounded work.
+- `listItem`: `label`, `subtitle`, `icon`, `action`, `args`, `enabled`, and
+  optional `selected`. Renders a Material list row; `selected` makes it a radio
+  choice.
+- `button` additionally accepts `variant: "text"` or `variant: "outlined"`; the
+  default remains filled using Aether theme tokens.
+
+Extensions can inspect `hosted_apps.capabilities` (`nativeUiVersion: 1`,
+`documentWindows: 1`, `directFiles: 1`, `streaming: true`, `uninstall: true`).
+
+- `hosted_apps.open` opens one reusable Android document task (`HostedAppActivity`)
+  per installed app ID and refreshes any pinned shortcut label and icon.
+- `hosted_apps.close` accepts an optional `id` to close a single hosted app
+  window, or closes all hosted windows when omitted.
+- `hosted_apps.uninstall` removes an installed app's static assets and data
+  grant, clears its WebView origin storage, and disables its pinned shortcut.
+- `documents.chooseFile` accepts an optional `mimeTypes` string array (defaulting
+  to `["application/zip", "application/octet-stream"]`).
+- `model_access.complete` accepts an optional `stream: true` flag to forward
+  text/reasoning/tool-call deltas directly to the requesting hosted WebView while
+  recording token usage into Aether's Usage Statistics.
+
+Windows share one `AetherViewModel` and one extension/model registration via
+`AetherUiSession`, while hosted app windows avoid observing full chat UI state.
+Closing one window does not revoke another app's file sessions. The controller
+is released when its last activity finishes, and survives configuration
+recreation.
+
+Android Back first closes an open HTML dialog, then dispatches the cancelable
+`aether:back` event in the top-level web page. A handler that performs local Back
+navigation must call `event.preventDefault()` synchronously. If unhandled, the
+host uses WebView history when available, otherwise finishes that app's task.
+No app history, data or credentials are returned through this event. The initial
+web-app view is not stacked above Aether content. Android chooses the previously
+foreground task after exit (normally the launcher for a home-icon launch).

@@ -246,6 +246,7 @@ dependencies {
     implementation(project(":terminal-view"))
 
     implementation(libs.androidx.core.ktx)
+    implementation("androidx.webkit:webkit:1.16.0")
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)

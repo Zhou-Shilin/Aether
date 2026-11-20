@@ -1,7 +1,27 @@
 package com.zhousl.aether.ui
 
+import android.graphics.BitmapFactory
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.zhousl.aether.AetherApplication
+import com.zhousl.aether.data.HostedApp
+import com.zhousl.aether.data.isCatalogEntryInstalled
+import com.zhousl.aether.data.normalizePiPackageName
+import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -192,7 +212,11 @@ import com.zhousl.aether.runtime.AndroidAlpineFileManagerRuntime
 import com.zhousl.aether.termux.TermuxSetupState
 import com.zhousl.aether.ui.theme.AetherOnSurface
 import com.zhousl.aether.ui.theme.AetherOnPrimary
+import com.zhousl.aether.ui.theme.AetherOnPrimaryContainer
 import com.zhousl.aether.ui.theme.AetherOnSurfaceVariant
+import com.zhousl.aether.ui.theme.AetherOutline
+import com.zhousl.aether.ui.theme.AetherPrimaryContainer
+import com.zhousl.aether.ui.theme.AetherSurfaceHigher
 import com.zhousl.aether.ui.theme.AetherPrimary
 import com.zhousl.aether.ui.theme.AetherScrim
 import com.zhousl.aether.ui.theme.AetherSettingsBackground
@@ -441,9 +465,11 @@ fun SettingsScreen(
     nativeModState: AetherNativeModState,
     piExtensionCatalog: List<PiExtensionCatalogEntry>,
     isLoadingPiExtensions: Boolean,
+    isLoadingPiExtensionCatalog: Boolean = false,
     piExtensionCatalogError: String,
     piExtensionInstalledError: String,
     piExtensionOperationSource: String,
+    piExtensionOperationLabel: String = "",
     piExtensionOperationPhase: String,
     selectedPiPackageDetails: PiPackageDetails?,
     selectedPiPackageSource: String,
@@ -479,11 +505,17 @@ fun SettingsScreen(
     onToggleSkillEnabled: (String, Boolean) -> Unit,
     onRemoveSkill: (String) -> Unit,
     onRefreshPiExtensions: () -> Unit,
+    onRefreshPiExtensionCatalog: () -> Unit = onRefreshPiExtensions,
+    onCancelPiExtensionOperation: () -> Unit = {},
     onInstallPiExtensionPackage: (String) -> Unit,
     onLoadPiPackageDetails: (PiExtensionCatalogEntry) -> Unit,
     onUpdatePiExtensionPackage: (String) -> Unit,
     onRemovePiExtension: (InstalledPiExtension) -> Unit,
     onSetPiExtensionEnabled: (InstalledPiExtension, Boolean) -> Unit,
+    onOpenHostedApp: (String) -> Unit = {},
+    onPinHostedApp: (String) -> Unit = {},
+    onUninstallHostedApp: (String) -> Unit = {},
+    onSetHostedAppsEnabled: (Boolean) -> Unit = {},
     onImportPiExtension: () -> Unit,
     onAllowNativeModsOnNextStart: () -> Unit,
     onDisableNativeModsOnNextStart: () -> Unit,
@@ -1056,17 +1088,31 @@ fun SettingsScreen(
             SettingsPage.Extensions -> PiExtensionsPage(
                 installedExtensions = installedPiExtensions,
                 hasLoadedInstalledExtensions = hasLoadedInstalledPiExtensions,
+                extensionSettingsPages = extensionSettings,
                 nativeModState = nativeModState,
                 catalog = piExtensionCatalog,
-                isLoading = isLoadingPiExtensions,
+                isLoadingInstalled = isLoadingPiExtensions,
+                isLoadingCatalog = isLoadingPiExtensionCatalog,
                 catalogError = piExtensionCatalogError,
                 operationSource = piExtensionOperationSource,
+                operationLabel = piExtensionOperationLabel,
                 operationPhase = piExtensionOperationPhase,
                 installedError = piExtensionInstalledError,
-                onRefresh = onRefreshPiExtensions,
+                onRefreshInstalled = onRefreshPiExtensions,
+                onRefreshCatalog = onRefreshPiExtensionCatalog,
+                onCancelOperation = onCancelPiExtensionOperation,
                 onUpdate = onUpdatePiExtensionPackage,
                 onRemove = onRemovePiExtension,
                 onSetEnabled = onSetPiExtensionEnabled,
+                onOpenExtensionSettings = { pageId ->
+                    selectedExtensionSettingsId = pageId
+                    selectedExtensionSettingsCategoryId = ""
+                    currentPage = SettingsPage.ExtensionSettings.name
+                },
+                onOpenHostedApp = onOpenHostedApp,
+                onPinHostedApp = onPinHostedApp,
+                onUninstallHostedApp = onUninstallHostedApp,
+                onSetHostedAppsEnabled = onSetHostedAppsEnabled,
                 onImport = onImportPiExtension,
                 onAllowNativeModsOnNextStart = onAllowNativeModsOnNextStart,
                 onDisableNativeModsOnNextStart = onDisableNativeModsOnNextStart,
@@ -1103,13 +1149,13 @@ fun SettingsScreen(
                         entry = entry,
                         details = selectedPiPackageDetails
                             ?.takeIf { selectedPiPackageSource == entry.source },
-                        installed = installedPiExtensions.any {
-                            it.kind == PiExtensionInstallKind.Package && it.source == entry.source
-                        },
+                        installed = isCatalogEntryInstalled(entry, installedPiExtensions),
                         isLoading = isLoadingPiPackageDetails,
                         error = piPackageDetailsError,
                         isOperating = piExtensionOperationSource == entry.source,
+                        operationLabel = piExtensionOperationLabel.ifBlank { entry.name },
                         operationPhase = piExtensionOperationPhase,
+                        onCancelOperation = onCancelPiExtensionOperation,
                         onRetry = { onLoadPiPackageDetails(entry) },
                         onInstall = { onInstallPiExtensionPackage(entry.source) },
                         onBack = { currentPage = SettingsPage.Extensions.name },
@@ -4177,54 +4223,131 @@ private fun ScriptExtensionStatusCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PiExtensionsPage(
     installedExtensions: List<InstalledPiExtension>,
     hasLoadedInstalledExtensions: Boolean,
+    extensionSettingsPages: List<com.zhousl.aether.data.AetherAppExtensionSettingsPage>,
     nativeModState: AetherNativeModState,
     catalog: List<PiExtensionCatalogEntry>,
-    isLoading: Boolean,
+    isLoadingInstalled: Boolean,
+    isLoadingCatalog: Boolean,
     catalogError: String,
     operationSource: String,
+    operationLabel: String,
     operationPhase: String,
     installedError: String,
-    onRefresh: () -> Unit,
+    onRefreshInstalled: () -> Unit,
+    onRefreshCatalog: () -> Unit,
+    onCancelOperation: () -> Unit,
     onUpdate: (String) -> Unit,
     onRemove: (InstalledPiExtension) -> Unit,
     onSetEnabled: (InstalledPiExtension, Boolean) -> Unit,
+    onOpenExtensionSettings: (String) -> Unit,
+    onOpenHostedApp: (String) -> Unit,
+    onPinHostedApp: (String) -> Unit,
+    onUninstallHostedApp: (String) -> Unit,
+    onSetHostedAppsEnabled: (Boolean) -> Unit,
     onImport: () -> Unit,
     onAllowNativeModsOnNextStart: () -> Unit,
     onDisableNativeModsOnNextStart: () -> Unit,
     onSelectPackage: (PiExtensionCatalogEntry) -> Unit,
     onBack: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val appRuntime = remember(context) {
+        (context.applicationContext as AetherApplication).runtime
+    }
+    val hostedAppsManager = appRuntime.hostedApps
+    val hostedRevision by hostedAppsManager.revision.collectAsStateWithLifecycle()
+    val hostedAppsList = remember(hostedRevision) { hostedAppsManager.installedApps() }
+    val hostingEnabled = remember(hostedRevision) { hostedAppsManager.isHostingEnabled() }
+
     val scriptExtensionController = LocalAetherExtensionUiController.current
     val scriptExtensionErrors = scriptExtensionController?.snapshot?.errors.orEmpty()
     val scriptExtensionRuntimeError = scriptExtensionController?.runtimeError.orEmpty()
-    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) } // 0=Installed, 1=Apps, 2=Discover
+    var discoverFilter by rememberSaveable { mutableIntStateOf(0) } // 0=All, 1=Compatible, 2=Extensions, 3=Skills
     var searchValue by rememberSaveable(stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(""))
     }
+    var pendingRemoveExtension by remember { mutableStateOf<InstalledPiExtension?>(null) }
+    var pendingRemoveApp by remember { mutableStateOf<HostedApp?>(null) }
+
     LaunchedEffect(Unit) {
-        onRefresh()
+        onRefreshInstalled()
     }
-    val installedSources = installedExtensions
-        .filter { it.kind == PiExtensionInstallKind.Package }
-        .map { it.source }
-        .toSet()
-    val query = searchValue.text.trim()
-    val visibleCatalog = catalog
-        .asSequence()
-        .filter { entry ->
-            query.isBlank() || listOf(
-                entry.name,
-                entry.description,
-                entry.author,
-                entry.source,
-            ).any { it.contains(query, ignoreCase = true) }
+    LaunchedEffect(selectedTab) {
+        if (selectedTab == 2 && catalog.isEmpty() && !isLoadingCatalog && catalogError.isBlank()) {
+            onRefreshCatalog()
         }
-        .take(40)
-        .toList()
+    }
+
+    val query = searchValue.text.trim()
+    val visibleCatalog = remember(catalog, query, discoverFilter) {
+        catalog
+            .asSequence()
+            .filter { entry ->
+                when (discoverFilter) {
+                    1 -> entry.compatibilityIssue == null
+                    2 -> entry.types.any { it.equals("extension", ignoreCase = true) } || entry.types.isEmpty()
+                    3 -> entry.types.any { it.equals("skill", ignoreCase = true) }
+                    else -> true
+                }
+            }
+            .filter { entry ->
+                query.isBlank() || listOf(
+                    entry.name,
+                    entry.description,
+                    entry.author,
+                    entry.source,
+                ).any { it.contains(query, ignoreCase = true) }
+            }
+            .take(50)
+            .toList()
+    }
+
+    // Resolve the aether-apps extension ID for invoking library / model / demo / ZIP actions
+    val appsExtensionId = remember(scriptExtensionController?.snapshot?.extensions) {
+        scriptExtensionController?.snapshot?.extensions
+            ?.firstOrNull { it.name.equals("aether-apps", ignoreCase = true) || it.path.contains("/aether-apps/") }
+            ?.id
+            .orEmpty()
+    }
+    val appsInstalledExtension = remember(installedExtensions) {
+        installedExtensions.firstOrNull {
+            it.name.equals("aether-apps", ignoreCase = true) ||
+                it.installedPath.endsWith("/aether-apps")
+        }
+    }
+
+    pendingRemoveExtension?.let { target ->
+        ExtensionConfirmDialog(
+            title = stringResource(R.string.settings_extension_remove_confirm_title, target.name),
+            body = stringResource(R.string.settings_extension_remove_confirm_body),
+            confirmLabel = stringResource(R.string.action_remove),
+            onDismiss = { pendingRemoveExtension = null },
+            onConfirm = {
+                pendingRemoveExtension = null
+                onRemove(target)
+            },
+        )
+    }
+
+    pendingRemoveApp?.let { target ->
+        ExtensionConfirmDialog(
+            title = stringResource(R.string.settings_hosted_app_remove_confirm_title, target.label),
+            body = stringResource(R.string.settings_hosted_app_remove_confirm_body),
+            confirmLabel = stringResource(R.string.action_remove),
+            onDismiss = { pendingRemoveApp = null },
+            onConfirm = {
+                pendingRemoveApp = null
+                onUninstallHostedApp(target.id)
+            },
+        )
+    }
 
     SubPageScaffold(
         title = stringResource(R.string.settings_pi_extensions),
@@ -4236,42 +4359,25 @@ private fun PiExtensionsPage(
         onTrailingAction = onImport,
     ) {
         if (operationSource.isNotBlank()) {
-            PiExtensionProgress(operationPhase)
-            Spacer(Modifier.height(14.dp))
-        }
-        Text(
-            text = stringResource(R.string.settings_pi_extensions_warning),
-            style = MaterialTheme.typography.bodySmall,
-            color = AetherOnSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp),
-        )
-
-        if (scriptExtensionRuntimeError.isNotBlank() || scriptExtensionErrors.isNotEmpty()) {
-            Spacer(Modifier.height(14.dp))
-            ScriptExtensionStatusCard(
-                runtimeError = scriptExtensionRuntimeError,
-                errors = scriptExtensionErrors,
+            PiExtensionProgress(
+                phase = operationPhase,
+                label = operationLabel,
+                onCancel = onCancelOperation,
             )
-        }
-
-        if (
-            nativeModState.safeModeActive ||
-            nativeModState.discovered.isNotEmpty() ||
-            nativeModState.loaded.isNotEmpty() ||
-            nativeModState.failures.isNotEmpty()
-        ) {
             Spacer(Modifier.height(14.dp))
-            NativeModStatusCard(
-                state = nativeModState,
-                onAllowNativeModsOnNextStart = onAllowNativeModsOnNextStart,
-                onDisableNativeModsOnNextStart = onDisableNativeModsOnNextStart,
-            )
         }
-
-        Spacer(Modifier.height(16.dp))
 
         val tabs = listOf(
-            stringResource(R.string.settings_extension_installed),
+            if (hasLoadedInstalledExtensions) {
+                "${stringResource(R.string.settings_extension_installed)} · ${installedExtensions.size}"
+            } else {
+                stringResource(R.string.settings_extension_installed)
+            },
+            if (hostedAppsList.isNotEmpty()) {
+                "${stringResource(R.string.settings_extension_tab_apps)} · ${hostedAppsList.size}"
+            } else {
+                stringResource(R.string.settings_extension_tab_apps)
+            },
             stringResource(R.string.settings_extension_discover),
         )
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
@@ -4280,45 +4386,90 @@ private fun PiExtensionsPage(
                     shape = SegmentedButtonDefaults.itemShape(index = index, count = tabs.size),
                     onClick = { selectedTab = index },
                     selected = selectedTab == index,
+                    icon = {},
                     colors = SegmentedButtonDefaults.colors(
                         activeContainerColor = AetherPrimary,
                         activeContentColor = AetherOnPrimary,
                         inactiveContainerColor = AetherSurfaceHigh,
                         inactiveContentColor = AetherOnSurface,
+                        activeBorderColor = Color.Transparent,
+                        inactiveBorderColor = AetherOutline.copy(alpha = 0.35f),
                     ),
                 ) {
-                    Text(label)
+                    Text(
+                        text = label,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
                 }
             }
         }
 
-        Spacer(Modifier.height(18.dp))
-
-        if (selectedTab == 0 && installedError.isNotBlank()) {
-            Text(installedError, color = MaterialTheme.colorScheme.error)
-            SettingsActionButton(
-                label = stringResource(R.string.common_retry),
-                onClick = onRefresh,
-                enabled = operationSource.isBlank() && !isLoading,
-            )
-        }
+        Spacer(Modifier.height(16.dp))
 
         when (selectedTab) {
             0 -> {
-                if (!hasLoadedInstalledExtensions) {
+                if (scriptExtensionRuntimeError.isNotBlank() || scriptExtensionErrors.isNotEmpty()) {
+                    ScriptExtensionStatusCard(
+                        runtimeError = scriptExtensionRuntimeError,
+                        errors = scriptExtensionErrors,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+
+                if (
+                    nativeModState.safeModeActive ||
+                    nativeModState.discovered.isNotEmpty() ||
+                    nativeModState.loaded.isNotEmpty() ||
+                    nativeModState.failures.isNotEmpty()
+                ) {
+                    NativeModStatusCard(
+                        state = nativeModState,
+                        onAllowNativeModsOnNextStart = onAllowNativeModsOnNextStart,
+                        onDisableNativeModsOnNextStart = onDisableNativeModsOnNextStart,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+
+                if (installedError.isNotBlank()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.65f))
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text(
+                            text = installedError,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        SettingsSubtleActionButton(
+                            label = stringResource(R.string.common_retry),
+                            onClick = onRefreshInstalled,
+                            enabled = operationSource.isBlank() && !isLoadingInstalled,
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
+
+                if (!hasLoadedInstalledExtensions && installedExtensions.isEmpty()) {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 36.dp),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(22.dp),
+                            modifier = Modifier.size(20.dp),
                             strokeWidth = 2.dp,
                             color = AetherPrimary,
                         )
                         Spacer(Modifier.width(12.dp))
                         Text(
                             stringResource(R.string.settings_loading_installed_extensions),
+                            style = MaterialTheme.typography.bodyMedium,
                             color = AetherOnSurfaceVariant,
                         )
                     }
@@ -4350,45 +4501,188 @@ private fun PiExtensionsPage(
                     }
                 } else {
                     installedExtensions.forEach { extension ->
+                        val matchingSettingsPage = extensionSettingsPages.firstOrNull { page ->
+                            normalizePiPackageName(page.extensionName) == normalizePiPackageName(extension.name)
+                        }
                         InstalledPiExtensionCard(
                             extension = extension,
                             isOperating = operationSource == extension.id ||
                                 operationSource == extension.source,
                             actionsEnabled = operationSource.isBlank(),
+                            hasSettingsPage = matchingSettingsPage != null && extension.isEnabled,
+                            onOpenSettings = {
+                                matchingSettingsPage?.let { onOpenExtensionSettings(it.id) }
+                            },
                             onUpdate = { onUpdate(extension.source) },
-                            onRemove = { onRemove(extension) },
+                            onRemove = { pendingRemoveExtension = extension },
                             onSetEnabled = { enabled -> onSetEnabled(extension, enabled) },
                         )
-                        Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(12.dp))
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Info,
+                            contentDescription = null,
+                            tint = AetherOnSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.size(15.dp),
+                        )
+                        Text(
+                            text = stringResource(R.string.settings_extension_trusted_note),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AetherOnSurfaceVariant,
+                        )
                     }
                 }
             }
 
+            1 -> {
+                HostedAppsCategorySection(
+                    apps = hostedAppsList,
+                    hostingEnabled = hostingEnabled,
+                    appsExtension = appsInstalledExtension,
+                    appsExtensionId = appsExtensionId,
+                    actionsEnabled = operationSource.isBlank(),
+                    onSetHostingEnabled = onSetHostedAppsEnabled,
+                    onEnableAppsExtension = { ext -> onSetEnabled(ext, true) },
+                    onOpenApp = onOpenHostedApp,
+                    onPinApp = onPinHostedApp,
+                    onUninstallApp = { app -> pendingRemoveApp = app },
+                    onInvokeAppsAction = { action, args ->
+                        if (appsExtensionId.isNotBlank()) {
+                            scriptExtensionController?.onAction?.invoke(appsExtensionId, action, args)
+                        }
+                    },
+                )
+            }
+
             else -> {
-                SettingsCardGroup {
-                    ChatGptTextField(
-                        label = stringResource(R.string.settings_search_extensions),
-                        value = searchValue,
-                        onValueChange = { searchValue = it },
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(AetherSurfaceHigh)
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Search,
+                            contentDescription = null,
+                            tint = AetherOnSurfaceVariant,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Box(modifier = Modifier.weight(1f)) {
+                            if (searchValue.text.isEmpty()) {
+                                Text(
+                                    text = stringResource(R.string.settings_search_extensions),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = AetherOnSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            BasicTextField(
+                                value = searchValue,
+                                onValueChange = { searchValue = it },
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(color = AetherOnSurface),
+                                cursorBrush = SolidColor(AetherPrimary),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                        if (searchValue.text.isNotEmpty()) {
+                            Icon(
+                                imageVector = Icons.Rounded.Close,
+                                contentDescription = null,
+                                tint = AetherOnSurfaceVariant,
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .clickable { searchValue = TextFieldValue("") },
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = onRefreshCatalog,
+                        enabled = !isLoadingCatalog,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(AetherSurfaceHigh),
+                    ) {
+                        if (isLoadingCatalog) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = AetherPrimary,
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Rounded.Refresh,
+                                contentDescription = stringResource(R.string.common_retry),
+                                tint = AetherOnSurface,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+
+                val filterLabels = listOf(
+                    stringResource(R.string.settings_extension_filter_all),
+                    stringResource(R.string.settings_extension_filter_compatible),
+                    stringResource(R.string.settings_extension_filter_extensions),
+                    stringResource(R.string.settings_extension_filter_skills),
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    filterLabels.forEachIndexed { index, label ->
+                        val selected = discoverFilter == index
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(if (selected) AetherPrimary else AetherSurfaceHigh)
+                                .clickable { discoverFilter = index }
+                                .padding(horizontal = 14.dp, vertical = 7.dp),
+                        ) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                                color = if (selected) AetherOnPrimary else AetherOnSurfaceVariant,
+                            )
+                        }
+                    }
                 }
                 Spacer(Modifier.height(14.dp))
 
                 when {
-                    isLoading && catalog.isEmpty() -> {
+                    isLoadingCatalog && catalog.isEmpty() -> {
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 36.dp),
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(22.dp),
+                                modifier = Modifier.size(20.dp),
                                 strokeWidth = 2.dp,
                                 color = AetherPrimary,
                             )
                             Spacer(Modifier.width(12.dp))
                             Text(
                                 stringResource(R.string.settings_loading_extensions),
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = AetherOnSurfaceVariant,
                             )
                         }
@@ -4405,7 +4699,7 @@ private fun PiExtensionsPage(
                                 Spacer(Modifier.height(14.dp))
                                 SettingsActionButton(
                                     label = stringResource(R.string.action_retry),
-                                    onClick = onRefresh,
+                                    onClick = onRefreshCatalog,
                                 )
                             }
                         }
@@ -4421,12 +4715,18 @@ private fun PiExtensionsPage(
                     }
 
                     else -> visibleCatalog.forEach { entry ->
+                        val isInstalled = isCatalogEntryInstalled(entry, installedExtensions)
+                        val isBuiltIn = isInstalled && installedExtensions.any {
+                            it.kind == PiExtensionInstallKind.Imported &&
+                                normalizePiPackageName(it.name) == normalizePiPackageName(entry.name)
+                        }
                         PiExtensionCatalogCard(
                             entry = entry,
-                            installed = installedSources.contains(entry.source),
+                            installed = isInstalled,
+                            builtIn = isBuiltIn,
                             onClick = { onSelectPackage(entry) },
                         )
-                        Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(12.dp))
                     }
                 }
             }
@@ -4434,23 +4734,418 @@ private fun PiExtensionsPage(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun HostedAppsCategorySection(
+    apps: List<HostedApp>,
+    hostingEnabled: Boolean,
+    appsExtension: InstalledPiExtension?,
+    appsExtensionId: String,
+    actionsEnabled: Boolean,
+    onSetHostingEnabled: (Boolean) -> Unit,
+    onEnableAppsExtension: (InstalledPiExtension) -> Unit,
+    onOpenApp: (String) -> Unit,
+    onPinApp: (String) -> Unit,
+    onUninstallApp: (HostedApp) -> Unit,
+    onInvokeAppsAction: (String, org.json.JSONObject) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Unified header card for Hosted Web Apps
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(AetherSurfaceHigh)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(AetherPrimaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Extension,
+                        contentDescription = null,
+                        tint = AetherOnPrimaryContainer,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.settings_hosted_apps_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AetherOnSurface,
+                    )
+                    Text(
+                        text = if (hostingEnabled) {
+                            stringResource(R.string.settings_hosted_apps_subtitle_enabled, apps.size)
+                        } else {
+                            stringResource(R.string.settings_hosted_apps_subtitle_disabled)
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AetherOnSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = hostingEnabled,
+                    onCheckedChange = onSetHostingEnabled,
+                    enabled = actionsEnabled,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = AetherOnPrimary,
+                        checkedTrackColor = AetherPrimary,
+                    ),
+                )
+            }
+
+            if (appsExtensionId.isNotBlank()) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    SmallChipButton(
+                        label = stringResource(R.string.settings_hosted_apps_import_zip),
+                        onClick = { onInvokeAppsAction("import-zip", org.json.JSONObject()) },
+                        enabled = actionsEnabled && hostingEnabled,
+                    )
+                    SmallChipButton(
+                        label = stringResource(R.string.settings_hosted_apps_open_library),
+                        onClick = { onInvokeAppsAction("open-apps", org.json.JSONObject()) },
+                        enabled = actionsEnabled,
+                    )
+                }
+            }
+        }
+
+        if (appsExtension != null && !appsExtension.isEnabled) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Color(0xFFFFB020).copy(alpha = 0.14f))
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.WarningAmber,
+                    contentDescription = null,
+                    tint = Color(0xFFFFB020),
+                    modifier = Modifier.size(22.dp),
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.settings_hosted_apps_extension_disabled_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AetherOnSurface,
+                    )
+                    Text(
+                        text = stringResource(R.string.settings_hosted_apps_extension_disabled_body),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AetherOnSurfaceVariant,
+                    )
+                }
+                SmallChipButton(
+                    label = stringResource(R.string.settings_hosted_apps_enable_extension),
+                    onClick = { onEnableAppsExtension(appsExtension) },
+                    enabled = actionsEnabled,
+                )
+            }
+        }
+
+        if (apps.isEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(AetherSurfaceHigh)
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_hosted_apps_empty_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AetherOnSurface,
+                )
+                Text(
+                    text = stringResource(R.string.settings_hosted_apps_empty_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AetherOnSurfaceVariant,
+                )
+                if (appsExtensionId.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    SettingsActionButton(
+                        label = stringResource(R.string.settings_hosted_apps_launch_demo),
+                        onClick = { onInvokeAppsAction("launch-demo", org.json.JSONObject()) },
+                        enabled = actionsEnabled,
+                    )
+                }
+            }
+        } else {
+            apps.forEach { app ->
+                HostedAppCard(
+                    app = app,
+                    hostingEnabled = hostingEnabled,
+                    canConfigureModel = appsExtensionId.isNotBlank(),
+                    actionsEnabled = actionsEnabled,
+                    onOpen = { onOpenApp(app.id) },
+                    onPin = { onPinApp(app.id) },
+                    onConfigureModel = {
+                        onInvokeAppsAction(
+                            "open-ai-settings",
+                            org.json.JSONObject().put("id", app.id),
+                        )
+                    },
+                    onUninstall = { onUninstallApp(app) },
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun HostedAppCard(
+    app: HostedApp,
+    hostingEnabled: Boolean,
+    canConfigureModel: Boolean,
+    actionsEnabled: Boolean,
+    onOpen: () -> Unit,
+    onPin: () -> Unit,
+    onConfigureModel: () -> Unit,
+    onUninstall: () -> Unit,
+) {
+    val iconBitmap by produceState<androidx.compose.ui.graphics.ImageBitmap?>(
+        initialValue = null,
+        key1 = app.assets.path,
+        key2 = app.version,
+    ) {
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                val file = File(app.assets, "icon-192.png")
+                if (file.isFile && file.length() <= 1024 * 1024) {
+                    BitmapFactory.decodeFile(file.path)?.asImageBitmap()
+                } else {
+                    null
+                }
+            }.getOrNull()
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(AetherSurfaceHigh)
+            .clickable(enabled = hostingEnabled && actionsEnabled, onClick = onOpen)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            if (iconBitmap != null) {
+                Image(
+                    bitmap = iconBitmap!!,
+                    contentDescription = app.label,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(14.dp)),
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(AetherPrimaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.AutoAwesome,
+                        contentDescription = null,
+                        tint = AetherOnPrimaryContainer,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = app.label,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AetherOnSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = "v${app.version} · ${app.id}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AetherOnSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Button(
+                onClick = onOpen,
+                enabled = hostingEnabled && actionsEnabled,
+                shape = RoundedCornerShape(999.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = AetherPrimary,
+                    contentColor = AetherOnPrimary,
+                ),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.PlayArrow,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = stringResource(R.string.settings_hosted_apps_open),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
+        }
+
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            SmallChipButton(
+                label = stringResource(R.string.settings_hosted_apps_pin),
+                onClick = onPin,
+                enabled = hostingEnabled && actionsEnabled,
+            )
+            if (canConfigureModel) {
+                SmallChipButton(
+                    label = stringResource(R.string.settings_hosted_apps_model),
+                    onClick = onConfigureModel,
+                    enabled = actionsEnabled,
+                )
+            }
+            SmallChipButton(
+                label = stringResource(R.string.action_remove),
+                onClick = onUninstall,
+                isDestructive = true,
+                enabled = actionsEnabled,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ExtensionCompatibilityPill(
+    issue: PiPackageCompatibilityIssue?,
+    installed: Boolean,
+    builtIn: Boolean,
+) {
+    val (label, containerColor, contentColor) = when {
+        builtIn -> Triple(
+            stringResource(R.string.settings_extension_compat_builtin),
+            AetherPrimaryContainer,
+            AetherOnPrimaryContainer,
+        )
+        installed -> Triple(
+            stringResource(R.string.settings_extension_installed),
+            AetherPrimaryContainer,
+            AetherOnPrimaryContainer,
+        )
+        issue == null -> Triple(
+            stringResource(R.string.settings_extension_compat_compatible),
+            Color(0xFF10B981).copy(alpha = 0.14f),
+            Color(0xFF10B981),
+        )
+        issue == PiPackageCompatibilityIssue.InteractiveUi -> Triple(
+            stringResource(R.string.settings_extension_compat_tui),
+            Color(0xFFFFB020).copy(alpha = 0.16f),
+            Color(0xFFD97706),
+        )
+        issue == PiPackageCompatibilityIssue.Theme -> Triple(
+            stringResource(R.string.settings_extension_compat_theme),
+            Color(0xFFFFB020).copy(alpha = 0.16f),
+            Color(0xFFD97706),
+        )
+        issue == PiPackageCompatibilityIssue.Prompt -> Triple(
+            stringResource(R.string.settings_extension_compat_prompt),
+            Color(0xFFFFB020).copy(alpha = 0.16f),
+            Color(0xFFD97706),
+        )
+        else -> Triple(
+            stringResource(R.string.settings_extension_compat_platform),
+            Color(0xFFFFB020).copy(alpha = 0.16f),
+            Color(0xFFD97706),
+        )
+    }
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(containerColor)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (issue != null && !installed) {
+            Icon(
+                imageVector = Icons.Rounded.WarningAmber,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(13.dp),
+            )
+        } else if (installed || issue == null) {
+            Icon(
+                imageVector = Icons.Rounded.CheckCircle,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(13.dp),
+            )
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = contentColor,
+            maxLines = 1,
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PiExtensionCatalogCard(
     entry: PiExtensionCatalogEntry,
     installed: Boolean,
+    builtIn: Boolean = false,
     onClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(20.dp))
             .background(AetherSurfaceHigh)
             .clickable(onClick = onClick)
             .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -4458,8 +5153,10 @@ private fun PiExtensionCatalogCard(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = AetherOnSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(2.dp))
                 Text(
                     text = buildString {
                         if (entry.author.isNotBlank()) append(entry.author)
@@ -4471,45 +5168,111 @@ private fun PiExtensionCatalogCard(
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = AetherOnSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (entry.compatibilityIssue != null) {
-                    Icon(
-                        imageVector = Icons.Rounded.WarningAmber,
-                        contentDescription = stringResource(R.string.settings_package_may_be_incompatible),
-                        tint = Color(0xFFFFB020),
-                        modifier = Modifier.size(22.dp),
-                    )
-                }
-                if (installed) {
-                    ActionPreviewPill(
-                        label = stringResource(R.string.settings_extension_installed),
-                    )
-                }
-            }
+            ExtensionCompatibilityPill(
+                issue = entry.compatibilityIssue,
+                installed = installed,
+                builtIn = builtIn,
+            )
         }
         if (entry.description.isNotBlank()) {
-            Spacer(Modifier.height(10.dp))
             Text(
                 text = entry.description,
                 style = MaterialTheme.typography.bodyMedium,
                 color = AetherOnSurfaceVariant,
-                maxLines = 3,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Spacer(Modifier.height(10.dp))
-        Text(
-            text = entry.source,
-            style = MaterialTheme.typography.labelMedium,
-            color = AetherOnSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        if (entry.compatibilityIssue != null && !installed) {
+            Text(
+                text = piPackageCompatibilityMessage(entry.compatibilityIssue),
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFD97706),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (entry.types.isNotEmpty()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                entry.types.take(4).forEach { type ->
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(AetherSurfaceHigher)
+                            .padding(horizontal = 9.dp, vertical = 3.dp),
+                    ) {
+                        Text(
+                            text = type,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = AetherOnSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExtensionConfirmDialog(
+    title: String,
+    body: String,
+    confirmLabel: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp)
+                .shadow(22.dp, RoundedCornerShape(28.dp), ambientColor = AetherScrim, spotColor = AetherScrim)
+                .clip(RoundedCornerShape(28.dp))
+                .background(AetherSurfaceHigh)
+                .padding(20.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = AetherOnSurface,
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = body,
+                style = MaterialTheme.typography.bodyMedium,
+                color = AetherOnSurfaceVariant,
+            )
+            Spacer(Modifier.height(18.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                SettingsSubtleActionButton(
+                    label = stringResource(R.string.action_cancel),
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                )
+                Button(
+                    onClick = onConfirm,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    ),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(confirmLabel)
+                }
+            }
+        }
     }
 }
 
@@ -4521,7 +5284,9 @@ private fun PiPackageDetailPage(
     isLoading: Boolean,
     error: String,
     isOperating: Boolean,
+    operationLabel: String = entry.name,
     operationPhase: String,
+    onCancelOperation: () -> Unit = {},
     onRetry: () -> Unit,
     onInstall: () -> Unit,
     onBack: () -> Unit,
@@ -4546,7 +5311,14 @@ private fun PiPackageDetailPage(
         title = entry.name,
         onBack = onBack,
     ) {
-        if (isOperating) PiExtensionProgress(operationPhase)
+        if (isOperating) {
+            PiExtensionProgress(
+                phase = operationPhase,
+                label = operationLabel,
+                onCancel = onCancelOperation,
+            )
+            Spacer(Modifier.height(14.dp))
+        }
         when {
             isLoading && details == null -> {
                 Row(
@@ -4845,39 +5617,74 @@ private fun PiPackageInstallWarningDialog(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun InstalledPiExtensionCard(
     extension: InstalledPiExtension,
     isOperating: Boolean,
     actionsEnabled: Boolean,
+    hasSettingsPage: Boolean = false,
+    onOpenSettings: () -> Unit = {},
     onUpdate: () -> Unit,
     onRemove: () -> Unit,
     onSetEnabled: (Boolean) -> Unit,
 ) {
+    val resources = listOfNotNull(
+        if (extension.extensionCount > 0) stringResource(R.string.settings_package_extensions_count, extension.extensionCount) else null,
+        if (extension.aetherExtensionCount > 0) stringResource(R.string.settings_package_aether_extensions_count, extension.aetherExtensionCount) else null,
+        if (extension.nativeEntrypointCount > 0) stringResource(R.string.settings_package_native_mods_count, extension.nativeEntrypointCount) else null,
+        if (extension.skillCount > 0) stringResource(R.string.settings_package_skills_count, extension.skillCount) else null,
+        if (extension.promptCount > 0) stringResource(R.string.settings_package_prompts_count, extension.promptCount) else null,
+        if (extension.themeCount > 0) stringResource(R.string.settings_package_themes_count, extension.themeCount) else null,
+    )
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(20.dp))
             .background(AetherSurfaceHigh)
             .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Top,
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (extension.isEnabled) AetherPrimaryContainer else AetherSurfaceHigher),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Extension,
+                    contentDescription = null,
+                    tint = if (extension.isEnabled) AetherOnPrimaryContainer else AetherOnSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = extension.name,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = AetherOnSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                if (extension.version.isNotBlank()) {
-                    Spacer(Modifier.height(3.dp))
+                val subtitle = buildString {
+                    if (extension.version.isNotBlank()) append("v${extension.version}")
+                    if (extension.version.isNotBlank() && extension.source.isNotBlank()) append(" · ")
+                    if (extension.source.isNotBlank()) append(extension.source)
+                }
+                if (subtitle.isNotBlank()) {
                     Text(
-                        text = "v${extension.version}",
+                        text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
                         color = AetherOnSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -4887,7 +5694,7 @@ private fun InstalledPiExtensionCard(
             ) {
                 if (isOperating) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp),
+                        modifier = Modifier.size(20.dp),
                         strokeWidth = 2.dp,
                         color = AetherPrimary,
                     )
@@ -4904,68 +5711,47 @@ private fun InstalledPiExtensionCard(
             }
         }
         if (extension.description.isNotBlank()) {
-            Spacer(Modifier.height(10.dp))
             Text(
                 text = extension.description,
                 style = MaterialTheme.typography.bodyMedium,
                 color = AetherOnSurfaceVariant,
-                maxLines = 3,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        run {
-            val extensionLabel = if (extension.extensionCount > 0) {
-                stringResource(R.string.settings_package_extensions_count, extension.extensionCount)
-            } else null
-            val aetherExtensionLabel = if (extension.aetherExtensionCount > 0) {
-                stringResource(
-                    R.string.settings_package_aether_extensions_count,
-                    extension.aetherExtensionCount,
-                )
-            } else null
-            val nativeEntrypointLabel = if (extension.nativeEntrypointCount > 0) {
-                stringResource(
-                    R.string.settings_package_native_mods_count,
-                    extension.nativeEntrypointCount,
-                )
-            } else null
-            val skillLabel = if (extension.skillCount > 0) {
-                stringResource(R.string.settings_package_skills_count, extension.skillCount)
-            } else null
-            val promptLabel = if (extension.promptCount > 0) {
-                stringResource(R.string.settings_package_prompts_count, extension.promptCount)
-            } else null
-            val themeLabel = if (extension.themeCount > 0) {
-                stringResource(R.string.settings_package_themes_count, extension.themeCount)
-            } else null
-            val resources = listOfNotNull(
-                extensionLabel,
-                aetherExtensionLabel,
-                nativeEntrypointLabel,
-                skillLabel,
-                promptLabel,
-                themeLabel,
-            )
-            if (resources.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = resources.joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AetherOnSurfaceVariant,
-                )
+        if (resources.isNotEmpty()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                resources.forEach { badge ->
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(AetherSurfaceHigher)
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    ) {
+                        Text(
+                            text = badge,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = AetherOnSurfaceVariant,
+                        )
+                    }
+                }
             }
         }
-        Spacer(Modifier.height(10.dp))
-        Text(
-            text = extension.source,
-            style = MaterialTheme.typography.labelMedium,
-            color = AetherOnSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
         if (!isOperating) {
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (hasSettingsPage) {
+                    SmallChipButton(
+                        label = stringResource(R.string.settings_extension_configure),
+                        onClick = onOpenSettings,
+                        enabled = actionsEnabled,
+                    )
+                }
                 if (extension.kind == PiExtensionInstallKind.Package) {
                     SmallChipButton(
                         label = stringResource(R.string.settings_update),
@@ -6555,7 +7341,11 @@ private fun SettingsCircleButton(
 }
 
 @Composable
-private fun PiExtensionProgress(phase: String) {
+private fun PiExtensionProgress(
+    phase: String,
+    label: String = "",
+    onCancel: (() -> Unit)? = null,
+) {
     var elapsedSeconds by remember { mutableStateOf(0L) }
     LaunchedEffect(Unit) {
         val startedAt = android.os.SystemClock.elapsedRealtime()
@@ -6564,21 +7354,97 @@ private fun PiExtensionProgress(phase: String) {
             delay(1000)
         }
     }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(
-            stringResource(when (phase) {
-                "installing" -> R.string.settings_extension_phase_installing
-                "saving" -> R.string.settings_extension_phase_saving
-                "reloading" -> R.string.settings_extension_phase_reloading
-                "refreshing" -> R.string.settings_extension_phase_refreshing
-                else -> R.string.settings_extension_phase_preparing
-            }),
-            color = AetherOnSurface,
+    val stepFraction = when (phase) {
+        "preparing" -> 0.18f
+        "saving" -> 0.35f
+        "installing" -> 0.52f
+        "reloading" -> 0.78f
+        "refreshing" -> 0.94f
+        else -> 0.2f
+    }
+    val phaseText = stringResource(
+        when (phase) {
+            "installing" -> R.string.settings_extension_phase_installing
+            "saving" -> R.string.settings_extension_phase_saving
+            "reloading" -> R.string.settings_extension_phase_reloading
+            "refreshing" -> R.string.settings_extension_phase_refreshing
+            else -> R.string.settings_extension_phase_preparing
+        }
+    )
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(AetherSurfaceHigh)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                strokeWidth = 2.dp,
+                color = AetherPrimary,
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                if (label.isNotBlank()) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AetherOnSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    text = phaseText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AetherOnSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                text = "${elapsedSeconds}s",
+                style = MaterialTheme.typography.labelMedium,
+                color = AetherOnSurfaceVariant,
+            )
+            if (onCancel != null) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(AetherSurfaceHigher)
+                        .clickable(onClick = onCancel)
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.action_cancel),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AetherOnSurface,
+                    )
+                }
+            }
+        }
+        LinearProgressIndicator(
+            progress = { stepFraction },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(4.dp)
+                .clip(RoundedCornerShape(999.dp)),
+            color = AetherPrimary,
+            trackColor = AetherSurfaceHigher,
         )
-        Text(
-            stringResource(R.string.settings_extension_operation_elapsed, elapsedSeconds),
-            style = MaterialTheme.typography.bodySmall,
-            color = AetherOnSurfaceVariant,
-        )
+        if (elapsedSeconds >= 8L) {
+            Text(
+                text = stringResource(R.string.settings_extension_operation_slow_hint),
+                style = MaterialTheme.typography.labelSmall,
+                color = AetherOnSurfaceVariant,
+            )
+        }
     }
 }
