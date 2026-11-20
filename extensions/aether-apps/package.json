@@ -1,0 +1,15 @@
+{
+  "name": "aether-apps",
+  "version": "1.0.0",
+  "description": "Host and launch local AI-powered web apps in standalone Android windows using Aether's configured models and scoped storage.",
+  "type": "module",
+  "aether": {
+    "api": {
+      "min": 2,
+      "max": 2
+    },
+    "extensions": [
+      "./aether.mjs"
+    ]
+  }
+}

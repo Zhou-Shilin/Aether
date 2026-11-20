@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Decision Lab</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <button id="backBtn" class="icon-btn hidden" aria-label="返回">←</button>
+        <div>
+          <h1 id="headerTitle">Decision Lab</h1>
+          <div id="modelBadge" class="model-pill">连接宿主模型中…</div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="exportBtn" class="ghost-btn" title="导出记录">导出</button>
+        <button id="infoBtn" class="icon-btn" aria-label="信息">ⓘ</button>
+      </div>
+    </header>
+
+    <main id="mainContent" class="main">
+      <!-- Lobby View -->
+      <section id="lobbyView" class="view">
+        <div class="mode-tabs" role="tablist">
+          <button class="mode-tab active" data-mode="sim">情境决策沙盘</button>
+          <button class="mode-tab" data-mode="cards">AI 速记卡片</button>
+        </div>
+
+        <!-- Simulator Lobby -->
+        <div id="simLobby" class="stack">
+          <div class="hero-card">
+            <div class="eyebrow">AETHER HOSTED WEB APP</div>
+            <h2>推演复杂局面，做出你的选择</h2>
+            <p class="muted">
+              直接复用 Aether 当前模型与鉴权，独立上下文不污染聊天记录；实时流式推演、多维指标变化与本地持久化保存。
+            </p>
+          </div>
+
+          <div class="section-label">精选场景</div>
+          <div id="presetGrid" class="preset-grid"></div>
+
+          <div class="card">
+            <div class="card-title">自定义推演主题</div>
+            <div class="input-row">
+              <input id="customTopicInput" type="text" placeholder="例如：2035年火星基地能源危机 / 开源项目核心维护者分歧" />
+              <button id="startCustomBtn" class="primary-btn">开始</button>
+            </div>
+          </div>
+
+          <div id="savedRunsSection" class="stack hidden">
+            <div class="section-label">最近存档</div>
+            <div id="savedRunsList" class="stack"></div>
+          </div>
+        </div>
+
+        <!-- Flashcard Lobby -->
+        <div id="cardsLobby" class="stack hidden">
+          <div class="hero-card">
+            <div class="eyebrow">FLASHCARD STUDIO</div>
+            <h2>把任意概念变成互动记忆卡</h2>
+            <p class="muted">
+              输入主题或一段笔记，AI 流式生成结构化翻转闪卡，本地跟踪掌握进度。
+            </p>
+          </div>
+
+          <div class="card stack">
+            <div class="card-title">生成新卡组</div>
+            <textarea id="cardTopicInput" rows="3" placeholder="输入主题或粘贴学习笔记，例如：HTTP/3 QUIC 握手机制与队头阻塞优化"></textarea>
+            <div class="row-between">
+              <div class="chip-group">
+                <button class="chip" data-card-preset="Rust 所有权与生命周期核心规则">Rust 所有权</button>
+                <button class="chip" data-card-preset="Android Binder IPC 机制与内存映射">Android Binder</button>
+                <button class="chip" data-card-preset="Transformer Attention 与 KV Cache 原理">KV Cache</button>
+              </div>
+            </div>
+            <button id="generateDeckBtn" class="primary-btn full-width">流式生成 5 张闪卡</button>
+          </div>
+
+          <div id="savedDecksSection" class="stack hidden">
+            <div class="section-label">已有卡组</div>
+            <div id="savedDecksList" class="stack"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Active Simulation View -->
+      <section id="simView" class="view hidden">
+        <div class="sim-header card">
+          <div class="row-between">
+            <div>
+              <div id="simTurnBadge" class="eyebrow">第 1 回合</div>
+              <h2 id="simScenarioTitle" class="sim-title">加载中…</h2>
+            </div>
+            <button id="restartSimBtn" class="ghost-btn">重开</button>
+          </div>
+          <div id="metricsGrid" class="metrics-grid"></div>
+        </div>
+
+        <div id="simStreamBox" class="card stream-card hidden">
+          <div class="row-between">
+            <span class="stream-status"><span class="pulse-dot"></span><span id="simStreamStatus">AI 推演中…</span></span>
+            <button id="cancelSimBtn" class="danger-ghost-btn">停止</button>
+          </div>
+          <details id="simThinkingDetails" class="thinking-box hidden">
+            <summary>思考过程</summary>
+            <pre id="simThinkingText" class="thinking-pre"></pre>
+          </details>
+          <pre id="simRawStream" class="stream-pre"></pre>
+        </div>
+
+        <div id="simErrorBox" class="error-card hidden"></div>
+
+        <article id="simNarrativeCard" class="card narrative-card hidden">
+          <div id="simFeedback" class="feedback-banner hidden"></div>
+          <h3 id="simBeatTitle"></h3>
+          <p id="simNarrative" class="narrative-text"></p>
+          <div id="simUsageLine" class="usage-line"></div>
+        </article>
+
+        <div id="simChoicesSection" class="stack hidden">
+          <div class="section-label">你的决策</div>
+          <div id="simChoicesList" class="stack"></div>
+        </div>
+
+        <details id="simHistoryDetails" class="card hidden">
+          <summary>决策时间线 (<span id="simHistoryCount">0</span>)</summary>
+          <div id="simHistoryList" class="timeline-list"></div>
+        </details>
+      </section>
+
+      <!-- Flashcard Study View -->
+      <section id="deckView" class="view hidden">
+        <div class="row-between">
+          <div>
+            <div id="deckProgressLabel" class="eyebrow">1 / 5</div>
+            <h2 id="deckTitle" class="sim-title">卡组</h2>
+          </div>
+          <button id="deckResetBtn" class="ghost-btn">重置进度</button>
+        </div>
+
+        <div id="deckStreamBox" class="card stream-card hidden">
+          <div class="row-between">
+            <span class="stream-status"><span class="pulse-dot"></span><span id="deckStreamStatus">正在流式生成闪卡…</span></span>
+            <button id="cancelDeckBtn" class="danger-ghost-btn">停止</button>
+          </div>
+          <details id="deckThinkingDetails" class="thinking-box hidden">
+            <summary>思考过程</summary>
+            <pre id="deckThinkingText" class="thinking-pre"></pre>
+          </details>
+          <pre id="deckRawStream" class="stream-pre"></pre>
+        </div>
+
+        <div id="deckErrorBox" class="error-card hidden"></div>
+
+        <div id="flashcardStage" class="flashcard-stage hidden">
+          <div id="flashcard" class="flashcard" role="button" tabindex="0" aria-label="点击翻转卡片">
+            <div class="flashcard-face flashcard-front">
+              <div class="eyebrow">问题 · 点击翻转</div>
+              <div id="cardFrontText" class="card-main-text"></div>
+              <div id="cardTagPill" class="tag-pill"></div>
+            </div>
+            <div class="flashcard-face flashcard-back">
+              <div class="eyebrow">解析</div>
+              <div id="cardBackText" class="card-answer-text"></div>
+              <div id="cardExampleText" class="card-example"></div>
+            </div>
+          </div>
+
+          <div class="study-controls">
+            <button id="needReviewBtn" class="secondary-btn">还需复习</button>
+            <button id="masteredBtn" class="primary-btn">已掌握 ✓</button>
+          </div>
+
+          <div class="row-between muted small">
+            <button id="prevCardBtn" class="ghost-btn">← 上一张</button>
+            <span id="deckMasteryStat">已掌握 0 / 0</span>
+            <button id="nextCardBtn" class="ghost-btn">下一张 →</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <dialog id="infoDialog" class="dialog">
+      <h3>关于此轻应用</h3>
+      <p class="muted">
+        <strong>Decision Lab</strong> 是运行在 Aether 宿主容器中的本地静态 WebApp（独立 Origin、无 localhost 服务、免单独登录）。
+      </p>
+      <ul class="info-list">
+        <li><strong>独立窗口</strong>：Android 独立文档任务 + 桌面快捷方式</li>
+        <li><strong>宿主模型直连</strong>：通过 <code>model_access</code> 复用 Aether 选定模型与 OAuth，支持流式输出与用量记账</li>
+        <li><strong>主题同步</strong>：自动读取 <code>window.AetherAppInfo.theme</code></li>
+        <li><strong>持久化 & 导出</strong>：本地保存进度，支持调用系统另存为导出 JSON</li>
+      </ul>
+      <div id="hostDiagPre" class="diag-box"></div>
+      <div class="dialog-actions">
+        <button id="closeInfoBtn" class="primary-btn">关闭</button>
+      </div>
+    </dialog>
+  </div>
+
+  <script type="module" src="./app.mjs"></script>
+</body>
+</html>
