@@ -364,6 +364,9 @@ class SharedChatHistoryStore(
         dao.updateSelectedModelKey(sessionId, selectedModelKey)
     }
 
+    suspend fun getAgentSessionMetadata(chatSessionId: String): ChatAgentSessionEntity? =
+        dao.getAgentSession(chatSessionId)
+
     suspend fun getAgentMessageEntryIds(sessionId: String, messageId: String): List<String> =
         dao.getAgentMessageRefs(sessionId, messageId).map(ChatAgentMessageRefEntity::piEntryId)
 

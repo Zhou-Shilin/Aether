@@ -175,3 +175,16 @@ class PiBridgeException(
     val code: String = "pi_bridge_error",
     cause: Throwable? = null,
 ) : RuntimeException(message, cause)
+
+/**
+ * Shallow-copies top-level entries of a [JSONObject] without serializing the full nested
+ * object graph to a giant intermediate [String] and re-parsing it.
+ */
+internal fun JSONObject.shallowCopy(): JSONObject = JSONObject().apply {
+    val source = this@shallowCopy
+    val keys = source.keys()
+    while (keys.hasNext()) {
+        val key = keys.next()
+        put(key, source.opt(key))
+    }
+}

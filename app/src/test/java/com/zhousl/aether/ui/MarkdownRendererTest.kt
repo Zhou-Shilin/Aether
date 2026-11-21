@@ -291,6 +291,33 @@ class MarkdownRendererTest {
         assertNull(layout.maxHeightDp)
     }
 
+    @Test
+    fun markdownTextHtmlMeasuresContentContainerAndIgnoresHeightOnlyResize() {
+        val html = buildMarkdownTextHtml(
+            text = "Formula: ${'$'}x^2 + y^2 = z^2${'$'}",
+            variant = MarkdownHtmlTextVariant.TableCell(isHeader = false),
+        )
+
+        assertTrue(html.contains(".aether-text"))
+        assertTrue(html.contains("getBoundingClientRect"))
+        assertTrue(html.contains("lastReportedWidth"))
+        assertFalse(html.contains("document.documentElement.scrollHeight"))
+        assertFalse(html.contains("window.addEventListener('resize', reportAetherHeight)"))
+    }
+
+    @Test
+    fun markdownMediaAttributesClampExtremeDimensionsToSafeCeiling() {
+        val image = parseMarkdownImage(
+            "![Tall](https://example.com/tall.png){width=999999 height=999999 min-height=500000 max-height=800000}"
+        )
+
+        requireNotNull(image)
+        assertEquals(MarkdownMediaWidth.DpValue(SafeMaxMarkdownDimensionDp), image.layout.width)
+        assertEquals(SafeMaxMarkdownDimensionDp, image.layout.heightDp)
+        assertEquals(SafeMaxMarkdownDimensionDp, image.layout.minHeightDp)
+        assertEquals(SafeMaxMarkdownDimensionDp, image.layout.maxHeightDp)
+    }
+
     private fun parseMarkdownBlocks(markdown: String): List<*> {
         val method = Class.forName("com.zhousl.aether.ui.MarkdownRendererKt")
             .getDeclaredMethod("parseMarkdown", String::class.java)

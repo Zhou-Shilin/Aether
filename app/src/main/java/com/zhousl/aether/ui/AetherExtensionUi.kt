@@ -682,11 +682,13 @@ private fun AetherExtensionNode(
         }
 
         "spacer" -> {
-            val size = node.optDouble("size", 8.0).dp
+            val size = clampSafeExtensionDp(node.optDouble("size", 8.0)) ?: 8.0
+            val height = clampSafeExtensionDp(node.optDouble("height", size)) ?: size
+            val width = clampSafeExtensionDp(node.optDouble("width", size)) ?: size
             Spacer(
                 modifier = resolvedModifier
-                    .height(node.optDouble("height", size.value.toDouble()).dp)
-                    .width(node.optDouble("width", size.value.toDouble()).dp)
+                    .height(height.dp)
+                    .width(width.dp)
             )
         }
 
@@ -774,15 +776,15 @@ private fun nodeModifier(
     when (node.optString("width")) {
         "fill", "match" -> modifier = modifier.fillMaxWidth()
         "full" -> modifier = modifier.fillMaxSize()
-        else -> node.optDoubleOrNull("width")?.let { modifier = modifier.width(it.dp) }
+        else -> node.optDoubleOrNull("width")?.let(::clampSafeExtensionDp)?.let { modifier = modifier.width(it.dp) }
     }
     when (node.optString("height")) {
         "fill", "match" -> modifier = modifier.fillMaxHeight()
         "full" -> modifier = modifier.fillMaxSize()
-        else -> node.optDoubleOrNull("height")?.let { modifier = modifier.height(it.dp) }
+        else -> node.optDoubleOrNull("height")?.let(::clampSafeExtensionDp)?.let { modifier = modifier.height(it.dp) }
     }
-    node.optDoubleOrNull("minHeight")?.let { modifier = modifier.heightIn(min = it.dp) }
-    node.optDoubleOrNull("maxHeight")?.let { modifier = modifier.heightIn(max = it.dp) }
+    node.optDoubleOrNull("minHeight")?.let(::clampSafeExtensionDp)?.let { modifier = modifier.heightIn(min = it.dp) }
+    node.optDoubleOrNull("maxHeight")?.let(::clampSafeExtensionDp)?.let { modifier = modifier.heightIn(max = it.dp) }
     node.optDoubleOrNull("alpha")?.let { modifier = modifier.alpha(it.toFloat().coerceIn(0f, 1f)) }
     val radius = node.optDouble("radius", 0.0)
     val background = node.optString("background")
@@ -978,8 +980,8 @@ private fun AetherExtensionWebView(
         },
         modifier = modifier
             .fillMaxWidth()
-            .height(node.optDouble("height", 240.0).dp)
-            .clip(RoundedCornerShape(node.optDouble("radius", 20.0).dp)),
+            .height((clampSafeExtensionDp(node.optDouble("height", 240.0), minDp = 1.0) ?: 240.0).dp)
+            .clip(RoundedCornerShape((clampSafeExtensionDp(node.optDouble("radius", 20.0)) ?: 20.0).dp)),
     )
 }
 

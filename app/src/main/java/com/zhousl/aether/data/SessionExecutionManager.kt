@@ -10,6 +10,8 @@ import com.zhousl.aether.runtime.RuntimeShellTool
 import com.zhousl.aether.data.pi.PiAgentRunner
 import com.zhousl.aether.data.pi.PiCompletionClient
 import com.zhousl.aether.data.pi.PiKernelBridge
+import com.zhousl.aether.data.pi.isValidPiSessionHeaderLine
+import com.zhousl.aether.data.pi.selectPiTurnRequestMessages
 import com.zhousl.aether.termux.TermuxBashTool
 import com.zhousl.aether.phoneuse.PhoneUseAccessibilityService
 import com.zhousl.aether.phoneuse.foregroundPhoneUseOverlay
@@ -689,10 +691,24 @@ class SessionExecutionManager(
             val isReasoningModel = modelKey in cachedReasoningModels
             val modelsDevThinkingLevels = settingsRepository.loadThinkingCatalogCache()[modelKey]
             val modelsDevLimits = settingsRepository.loadModelLimitsCache()[modelKey]
+            val resolvedSessionBranch = if (request.forkPiSession) {
+                com.zhousl.aether.data.pi.PiSessionBranch(
+                    request.piBranchMessageId?.let { messageId ->
+                        chatRepository.getAgentMessageEntryIds(handle.sessionId, messageId).lastOrNull()
+                    },
+                )
+            } else {
+                null
+            }
+            val turnRequestMessages = selectPiTurnRequestMessages(
+                messages = request.requestMessages,
+                hasValidatedSessionFile = agentSessionMetadata != null,
+                sessionBranch = resolvedSessionBranch,
+            )
             val result = piAgentRunner.runTurn(
                 settings = request.settings,
                 messages = buildRequestMessages(
-                    messages = request.requestMessages,
+                    messages = turnRequestMessages,
                     settings = request.settings,
                 ),
                 workspaceDirectory = alpineWorkspaceDirectory,
@@ -709,15 +725,7 @@ class SessionExecutionManager(
                 isReasoningModel = isReasoningModel,
                 modelsDevThinkingLevels = modelsDevThinkingLevels,
                 modelsDevLimits = modelsDevLimits,
-                sessionBranch = if (request.forkPiSession) {
-                    com.zhousl.aether.data.pi.PiSessionBranch(
-                        request.piBranchMessageId?.let { messageId ->
-                            chatRepository.getAgentMessageEntryIds(handle.sessionId, messageId).lastOrNull()
-                        },
-                    )
-                } else {
-                    null
-                },
+                sessionBranch = resolvedSessionBranch,
                 onToolEvent = emitToolEvent,
                 onToolProgress = emitToolEvent,
                 onAssistantReasoningDelta = { delta ->
@@ -1038,10 +1046,8 @@ class SessionExecutionManager(
             )
         }.getOrNull() ?: return false
         if (!result.optBoolean("ok")) return false
-        val header = runCatching {
-            JSONObject(result.optString("stdout").lineSequence().firstOrNull().orEmpty())
-        }.getOrNull() ?: return false
-        return header.optString("type") == "session" && header.optString("id") == expectedSessionId
+        val firstLine = result.optString("stdout").lineSequence().firstOrNull().orEmpty()
+        return isValidPiSessionHeaderLine(firstLine, expectedSessionId)
     }
 
     private fun buildQueuedTurnRequest(

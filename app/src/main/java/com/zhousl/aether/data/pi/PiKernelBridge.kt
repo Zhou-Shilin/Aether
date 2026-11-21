@@ -193,7 +193,7 @@ class PiKernelBridge(
         sessionPayload: JSONObject = JSONObject(),
     ): JSONObject = request(
         type = "compact_session",
-        payload = JSONObject(sessionPayload.toString()).apply {
+        payload = sessionPayload.shallowCopy().apply {
             put("session_id", sessionId)
             if (customInstructions.isNotBlank()) put("custom_instructions", customInstructions)
         },
@@ -210,7 +210,7 @@ class PiKernelBridge(
         sessionPayload: JSONObject = JSONObject(),
     ): JSONObject = request(
         type = "navigate_session",
-        payload = JSONObject(sessionPayload.toString()).apply {
+        payload = sessionPayload.shallowCopy().apply {
             put("session_id", sessionId)
             put("entry_id", entryId)
             put("reset", reset)

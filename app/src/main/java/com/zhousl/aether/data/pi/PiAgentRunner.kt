@@ -205,7 +205,7 @@ class PiAgentRunner(
                             return
                         }
                         if (!handledHostToolRequestIds.add(toolRequestId)) return
-                        val requestPayload = JSONObject(eventPayload.toString())
+                        val requestPayload = eventPayload.shallowCopy()
                         if (eventPayload.optString("execution_mode") == "sequential") {
                             sequentialHostToolRequests.send(requestPayload)
                             return
@@ -296,7 +296,7 @@ class PiAgentRunner(
                             startRuntimeOperation(eventPayload)
                             return
                         }
-                        pendingRuntimeOperationRequests[operationId] = JSONObject(eventPayload.toString())
+                        pendingRuntimeOperationRequests[operationId] = eventPayload.shallowCopy()
                         pendingRuntimeOperationChunks[operationId] = ConcurrentHashMap()
                     }
 

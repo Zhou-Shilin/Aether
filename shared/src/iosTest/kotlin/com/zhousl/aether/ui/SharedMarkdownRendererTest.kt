@@ -177,4 +177,21 @@ class SharedMarkdownRendererTest {
         assertEquals(markdown.indexOf("```mermaid"), segments[2].sourceOffset)
         assertEquals(markdown.indexOf("After"), segments[3].sourceOffset)
     }
+
+    @Test
+    fun mathHtmlMeasuresContentContainerAndIgnoresHeightOnlyResize() {
+        val html = buildSharedMarkdownTextHtml(
+            text = "Formula: ${'$'}x^2 + y^2 = z^2${'$'}",
+            variant = SharedMarkdownHtmlTextVariant.TableCell(isHeader = false),
+            textColor = Color.Black,
+            linkColor = Color.Blue,
+            codeColor = Color.Gray,
+        )
+
+        assertContains(html, ".aether-text")
+        assertContains(html, "getBoundingClientRect")
+        assertContains(html, "lastReportedWidth")
+        assertFalse(html.contains("document.documentElement.scrollHeight"))
+        assertFalse(html.contains("window.addEventListener('resize',reportAetherHeight)"))
+    }
 }

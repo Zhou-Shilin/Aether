@@ -160,6 +160,7 @@ class SharedPiChatClient(
         config: LlmProviderConfig,
         messages: List<SharedPiChatMessage>,
         sessionId: String,
+        sessionFile: String = "",
         workspaceDirectory: String = "/workspace",
         skillPaths: List<String> = emptyList(),
         skillCommand: String = "",
@@ -203,6 +204,7 @@ class SharedPiChatClient(
         val payload = buildJsonObject {
             put("model_config", modelConfig)
             put("session_id", resolvedSessionId)
+            if (sessionFile.isNotBlank()) put("session_file", sessionFile)
             sessionBranch?.let { branch ->
                 put("session_branch", buildJsonObject {
                     put("entry_id", branch.entryId.orEmpty())

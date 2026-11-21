@@ -199,6 +199,9 @@ class AetherModOperationRegistry {
                         .thenBy { it.sequence }
                 )
         }
+        if (interceptors.isEmpty()) {
+            return AetherModOperationDecision(payload = payload)
+        }
         var currentPayload = JSONObject(payload.toString())
         for (registration in interceptors) {
             val decision = registration.interceptor.intercept(

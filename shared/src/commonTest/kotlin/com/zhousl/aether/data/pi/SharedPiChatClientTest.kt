@@ -466,6 +466,34 @@ class SharedPiChatClientTest {
         assertEquals("done", turn.await().assistantText)
         bridge.close()
     }
+
+    @Test
+    fun runTurnForwardsSessionFileWhenProvided() = runTest {
+        val process = DeferredChatProtocolProcess()
+        val bridge = SharedPiBridgeClient(
+            transport = SingleProcessTransport(process),
+            dispatcher = StandardTestDispatcher(testScheduler),
+        )
+
+        val turn = async {
+            SharedPiChatClient(bridge).runTurn(
+                config = testProvider(),
+                messages = listOf(SharedPiChatMessage("user", "next turn")),
+                sessionId = "persisted-session",
+                sessionFile = "/root/.aether/agent-sessions/persisted-session.jsonl",
+            )
+        }
+        runCurrent()
+        val payload = process.requests.single()["payload"]!!.jsonObject
+        assertEquals(
+            "/root/.aether/agent-sessions/persisted-session.jsonl",
+            payload["session_file"]!!.jsonPrimitive.content,
+        )
+        process.respondToFirstRequest()
+        runCurrent()
+        assertEquals("done", turn.await().assistantText)
+        bridge.close()
+    }
 }
 
 private class SingleProcessTransport(private val process: RuntimeProcess) : PiBridgeTransport {

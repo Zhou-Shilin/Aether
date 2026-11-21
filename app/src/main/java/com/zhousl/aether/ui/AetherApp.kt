@@ -185,8 +185,8 @@ private fun AetherUiState.toAetherExtensionContext(): JSONObject {
     return JSONObject().apply {
         put("screen", currentScreen.name.lowercase())
         put("session_id", currentSessionId)
-        put("session_title", activeSession?.title.orEmpty())
-        put("message_count", activeSession?.messages?.size ?: 0)
+        put("session_title", activeSession?.title.orEmpty().take(4_000))
+        put("message_count", activeSession?.messageCount ?: 0)
         put("draft_input", draftInput)
         put("is_running", execution?.isRunning == true)
         put("is_editing", editingMessageId != null)
@@ -382,6 +382,9 @@ fun AetherApp(
     val extensionContext = remember(uiState) {
         uiState.toAetherExtensionContext()
     }
+    val extensionContextKey = remember(extensionContext) {
+        extensionContext.toString()
+    }
     val extensionController = remember(
         extensionState.snapshot,
         nativeComponents,
@@ -410,7 +413,7 @@ fun AetherApp(
         }
     }
 
-    LaunchedEffect(extensionManager, extensionContext.toString(), uiState.alpineSetupState.isReady) {
+    LaunchedEffect(extensionManager, extensionContextKey, uiState.alpineSetupState.isReady) {
         if (!uiState.alpineSetupState.isReady) return@LaunchedEffect
         extensionManager.start(extensionContext)
         extensionManager.updateContext(extensionContext)

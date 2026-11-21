@@ -54,7 +54,10 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -729,28 +732,26 @@ private fun MarkdownHtmlBlock(
     onTap: (() -> Unit)? = null,
     onLinkClick: ((String) -> Unit)? = null,
 ) {
-    val resolvedMinHeightDp = layout.minHeightDp ?: defaultMinHeightDp
-    val resolvedMaxHeightDp = layout.maxHeightDp ?: defaultMaxHeightDp
-    val scrollViewportHeightDp = if (layout.scroll) {
-        (layout.heightDp ?: resolvedMaxHeightDp).coerceAtLeast(1)
-    } else {
-        null
-    }
-    var measuredHeightDp by remember(html) { mutableIntStateOf(resolvedMinHeightDp.coerceAtLeast(1)) }
+    val density = LocalDensity.current.density
+    val safeCeilingDp = maxComposeSafeDpForDensity(density = density, capDp = SafeMaxMarkdownDimensionDp)
+    val resolvedMinHeightDp = (layout.minHeightDp ?: defaultMinHeightDp).coerceIn(1, safeCeilingDp)
+    var measuredHeightDp by remember(html) { mutableIntStateOf(resolvedMinHeightDp) }
     var hasMeasuredContent by remember(html) { mutableStateOf(false) }
-    val effectiveMinHeightDp = if (hasMeasuredContent) 1 else resolvedMinHeightDp.coerceAtLeast(1)
-    val appliedHeightDp = when {
-        layout.showAll -> measuredHeightDp.coerceAtLeast(effectiveMinHeightDp)
-        layout.heightDp != null -> layout.heightDp.coerceAtLeast(effectiveMinHeightDp)
-        scrollViewportHeightDp != null -> measuredHeightDp.coerceIn(
-            effectiveMinHeightDp,
-            scrollViewportHeightDp,
-        )
-        else -> measuredHeightDp.coerceIn(
-            effectiveMinHeightDp,
-            resolvedMaxHeightDp.coerceAtLeast(effectiveMinHeightDp),
-        )
-    }
+    val appliedHeightDp = resolveSafeMarkdownHtmlHeightDp(
+        measuredHeightDp = measuredHeightDp,
+        hasMeasuredContent = hasMeasuredContent,
+        layoutMinHeightDp = layout.minHeightDp,
+        layoutMaxHeightDp = layout.maxHeightDp,
+        layoutHeightDp = layout.heightDp,
+        showAll = layout.showAll,
+        scroll = layout.scroll,
+        defaultMinHeightDp = defaultMinHeightDp,
+        defaultMaxHeightDp = defaultMaxHeightDp,
+        density = density,
+        maxSafeHeightDp = SafeMaxMarkdownDimensionDp,
+    )
+    val enableHorizontalScroll = layout.scroll && !layout.showAll
+    val enableVerticalScroll = enableHorizontalScroll || measuredHeightDp > appliedHeightDp
 
     AndroidView(
         modifier = modifier.height(appliedHeightDp.dp),
@@ -771,18 +772,21 @@ private fun MarkdownHtmlBlock(
                 settings.loadsImagesAutomatically = true
                 settings.allowFileAccess = true
                 settings.allowContentAccess = true
-                settings.useWideViewPort = true
-                settings.loadWithOverviewMode = true
-                isVerticalScrollBarEnabled = layout.scroll && !layout.showAll
-                isHorizontalScrollBarEnabled = layout.scroll && !layout.showAll
+                // Keep CSS px 1:1 with Compose dp so narrow containers (e.g. table cells with KaTeX)
+                // never trigger overview zoom-out and vertical viewport height inflation.
+                settings.useWideViewPort = false
+                settings.loadWithOverviewMode = false
+                isVerticalScrollBarEnabled = enableVerticalScroll
+                isHorizontalScrollBarEnabled = enableHorizontalScroll
                 isFocusable = true
                 isFocusableInTouchMode = true
-                ViewCompat.setNestedScrollingEnabled(this, layout.scroll && !layout.showAll)
+                ViewCompat.setNestedScrollingEnabled(this, enableVerticalScroll || enableHorizontalScroll)
                 webChromeClient = WebChromeClient()
                 addJavascriptInterface(
                     MarkdownHtmlBridge(
+                        maxSafeHeightDp = safeCeilingDp,
                         onHeightMeasured = { measuredHeight ->
-                            measuredHeightDp = measuredHeight.coerceAtLeast(1)
+                            measuredHeightDp = measuredHeight
                             hasMeasuredContent = true
                         },
                         onTap = onTap,
@@ -791,7 +795,7 @@ private fun MarkdownHtmlBlock(
                     MarkdownHtmlBridgeName,
                 )
                 setOnTouchListener { view, event ->
-                    if (layout.scroll && !layout.showAll) {
+                    if (isVerticalScrollBarEnabled || isHorizontalScrollBarEnabled) {
                         when (event.actionMasked) {
                             MotionEvent.ACTION_DOWN,
                             MotionEvent.ACTION_MOVE -> view.parent?.requestDisallowInterceptTouchEvent(true)
@@ -825,9 +829,9 @@ private fun MarkdownHtmlBlock(
             }
         },
         update = { webView ->
-            webView.isVerticalScrollBarEnabled = layout.scroll && !layout.showAll
-            webView.isHorizontalScrollBarEnabled = layout.scroll && !layout.showAll
-            ViewCompat.setNestedScrollingEnabled(webView, layout.scroll && !layout.showAll)
+            webView.isVerticalScrollBarEnabled = enableVerticalScroll
+            webView.isHorizontalScrollBarEnabled = enableHorizontalScroll
+            ViewCompat.setNestedScrollingEnabled(webView, enableVerticalScroll || enableHorizontalScroll)
             if (webView.tag != html) {
                 webView.tag = html
                 webView.loadDataWithBaseURL(
@@ -854,6 +858,7 @@ private fun MarkdownBitmapImageBlock(
     } else {
         ContentScale.Fit
     }
+    val density = LocalDensity.current.density
     BoxWithConstraints(modifier = modifier) {
         val resolvedMaxHeight = (layout.maxHeightDp ?: DefaultImageMaxHeightDp).dp
         val explicitHeight = layout.heightDp?.dp
@@ -868,12 +873,17 @@ private fun MarkdownBitmapImageBlock(
         } else {
             resolvedMaxHeight
         }
-        val containerHeight = when {
-            layout.showAll -> naturalHeight.coerceAtLeast(1.dp)
-            explicitHeight != null -> explicitHeight
-            else -> naturalHeight.coerceAtMost(resolvedMaxHeight).coerceAtLeast(1.dp)
-        }
-        val needsVerticalScroll = !layout.showAll && layout.scroll && naturalHeight > containerHeight
+        val containerHeight = resolveSafeMarkdownBitmapHeightDp(
+            naturalHeightDp = naturalHeight.value,
+            layoutMaxHeightDp = layout.maxHeightDp,
+            layoutHeightDp = layout.heightDp,
+            showAll = layout.showAll,
+            defaultMaxHeightDp = DefaultImageMaxHeightDp,
+            density = density,
+            maxSafeHeightDp = SafeMaxMarkdownDimensionDp,
+        ).dp
+        val needsVerticalScroll = (!layout.showAll && layout.scroll && naturalHeight > containerHeight) ||
+            (layout.showAll && naturalHeight > containerHeight)
 
         Box(
             modifier = Modifier
@@ -936,7 +946,7 @@ private fun Modifier.markdownMediaWidth(
 ): Modifier = when (mediaWidth) {
     null -> fillMaxWidth()
     is MarkdownMediaWidth.Fraction -> fillMaxWidth(mediaWidth.value.coerceIn(0.1f, 1f))
-    is MarkdownMediaWidth.DpValue -> width(mediaWidth.value.dp)
+    is MarkdownMediaWidth.DpValue -> width(clampMarkdownMediaDp(mediaWidth.value).dp)
 }
 
 @Composable
@@ -1173,7 +1183,10 @@ private fun MarkdownTextHtmlBlock(
     }
     MarkdownHtmlBlock(
         html = html,
-        layout = MarkdownMediaLayout(showAll = true),
+        layout = MarkdownMediaLayout(
+            maxHeightDp = DefaultTextBlockMaxHeightDp,
+            showAll = false,
+        ),
         defaultMinHeightDp = DefaultTextBlockMinHeightDp,
         defaultMaxHeightDp = DefaultTextBlockMaxHeightDp,
         modifier = modifier.fillMaxWidth(),
@@ -1694,12 +1707,9 @@ internal fun buildMarkdownTextHtml(
         <body>
             <div class="aether-text">$contentHtml</div>
             <script>
+                var lastReportedWidth = window.innerWidth || 0;
                 function reportAetherHeight() {
-                    const height = Math.max(
-                        document.documentElement.scrollHeight || 0,
-                        document.body.scrollHeight || 0,
-                        $DefaultTextBlockMinHeightDp
-                    );
+                    ${buildSafeMarkdownContentHeightJs(".aether-text", DefaultTextBlockMinHeightDp)}
                     if (window.$MarkdownHtmlBridgeName && window.$MarkdownHtmlBridgeName.reportHeight) {
                         window.$MarkdownHtmlBridgeName.reportHeight(String(height));
                     }
@@ -1740,7 +1750,13 @@ internal fun buildMarkdownTextHtml(
                 }
 
                 window.reportAetherHeight = reportAetherHeight;
-                window.addEventListener('resize', reportAetherHeight);
+                window.addEventListener('resize', function() {
+                    var currentWidth = window.innerWidth || 0;
+                    if (currentWidth !== lastReportedWidth) {
+                        lastReportedWidth = currentWidth;
+                        reportAetherHeight();
+                    }
+                });
                 window.addEventListener('load', function() {
                     setTimeout(renderAetherMath, 0);
                     setTimeout(reportAetherHeight, 120);
@@ -2469,11 +2485,7 @@ internal fun buildMarkdownBadgeGroupHtml(
             <div class="badge-row">$imageTags</div>
             <script>
                 function reportAetherHeight() {
-                    const height = Math.max(
-                        document.documentElement.scrollHeight || 0,
-                        document.body.scrollHeight || 0,
-                        1
-                    );
+                    ${buildSafeMarkdownContentHeightJs(".badge-row", 1)}
                     if (window.$MarkdownHtmlBridgeName && window.$MarkdownHtmlBridgeName.reportHeight) {
                         window.$MarkdownHtmlBridgeName.reportHeight(String(height));
                     }
@@ -2533,11 +2545,7 @@ internal fun buildMarkdownInlineSvgHtml(
             </div>
             <script>
                 function reportAetherHeight() {
-                    const height = Math.max(
-                        document.documentElement.scrollHeight || 0,
-                        document.body.scrollHeight || 0,
-                        1
-                    );
+                    ${buildSafeMarkdownContentHeightJs(".image-shell", 1)}
                     if (window.$MarkdownHtmlBridgeName && window.$MarkdownHtmlBridgeName.reportHeight) {
                         window.$MarkdownHtmlBridgeName.reportHeight(String(height));
                     }
@@ -2599,17 +2607,15 @@ private fun buildMarkdownImageHtml(
         </style>
     </head>
     <body>
-        <div class="image-shell">
-            <img id="preview-image" src="${escapeHtml(imageUrl)}" alt="" />
+        <div class="image-root">
+            <div class="image-shell">
+                <img id="preview-image" src="${escapeHtml(imageUrl)}" alt="" />
+            </div>
+            <div id="image-error" class="image-error">${escapeHtml(loadErrorMessage)}</div>
         </div>
-        <div id="image-error" class="image-error">${escapeHtml(loadErrorMessage)}</div>
         <script>
             function reportAetherHeight() {
-                const height = Math.max(
-                    document.documentElement.scrollHeight || 0,
-                    document.body.scrollHeight || 0,
-                    1
-                );
+                ${buildSafeMarkdownContentHeightJs(".image-root", 1)}
                 if (window.$MarkdownHtmlBridgeName && window.$MarkdownHtmlBridgeName.reportHeight) {
                     window.$MarkdownHtmlBridgeName.reportHeight(String(height));
                 }
@@ -2837,11 +2843,7 @@ private fun buildMermaidHtml(
                 }
 
                 function reportAetherHeight() {
-                    const height = Math.max(
-                        document.documentElement.scrollHeight || 0,
-                        document.body.scrollHeight || 0,
-                        220
-                    );
+                    ${buildSafeMarkdownContentHeightJs("#container", 220)}
                     if (window.$MarkdownHtmlBridgeName && window.$MarkdownHtmlBridgeName.reportHeight) {
                         window.$MarkdownHtmlBridgeName.reportHeight(String(height));
                     }
@@ -2945,25 +2947,30 @@ private fun Color.toCssHex(): String {
 }
 
 private class MarkdownHtmlBridge(
+    private val maxSafeHeightDp: Int,
     private val onHeightMeasured: (Int) -> Unit,
     private val onTap: (() -> Unit)? = null,
     private val onLinkClick: ((String) -> Unit)? = null,
 ) {
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     @JavascriptInterface
     fun reportHeight(height: String?) {
-        height?.toIntOrNull()?.let(onHeightMeasured)
+        val parsed = parseSafeReportedHtmlHeightDp(height, maxSafeHeightDp) ?: return
+        mainHandler.post { onHeightMeasured(parsed) }
     }
 
     @JavascriptInterface
     fun reportTap() {
-        onTap?.invoke()
+        val callback = onTap ?: return
+        mainHandler.post { callback() }
     }
 
     @JavascriptInterface
     fun reportLink(url: String?) {
-        url?.takeIf { it.isNotBlank() }?.let { targetUrl ->
-            onLinkClick?.invoke(targetUrl)
-        }
+        val targetUrl = url?.takeIf { it.isNotBlank() } ?: return
+        val callback = onLinkClick ?: return
+        mainHandler.post { callback(targetUrl) }
     }
 }
 

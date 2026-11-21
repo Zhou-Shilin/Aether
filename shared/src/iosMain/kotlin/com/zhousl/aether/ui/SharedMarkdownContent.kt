@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -258,7 +259,7 @@ private fun SharedMarkdownMediaWidthContainer(
             when (val width = layout.width) {
                 null -> Modifier.fillMaxWidth()
                 is SharedMarkdownMediaWidth.Fraction -> Modifier.fillMaxWidth(width.value.coerceIn(0.1f, 1f))
-                is SharedMarkdownMediaWidth.DpValue -> Modifier.width(width.value.dp)
+                is SharedMarkdownMediaWidth.DpValue -> Modifier.width(clampMarkdownMediaDp(width.value).dp)
             }
         )
     }
@@ -272,6 +273,7 @@ private fun SharedMarkdownBitmapImageBlock(
     modifier: Modifier,
 ) {
     val contentScale = if (layout.fit == SharedMarkdownMediaFit.Cover) ContentScale.Crop else ContentScale.Fit
+    val density = LocalDensity.current.density
     BoxWithConstraints(modifier) {
         val resolvedMaxHeight = (layout.maxHeightDp ?: 420).dp
         val explicitHeight = layout.heightDp?.dp
@@ -280,12 +282,17 @@ private fun SharedMarkdownBitmapImageBlock(
         val naturalHeight = if (bitmap.width > 0 && bitmap.height > 0) {
             renderWidth * (bitmap.height.toFloat() / bitmap.width.toFloat())
         } else resolvedMaxHeight
-        val containerHeight = when {
-            layout.showAll -> naturalHeight.coerceAtLeast(1.dp)
-            explicitHeight != null -> explicitHeight
-            else -> naturalHeight.coerceAtMost(resolvedMaxHeight).coerceAtLeast(1.dp)
-        }
-        val needsVerticalScroll = !layout.showAll && layout.scroll && naturalHeight > containerHeight
+        val containerHeight = resolveSafeMarkdownBitmapHeightDp(
+            naturalHeightDp = naturalHeight.value,
+            layoutMaxHeightDp = layout.maxHeightDp,
+            layoutHeightDp = layout.heightDp,
+            showAll = layout.showAll,
+            defaultMaxHeightDp = 420,
+            density = density,
+            maxSafeHeightDp = SafeMaxMarkdownDimensionDp,
+        ).dp
+        val needsVerticalScroll = (!layout.showAll && layout.scroll && naturalHeight > containerHeight) ||
+            (layout.showAll && naturalHeight > containerHeight)
         Box(
             modifier = Modifier.width(renderWidth).height(containerHeight),
             contentAlignment = if (needsVerticalScroll) Alignment.TopCenter else Alignment.Center,
@@ -327,34 +334,41 @@ private fun SharedMarkdownImageHtmlBlock(
     modifier: Modifier,
     onTap: (() -> Unit)? = null,
 ) {
-    val minHeight = (layout.minHeightDp ?: defaultMinHeightDp).coerceAtLeast(1)
-    val maxHeight = (layout.maxHeightDp ?: defaultMaxHeightDp).coerceAtLeast(minHeight)
-    val scrollViewportHeight = if (layout.scroll) {
-        (layout.heightDp ?: maxHeight).coerceAtLeast(1)
-    } else null
+    val density = LocalDensity.current.density
+    val safeCeilingDp = maxComposeSafeDpForDensity(density = density, capDp = SafeMaxMarkdownDimensionDp)
+    val minHeight = (layout.minHeightDp ?: defaultMinHeightDp).coerceIn(1, safeCeilingDp)
     var measuredHeight by remember(html) { mutableStateOf(minHeight) }
     var measured by remember(html) { mutableStateOf(false) }
-    val effectiveMinHeight = if (measured) 1 else minHeight
-    val appliedHeight = when {
-        layout.showAll -> measuredHeight.coerceAtLeast(effectiveMinHeight)
-        layout.heightDp != null -> layout.heightDp.coerceAtLeast(effectiveMinHeight)
-        scrollViewportHeight != null -> measuredHeight.coerceIn(effectiveMinHeight, scrollViewportHeight)
-        else -> measuredHeight.coerceIn(effectiveMinHeight, maxHeight)
-    }
+    val appliedHeight = resolveSafeMarkdownHtmlHeightDp(
+        measuredHeightDp = measuredHeight,
+        hasMeasuredContent = measured,
+        layoutMinHeightDp = layout.minHeightDp,
+        layoutMaxHeightDp = layout.maxHeightDp,
+        layoutHeightDp = layout.heightDp,
+        showAll = layout.showAll,
+        scroll = layout.scroll,
+        defaultMinHeightDp = defaultMinHeightDp,
+        defaultMaxHeightDp = defaultMaxHeightDp,
+        density = density,
+        maxSafeHeightDp = SafeMaxMarkdownDimensionDp,
+    )
     PlatformWebView(
         url = "",
         html = html,
         onMessage = { message ->
             when {
                 message == "tap" -> onTap?.invoke()
-                message.startsWith("height:") -> message.substringAfter(':').toDoubleOrNull()?.let {
-                    measuredHeight = it.roundToInt().coerceAtLeast(1)
+                message.startsWith("height:") -> parseSafeReportedHtmlHeightDp(
+                    rawHeight = message.substringAfter(':'),
+                    maxSafeHeightDp = safeCeilingDp,
+                )?.let { parsed ->
+                    measuredHeight = parsed
                     measured = true
                 }
             }
         },
         transparentBackground = true,
-        scrollEnabled = layout.scroll && !layout.showAll,
+        scrollEnabled = (layout.scroll && !layout.showAll) || measuredHeight > appliedHeight,
         modifier = modifier.height(appliedHeight.dp),
     )
 }
@@ -728,7 +742,7 @@ internal fun buildSharedMarkdownBadgeGroupHtml(images: List<SharedMarkdownImageS
         </head><body><div class="badge-row">$tags</div>
         <script>
         function postAether(message){if(window.Aether&&window.Aether.postMessage){window.Aether.postMessage(message);}}
-        function reportAetherHeight(){const height=Math.max(document.documentElement.scrollHeight||0,document.body.scrollHeight||0,1);postAether('height:'+height);}
+        function reportAetherHeight(){${buildSafeMarkdownContentHeightJs(".badge-row", 1)}postAether('height:'+height);}
         document.querySelectorAll('img').forEach(function(image){image.addEventListener('load',reportAetherHeight);image.addEventListener('error',function(){image.style.display='none';reportAetherHeight();});});
         window.addEventListener('load',function(){setTimeout(reportAetherHeight,0);setTimeout(reportAetherHeight,120);});
         </script></body></html>
@@ -742,7 +756,7 @@ internal fun buildSharedMarkdownInlineSvgHtml(svg: String): String = """
     </head><body><div id="preview-image" class="image-shell">${sanitizeSharedInlineMarkdownSvg(svg)}</div>
     <script>
     function postAether(message){if(window.Aether&&window.Aether.postMessage){window.Aether.postMessage(message);}}
-    function reportAetherHeight(){const height=Math.max(document.documentElement.scrollHeight||0,document.body.scrollHeight||0,1);postAether('height:'+height);}
+    function reportAetherHeight(){${buildSafeMarkdownContentHeightJs(".image-shell", 1)}postAether('height:'+height);}
     const image=document.getElementById('preview-image');if(image){image.addEventListener('click',function(){postAether('tap');});}
     window.addEventListener('load',function(){setTimeout(reportAetherHeight,0);setTimeout(reportAetherHeight,120);});
     </script></body></html>
@@ -752,10 +766,10 @@ private fun buildSharedMarkdownImageHtml(imageUrl: String, loadErrorMessage: Str
     <!DOCTYPE html><html><head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <style>html,body{margin:0;padding:0;background:transparent}.image-shell{display:flex;align-items:center;justify-content:flex-start}img{display:block;max-width:100%;height:auto;border-radius:12px}.image-error{color:#6b7280;display:none;font:14px sans-serif;padding:16px}</style>
-    </head><body><div class="image-shell"><img id="preview-image" src="${escapeSharedMarkdownHtml(imageUrl)}" alt="" /></div><div id="image-error" class="image-error">${escapeSharedMarkdownHtml(loadErrorMessage)}</div>
+    </head><body><div class="image-root"><div class="image-shell"><img id="preview-image" src="${escapeSharedMarkdownHtml(imageUrl)}" alt="" /></div><div id="image-error" class="image-error">${escapeSharedMarkdownHtml(loadErrorMessage)}</div></div>
     <script>
     function postAether(message){if(window.Aether&&window.Aether.postMessage){window.Aether.postMessage(message);}}
-    function reportAetherHeight(){const height=Math.max(document.documentElement.scrollHeight||0,document.body.scrollHeight||0,1);postAether('height:'+height);}
+    function reportAetherHeight(){${buildSafeMarkdownContentHeightJs(".image-root", 1)}postAether('height:'+height);}
     const image=document.getElementById('preview-image');if(image){image.addEventListener('load',function(){setTimeout(reportAetherHeight,0);setTimeout(reportAetherHeight,120);});image.addEventListener('click',function(){postAether('tap');});image.addEventListener('error',function(){const error=document.getElementById('image-error');if(error){error.style.display='block';}image.style.display='none';reportAetherHeight();});}
     window.addEventListener('load',function(){setTimeout(reportAetherHeight,0);setTimeout(reportAetherHeight,120);});
     </script></body></html>

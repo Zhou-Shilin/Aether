@@ -290,7 +290,7 @@ private fun parseMarkdownDp(
         .removeSuffix("dp")
         .removeSuffix("px")
         .trim()
-    return normalized.toIntOrNull()?.takeIf { it > 0 }
+    return normalized.toIntOrNull()?.takeIf { it > 0 }?.let(::clampMarkdownMediaDp)
 }
 
 private fun parseMarkdownBoolean(

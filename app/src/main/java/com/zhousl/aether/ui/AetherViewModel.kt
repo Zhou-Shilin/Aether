@@ -71,7 +71,6 @@ import com.zhousl.aether.data.SessionTurnRequest
 import com.zhousl.aether.data.parseChatSessions
 import com.zhousl.aether.data.parseCustomHeaders
 import com.zhousl.aether.data.parseProviderConfigs
-import com.zhousl.aether.data.serializeChatSessions
 import com.zhousl.aether.data.serializeProviderConfigs
 import com.zhousl.aether.data.toJson
 import com.zhousl.aether.data.toJsonArray
@@ -6135,7 +6134,14 @@ class AetherViewModel(
             put("exportedAtMillis", System.currentTimeMillis())
             put("settings", snapshot.settings.toJson())
             put("providerConfigs", JSONArray(serializeProviderConfigs(snapshot.providerConfigs)))
-            put("sessions", JSONArray(serializeChatSessions(sessions.map { it.copy(activeSkills = emptyList()) })))
+            put(
+                "sessions",
+                JSONArray().apply {
+                    sessions.forEach { session ->
+                        put(session.copy(activeSkills = emptyList()).toJson())
+                    }
+                },
+            )
             put("currentSessionId", snapshot.currentSessionId)
             put("skillBundles", skillManager.exportSkillBundles(snapshot.installedSkills))
             put("piSessions", piSessions)

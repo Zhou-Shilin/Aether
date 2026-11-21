@@ -22,11 +22,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -416,25 +418,42 @@ private fun SharedMarkdownMathTextBlock(
     val html = remember(text, variant, textColor, linkColor, codeColor) {
         buildSharedMarkdownTextHtml(text, variant, textColor, linkColor, codeColor)
     }
+    val density = LocalDensity.current.density
+    val safeCeilingDp = maxComposeSafeDpForDensity(density = density, capDp = SafeMaxMarkdownDimensionDp)
     var measuredHeight by remember(html) { mutableIntStateOf(SharedMarkdownTextMinHeightDp) }
+    var hasMeasured by remember(html) { mutableStateOf(false) }
+    val appliedHeight = resolveSafeMarkdownHtmlHeightDp(
+        measuredHeightDp = measuredHeight,
+        hasMeasuredContent = hasMeasured,
+        layoutMinHeightDp = SharedMarkdownTextMinHeightDp,
+        layoutMaxHeightDp = SharedMarkdownTextMaxHeightDp,
+        layoutHeightDp = null,
+        showAll = false,
+        scroll = false,
+        defaultMinHeightDp = SharedMarkdownTextMinHeightDp,
+        defaultMaxHeightDp = SharedMarkdownTextMaxHeightDp,
+        density = density,
+        maxSafeHeightDp = SafeMaxMarkdownDimensionDp,
+    )
     PlatformWebView(
         url = "",
         html = html,
         onMessage = { message ->
             when {
-                message.startsWith("height:") -> message.substringAfter(':').toDoubleOrNull()?.let {
-                    measuredHeight = it.roundToInt().coerceIn(
-                        SharedMarkdownTextMinHeightDp,
-                        SharedMarkdownTextMaxHeightDp,
-                    )
+                message.startsWith("height:") -> parseSafeReportedHtmlHeightDp(
+                    rawHeight = message.substringAfter(':'),
+                    maxSafeHeightDp = safeCeilingDp,
+                )?.let { parsed ->
+                    measuredHeight = parsed
+                    hasMeasured = true
                 }
                 message.startsWith("link:") -> message.substringAfter(':').takeIf(String::isNotBlank)
                     ?.let(onOpenLink)
             }
         },
         transparentBackground = true,
-        scrollEnabled = false,
-        modifier = modifier.fillMaxWidth().height(measuredHeight.dp),
+        scrollEnabled = measuredHeight > appliedHeight,
+        modifier = modifier.fillMaxWidth().height(appliedHeight.dp),
     )
 }
 
@@ -1017,11 +1036,12 @@ internal fun buildSharedMarkdownTextHtml(
         <body>
           <div class="aether-text">$content</div>
           <script>
+            var lastReportedWidth=window.innerWidth||0;
             function postAether(message){if(window.Aether&&window.Aether.postMessage){window.Aether.postMessage(message);}}
-            function reportAetherHeight(){var h=Math.max(document.documentElement.scrollHeight||0,document.body.scrollHeight||0,$SharedMarkdownTextMinHeightDp);postAether('height:'+h);}
+            function reportAetherHeight(){${buildSafeMarkdownContentHeightJs(".aether-text", SharedMarkdownTextMinHeightDp)}postAether('height:'+height);}
             function bindAetherLinks(){document.querySelectorAll('a[href]').forEach(function(a){a.onclick=function(e){e.preventDefault();var href=a.getAttribute('href');if(href){postAether('link:'+href);}return false;};});}
             function renderAetherMath(){bindAetherLinks();try{if(window.renderMathInElement){window.renderMathInElement(document.body,{delimiters:$MarkdownMathDelimitersJson,throwOnError:false,strict:'ignore',ignoredTags:['script','noscript','style','textarea','pre','code','option']});}}catch(e){}finally{bindAetherLinks();setTimeout(reportAetherHeight,0);setTimeout(reportAetherHeight,120);setTimeout(reportAetherHeight,360);}}
-            window.addEventListener('resize',reportAetherHeight);window.addEventListener('load',function(){setTimeout(renderAetherMath,0);setTimeout(reportAetherHeight,120);});
+            window.addEventListener('resize',function(){var w=window.innerWidth||0;if(w!==lastReportedWidth){lastReportedWidth=w;reportAetherHeight();}});window.addEventListener('load',function(){setTimeout(renderAetherMath,0);setTimeout(reportAetherHeight,120);});
           </script>
         </body>
         </html>

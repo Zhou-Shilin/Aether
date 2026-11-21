@@ -21,6 +21,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -206,17 +207,17 @@ fun encodeSharedAppDataArchive(archive: SharedAppDataArchive): String {
         )
         put(
             "skillBundles",
-            Json.parseToJsonElement(SharedAppDataJson.encodeToString(archive.skillBundles)),
+            SharedAppDataJson.encodeToJsonElement(archive.skillBundles),
         )
         put("mcpServers", archive.mcpServers)
         put(
             "piSessions",
-            Json.parseToJsonElement(SharedAppDataJson.encodeToString(archive.piSessions)),
+            SharedAppDataJson.encodeToJsonElement(archive.piSessions),
         )
         archive.extensionArchive?.let { extensionArchive ->
             put(
                 "extensionArchive",
-                Json.parseToJsonElement(SharedAppDataJson.encodeToString(extensionArchive)),
+                SharedAppDataJson.encodeToJsonElement(extensionArchive),
             )
         }
     }

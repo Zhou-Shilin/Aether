@@ -5,6 +5,8 @@ import java.io.Writer
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -141,6 +143,24 @@ class PiBridgeProtocolTest {
 
         assertTrue(output.charactersWritten > payloadCharacters)
         assertTrue(output.largestWrite <= payloadCharacters)
+    }
+
+    @Test
+    fun shallowCopySharesNestedPayloadReferencesWhileIsolatingTopLevelKeys() {
+        val nestedMessages = JSONArray().put(JSONObject().put("text", "large payload"))
+        val original = JSONObject()
+            .put("session_file", "/tmp/session.jsonl")
+            .put("messages", nestedMessages)
+
+        val copied = original.shallowCopy().apply {
+            put("session_id", "session-1")
+            put("entry_id", "entry-1")
+        }
+
+        assertSame(nestedMessages, copied.getJSONArray("messages"))
+        assertEquals("session-1", copied.optString("session_id"))
+        assertFalse(original.has("session_id"))
+        assertFalse(original.has("entry_id"))
     }
 
     private class CountingWriter : Writer() {

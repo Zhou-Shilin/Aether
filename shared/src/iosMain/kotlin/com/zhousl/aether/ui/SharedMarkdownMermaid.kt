@@ -25,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -269,7 +270,7 @@ private fun parseSharedMarkdownMediaWidth(value: String): SharedMarkdownMediaWid
 }
 
 private fun parseSharedMarkdownDp(value: String): Int? = value.trim().lowercase()
-    .removeSuffix("dp").removeSuffix("px").trim().toIntOrNull()?.takeIf { it > 0 }
+    .removeSuffix("dp").removeSuffix("px").trim().toIntOrNull()?.takeIf { it > 0 }?.let(::clampMarkdownMediaDp)
 
 private fun parseSharedMarkdownBoolean(value: String): Boolean? = when (value.trim().lowercase()) {
     "1", "true", "yes", "on" -> true
@@ -407,7 +408,7 @@ private fun SharedMarkdownMediaWidthContainer(
         val width = when (val value = layout.width) {
             null -> Modifier.fillMaxWidth()
             is SharedMarkdownMediaWidth.Fraction -> Modifier.fillMaxWidth(value.value.coerceIn(0.1f, 1f))
-            is SharedMarkdownMediaWidth.DpValue -> Modifier.width(value.value.dp)
+            is SharedMarkdownMediaWidth.DpValue -> Modifier.width(clampMarkdownMediaDp(value.value).dp)
         }
         content(width)
     }
@@ -420,30 +421,41 @@ private fun SharedMarkdownMermaidHtml(
     modifier: Modifier,
     onTap: () -> Unit,
 ) {
-    val minHeight = (layout.minHeightDp ?: SharedDefaultMermaidMinHeightDp).coerceAtLeast(1)
-    val maxHeight = (layout.maxHeightDp ?: SharedDefaultMermaidMaxHeightDp).coerceAtLeast(minHeight)
+    val density = LocalDensity.current.density
+    val safeCeilingDp = maxComposeSafeDpForDensity(density = density, capDp = SafeMaxMarkdownDimensionDp)
+    val minHeight = (layout.minHeightDp ?: SharedDefaultMermaidMinHeightDp).coerceIn(1, safeCeilingDp)
     var measuredHeight by remember(html) { mutableIntStateOf(minHeight) }
     var measured by remember(html) { mutableStateOf(false) }
-    val effectiveMinHeight = if (measured) 1 else minHeight
-    val appliedHeight = when {
-        layout.showAll -> measuredHeight.coerceAtLeast(effectiveMinHeight)
-        layout.heightDp != null -> layout.heightDp.coerceAtLeast(effectiveMinHeight)
-        else -> measuredHeight.coerceIn(effectiveMinHeight, maxHeight)
-    }
+    val appliedHeight = resolveSafeMarkdownHtmlHeightDp(
+        measuredHeightDp = measuredHeight,
+        hasMeasuredContent = measured,
+        layoutMinHeightDp = layout.minHeightDp,
+        layoutMaxHeightDp = layout.maxHeightDp,
+        layoutHeightDp = layout.heightDp,
+        showAll = layout.showAll,
+        scroll = layout.scroll,
+        defaultMinHeightDp = SharedDefaultMermaidMinHeightDp,
+        defaultMaxHeightDp = SharedDefaultMermaidMaxHeightDp,
+        density = density,
+        maxSafeHeightDp = SafeMaxMarkdownDimensionDp,
+    )
     PlatformWebView(
         url = "",
         html = html,
         onMessage = { message ->
             when {
                 message == "tap" -> onTap()
-                message.startsWith("height:") -> message.substringAfter(':').toDoubleOrNull()?.let {
-                    measuredHeight = it.toInt().coerceAtLeast(1)
+                message.startsWith("height:") -> parseSafeReportedHtmlHeightDp(
+                    rawHeight = message.substringAfter(':'),
+                    maxSafeHeightDp = safeCeilingDp,
+                )?.let { parsed ->
+                    measuredHeight = parsed
                     measured = true
                 }
             }
         },
         transparentBackground = true,
-        scrollEnabled = layout.scroll && !layout.showAll,
+        scrollEnabled = (layout.scroll && !layout.showAll) || measuredHeight > appliedHeight,
         modifier = modifier.height(appliedHeight.dp),
     )
 }
@@ -534,7 +546,7 @@ internal fun buildSharedMermaidHtml(
                 const renderErrorTitle=${sharedMermaidJsString(renderError)};
                 const invalidSyntaxError=${sharedMermaidJsString(invalidSyntax)};
                 function postAether(message){if(window.Aether&&window.Aether.postMessage){window.Aether.postMessage(message);}}
-                function reportAetherHeight(){const height=Math.max(document.documentElement.scrollHeight||0,document.body.scrollHeight||0,1);postAether('height:'+height);}
+                function reportAetherHeight(){${buildSafeMarkdownContentHeightJs("#container", 1)}postAether('height:'+height);}
                 function reportAetherTap(){postAether('tap');}
                 function escapeHtml(value){return String(value).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
                 function showMermaidError(source,detail){document.getElementById('container').innerHTML='<div class="mermaid-error"><div class="mermaid-error-title">'+escapeHtml(renderErrorTitle)+'</div><pre class="mermaid-source">'+escapeHtml(source)+'</pre><div class="mermaid-error-detail">'+escapeHtml(detail||invalidSyntaxError)+'</div></div>';}

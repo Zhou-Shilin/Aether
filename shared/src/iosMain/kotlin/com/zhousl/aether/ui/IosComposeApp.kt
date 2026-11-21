@@ -223,6 +223,8 @@ import com.zhousl.aether.data.SharedModelCatalogInfo
 import com.zhousl.aether.data.SharedThinkingCatalogCache
 import com.zhousl.aether.data.ModelsDevThinkingCatalogSource
 import com.zhousl.aether.data.ModelsDevModelLimits
+import com.zhousl.aether.data.pi.isValidPiSessionHeaderLine
+import com.zhousl.aether.data.pi.selectPiTurnRequestMessages
 import com.zhousl.aether.data.PiProviderCatalog
 import com.zhousl.aether.data.ProviderAuthMethod
 import com.zhousl.aether.data.AetherPrivacyPolicyUrl
@@ -1644,7 +1646,7 @@ fun IosComposeApp(
             }
             field("screen") { JsonPrimitive(route.name.lowercase()) }
             field("session_id") { JsonPrimitive(state.id) }
-            field("session_title") { JsonPrimitive(state.title) }
+            field("session_title") { JsonPrimitive(state.title.take(4_000)) }
             field("draft_input") { JsonPrimitive(state.input) }
             field("is_generating") { JsonPrimitive(state.isWorking) }
             field("is_running") { JsonPrimitive(state.isWorking) }
@@ -2085,6 +2087,27 @@ fun IosComposeApp(
                 val mappedPiEntryId = resolvedPiBranchMessageId?.let { messageId ->
                     historyStore?.getAgentMessageEntryIds(target.id, messageId)?.lastOrNull()
                 }
+                val resolvedSessionBranch = if (shouldResetPiBranch) {
+                    com.zhousl.aether.data.pi.PiSessionBranch(mappedPiEntryId)
+                } else {
+                    null
+                }
+                val validatedAgentSessionFile = historyStore?.getAgentSessionMetadata(target.id)
+                    ?.takeIf { metadata ->
+                        metadata.piSessionId.isNotBlank() &&
+                            metadata.jsonlPath.isNotBlank() &&
+                            runCatching {
+                                val firstLine = runtime.fileSystem
+                                    .readPrefix(metadata.jsonlPath, 4_096L)
+                                    .decodeToString()
+                                    .lineSequence()
+                                    .firstOrNull()
+                                    .orEmpty()
+                                isValidPiSessionHeaderLine(firstLine, metadata.piSessionId)
+                            }.getOrDefault(false)
+                    }
+                    ?.jsonlPath
+                    .orEmpty()
                 analyticsInputCount = requestMessages.size
                 analyticsUserCount = requestMessages.count { it.fromUser }
                 val modelKey = sharedThinkingCatalogKey(config.piProviderId, config.modelId)
@@ -2093,7 +2116,12 @@ fun IosComposeApp(
                 val reasoningEffort = sharedAppSettings.reasoningEffort
                 val reasoningEnabled = isReasoningModel
                 val estimatedUsage = estimateSharedRequestTokenUsage(requestMessages)
-                val turnMessages = requestMessages.map { message ->
+                val turnRequestMessages = selectPiTurnRequestMessages(
+                    messages = requestMessages,
+                    hasValidatedSessionFile = validatedAgentSessionFile.isNotBlank(),
+                    sessionBranch = resolvedSessionBranch,
+                )
+                val turnMessages = turnRequestMessages.map { message ->
                     message.toPiChatMessage(
                         supportsInlineImageWithTools = sharedSupportsInlineImageWithTools(config),
                     )
@@ -2122,6 +2150,7 @@ fun IosComposeApp(
                         config = config,
                         messages = turnMessages,
                         sessionId = target.id,
+                        sessionFile = validatedAgentSessionFile,
                         skillPaths = skillSelection.availableSkills
                             .filter(SharedInstalledSkill::isEnabled)
                             .map(SharedInstalledSkill::guestPath),
@@ -2139,11 +2168,7 @@ fun IosComposeApp(
                         isReasoningModel = isReasoningModel,
                         modelsDevThinkingLevels = thinkingLevelsByProviderModel[modelKey],
                         modelsDevLimits = modelLimitsByProviderModel[modelKey],
-                        sessionBranch = if (shouldResetPiBranch) {
-                            com.zhousl.aether.data.pi.PiSessionBranch(mappedPiEntryId)
-                        } else {
-                            null
-                        },
+                        sessionBranch = resolvedSessionBranch,
                         onAssistantTextDelta = { delta ->
                             backgroundLeases[target.id]?.update("Writing response")
                             reasoningTracker.finishDirectSummaryChunk()
