@@ -84,6 +84,7 @@ internal fun providerBrandIconRes(providerId: String): DrawableResource = when (
     "opencode" -> Res.drawable.provider_opencode
     "opencode-go" -> Res.drawable.provider_opencode_go
     "openrouter" -> Res.drawable.provider_openrouter
+    "requesty" -> Res.drawable.provider_requesty
     "together" -> Res.drawable.provider_together
     "vercel-ai-gateway" -> Res.drawable.provider_vercel_ai_gateway
     "xai" -> Res.drawable.provider_xai
