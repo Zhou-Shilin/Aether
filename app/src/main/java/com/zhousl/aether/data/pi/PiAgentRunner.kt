@@ -415,24 +415,25 @@ class PiAgentRunner(
                         }
                     }
                     try {
-                        diagnosticLogger.event(
-                            category = "pi_agent",
-                            event = "bridge_run_turn_start",
-                            sessionId = resolvedSessionId,
-                            details = mapOf(
-                                "payload_session_id" to payload.optString("session_id"),
-                                "payload_session_file" to payload.optString("session_file"),
-                            ),
-                        )
+                        val bridgeTurnStartedAtMillis = System.currentTimeMillis()
                         var response = bridge.runTurn(payload, eventHandler)
+                        val stopReason = response.optString("stop_reason").trim()
+                        val responseErrorMessage = response.optString("error_message").trim()
+                        val hasResponseError = stopReason == "error" || responseErrorMessage.isNotBlank()
                         diagnosticLogger.event(
                             category = "pi_agent",
                             event = "bridge_run_turn_end",
+                            level = if (hasResponseError) "warn" else "info",
                             sessionId = resolvedSessionId,
-                            details = mapOf(
-                                "response_ok" to response.optBoolean("ok"),
-                                "response_session_id" to response.optString("session_id"),
-                            ),
+                            details = buildMap {
+                                put("stop_reason", stopReason)
+                                put("response_session_id", response.optString("session_id"))
+                                put("session_reused", response.optBoolean("session_reused", false))
+                                put("duration_millis", System.currentTimeMillis() - bridgeTurnStartedAtMillis)
+                                if (responseErrorMessage.isNotBlank()) {
+                                    put("error_message", responseErrorMessage)
+                                }
+                            },
                         )
                         forwardInjectedMessages()
                         while (true) {
@@ -495,11 +496,6 @@ class PiAgentRunner(
                 }
             }
         } finally {
-            diagnosticLogger.event(
-                category = "pi_agent",
-                event = "run_turn_end",
-                sessionId = sessionId,
-            )
             onStreamingStatus(null)
         }
     }

@@ -5,8 +5,10 @@ import com.zhousl.aether.data.ModelsDevModelLimits
 import com.zhousl.aether.data.PiProviderCatalog
 import com.zhousl.aether.data.ProviderAuthMethod
 import com.zhousl.aether.data.SharedDiagnosticLogger
+import com.zhousl.aether.data.SharedDiagnosticRedactor
 import com.zhousl.aether.data.normalizeReasoningEffort
 import com.zhousl.aether.data.normalizeLlmUserAgent
+import com.zhousl.aether.data.platformCurrentTimeMillis
 import com.zhousl.aether.data.platformDefaultSystemPrompt
 import com.zhousl.aether.data.platformRandomUuid
 import com.zhousl.aether.runtime.SharedPiBridgeClient
@@ -138,7 +140,21 @@ class SharedPiChatClient(
                 if (!omitReasoningEffort) put("reasoning", reasoning)
             },
         )
-        return response.toSharedPiTurnResult(config)
+        val result = response.toSharedPiTurnResult(config)
+        if (result.errorMessage.isNotBlank()) {
+            SharedDiagnosticLogger.event(
+                category = "pi_agent",
+                event = "complete_once_failed",
+                level = "warn",
+                details = mapOf(
+                    "provider" to config.piProviderId,
+                    "model" to config.modelId,
+                    "base_url" to SharedDiagnosticRedactor.sanitizedBaseUrl(config.baseUrl),
+                    "error_message" to result.errorMessage,
+                ),
+            )
+        }
+        return result
     }
 
     suspend fun steer(
@@ -322,11 +338,33 @@ class SharedPiChatClient(
                     }
                 }
                 try {
+                    val bridgeTurnStartedAtMillis = platformCurrentTimeMillis()
                     var resolvedResponse = bridge.request(
                         type = "run_turn",
                         payload = payload,
                         timeoutMillis = null,
                         onEvent = eventHandler,
+                    )
+                    val stopReason = resolvedResponse.string("stop_reason").trim()
+                    val responseErrorMessage = resolvedResponse.string("error_message").trim()
+                    val hasResponseError = stopReason == "error" || responseErrorMessage.isNotBlank()
+                    SharedDiagnosticLogger.event(
+                        category = "pi_agent",
+                        event = "bridge_run_turn_end",
+                        level = if (hasResponseError) "warn" else "info",
+                        sessionId = resolvedSessionId,
+                        details = buildMap {
+                            put("stop_reason", stopReason)
+                            put("response_session_id", resolvedResponse.string("session_id"))
+                            put(
+                                "session_reused",
+                                resolvedResponse["session_reused"]?.jsonPrimitive?.booleanOrNull == true,
+                            )
+                            put("duration_millis", platformCurrentTimeMillis() - bridgeTurnStartedAtMillis)
+                            if (responseErrorMessage.isNotBlank()) {
+                                put("error_message", responseErrorMessage)
+                            }
+                        },
                     )
                     forwardInjectedMessages()
                     pollingJob.cancelAndJoin()

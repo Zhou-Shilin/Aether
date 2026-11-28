@@ -3,6 +3,7 @@ package com.zhousl.aether.data.pi
 import com.zhousl.aether.data.PiExtensionLoadOptions
 import com.zhousl.aether.data.AetherDiagnosticLogger
 import com.zhousl.aether.data.DiagnosticRedactor
+import com.zhousl.aether.data.classifyPiBridgeStderrLevel
 import com.zhousl.aether.runtime.AlpineRuntime
 import com.zhousl.aether.runtime.PiNodeRuntimeSetup
 import kotlin.coroutines.cancellation.CancellationException
@@ -534,15 +535,7 @@ class PiKernelBridge(
         startIfNeeded: Boolean = true,
     ): JSONObject = withContext(Dispatchers.IO) {
         val id = nextRequestId(type)
-        diagnosticLogger.event(
-            category = "pi_bridge",
-            event = "request_queued",
-            requestId = id,
-            details = requestDiagnosticDetails(type, payload) + mapOf(
-                "timeout_millis" to timeoutMillis,
-                "start_if_needed" to startIfNeeded,
-            ),
-        )
+        val startedAtMillis = System.currentTimeMillis()
         val response = CompletableDeferred<PiBridgeFrame>()
         val eventChannel = onEvent?.let { Channel<PiBridgeFrame>(Channel.UNLIMITED) }
         val eventJob = if (onEvent != null && eventChannel != null) {
@@ -575,34 +568,24 @@ class PiKernelBridge(
             null
         }
         val diagnosticDetails = requestDiagnosticDetails(type, payload)
+        val sessionId = payload.optString("session_id").ifBlank { null }
         try {
-            diagnosticLogger.event(
-                category = "pi_bridge",
-                event = "request_start",
-                requestId = id,
-                details = diagnosticDetails,
-            )
             alpineRuntime.refreshGuestResolvConf()
             val requestProcess = if (startIfNeeded) {
-                diagnosticLogger.event(
-                    category = "pi_bridge",
-                    event = "ensure_started_begin",
-                    requestId = id,
-                )
-                val process = ensureStartedLocked(onSetupProgress)
-                diagnosticLogger.event(
-                    category = "pi_bridge",
-                    event = "ensure_started_end",
-                    requestId = id,
-                    details = mapOf(
-                        "process_generation" to process.generation,
-                        "process_alive" to process.process.isAlive,
-                    ),
-                )
-                process
+                ensureStartedLocked(onSetupProgress)
             } else {
                 currentLiveProcess() ?: return@withContext JSONObject().put("closed", false)
             }
+            diagnosticLogger.event(
+                category = "pi_bridge",
+                event = "request_start",
+                sessionId = sessionId,
+                requestId = id,
+                details = diagnosticDetails + mapOf(
+                    "process_generation" to requestProcess.generation,
+                    "timeout_millis" to timeoutMillis,
+                ),
+            )
             pendingRequests[id] = PendingPiBridgeRequest(
                 response = response,
                 processGeneration = requestProcess.generation,
@@ -611,49 +594,15 @@ class PiKernelBridge(
             )
             onSetupProgress(PiCoreSetupUpdate(PiCoreSetupPhase.VerifyingBridge))
             val request = PiBridgeRequest(id = id, type = type, payload = payload)
-            diagnosticLogger.event(
-                category = "pi_bridge",
-                event = "request_write_start",
-                requestId = id,
-                details = mapOf(
-                    "process_generation" to requestProcess.generation,
-                ),
-            )
             synchronized(requestProcess.writer) {
                 request.writeJsonLine(requestProcess.writer)
                 requestProcess.writer.flush()
             }
-            diagnosticLogger.event(
-                category = "pi_bridge",
-                event = "request_write_end",
-                requestId = id,
-            )
             val frame = if (timeoutMillis == null) {
-                diagnosticLogger.event(
-                    category = "pi_bridge",
-                    event = "request_await_start",
-                    requestId = id,
-                    details = mapOf("timeout" to "none"),
-                )
                 response.await()
             } else {
-                diagnosticLogger.event(
-                    category = "pi_bridge",
-                    event = "request_await_start",
-                    requestId = id,
-                    details = mapOf("timeout_millis" to timeoutMillis),
-                )
                 withTimeout(timeoutMillis) { response.await() }
             }
-            diagnosticLogger.event(
-                category = "pi_bridge",
-                event = "request_response_received",
-                requestId = id,
-                details = mapOf(
-                    "frame_type" to frame.type,
-                    "frame_ok" to frame.ok,
-                ),
-            )
             if (!frame.ok || frame.type == "error") {
                 val error = frame.error
                 throw PiBridgeException(
@@ -662,11 +611,21 @@ class PiKernelBridge(
                     code = error?.code?.ifBlank { "pi_bridge_error" } ?: "pi_bridge_error",
                 )
             }
+            val stopReason = frame.payload.optString("stop_reason").trim()
+            val errorMessage = frame.payload.optString("error_message").trim()
+            val hasPayloadError = stopReason == "error" || errorMessage.isNotBlank()
             diagnosticLogger.event(
                 category = "pi_bridge",
                 event = "request_end",
+                level = if (hasPayloadError) "warn" else "info",
+                sessionId = sessionId,
                 requestId = id,
-                details = diagnosticDetails + mapOf("frame_type" to frame.type),
+                details = diagnosticDetails + buildMap {
+                    put("duration_millis", System.currentTimeMillis() - startedAtMillis)
+                    put("process_generation", requestProcess.generation)
+                    if (stopReason.isNotBlank()) put("stop_reason", stopReason)
+                    if (errorMessage.isNotBlank()) put("error_message", errorMessage)
+                },
             )
             frame.payload
         } catch (cancellationException: CancellationException) {
@@ -674,8 +633,11 @@ class PiKernelBridge(
                 category = "pi_bridge",
                 event = "request_cancelled",
                 level = "warn",
+                sessionId = sessionId,
                 requestId = id,
-                details = diagnosticDetails,
+                details = diagnosticDetails + mapOf(
+                    "duration_millis" to (System.currentTimeMillis() - startedAtMillis),
+                ),
             )
             if (abortOnCancellation) {
                 markRequestCancelled(id)
@@ -698,8 +660,11 @@ class PiKernelBridge(
                 category = "pi_bridge",
                 event = "request_failed",
                 throwable = throwable,
+                sessionId = sessionId,
                 requestId = id,
-                details = diagnosticDetails,
+                details = diagnosticDetails + mapOf(
+                    "duration_millis" to (System.currentTimeMillis() - startedAtMillis),
+                ),
             )
             throw throwable
         } finally {
@@ -713,21 +678,7 @@ class PiKernelBridge(
         onSetupProgress: (PiCoreSetupUpdate) -> Unit = {},
     ): ActivePiBridgeProcess {
         mutex.withLock {
-            diagnosticLogger.event(
-                category = "pi_bridge",
-                event = "ensure_started_locked_enter",
-                details = mapOf(
-                    "current_process_alive" to (currentLiveProcess() != null),
-                ),
-            )
-            currentLiveProcess()?.let {
-                diagnosticLogger.event(
-                    category = "pi_bridge",
-                    event = "ensure_started_locked_reuse",
-                    details = mapOf("process_generation" to it.generation),
-                )
-                return it
-            }
+            currentLiveProcess()?.let { return it }
             val staleProcess = synchronized(processStateLock) {
                 activeProcess.also { activeProcess = null }
             }
@@ -981,11 +932,16 @@ class PiKernelBridge(
                         details = mapOf("process_generation" to startedProcess.generation),
                     )
                 }
+                val exitCode = runCatching { startedProcess.process.exitValue() }.getOrNull()
                 diagnosticLogger.event(
                     category = "pi_bridge",
                     event = "stdout_reader_exiting",
                     level = "warn",
-                    details = mapOf("process_generation" to startedProcess.generation),
+                    details = buildMap {
+                        put("process_generation", startedProcess.generation)
+                        put("process_alive", startedProcess.process.isAlive)
+                        if (exitCode != null) put("exit_code", exitCode)
+                    },
                 )
                 eventScope.launch {
                     failPendingRequests(
@@ -1009,10 +965,11 @@ class PiKernelBridge(
                         InputStreamReader(startedProcess.process.errorStream, Charsets.UTF_8)
                     ).useLines { lines ->
                         lines.forEach { line ->
+                            if (line.isBlank()) return@forEach
                             diagnosticLogger.event(
                                 category = "pi_bridge",
                                 event = "stderr",
-                                level = "warn",
+                                level = classifyPiBridgeStderrLevel(line),
                                 details = mapOf(
                                     "line" to DiagnosticRedactor.sanitizeString(line),
                                     "process_generation" to startedProcess.generation,
@@ -1033,17 +990,14 @@ class PiKernelBridge(
         frame: PiBridgeFrame,
         processGeneration: Long,
     ) {
-        diagnosticLogger.event(
-            category = "pi_bridge",
-            event = "frame_received",
-            requestId = frame.id,
-            details = mapOf(
-                "frame_type" to frame.type,
-                "frame_event" to frame.event,
-                "process_generation" to processGeneration,
-                "has_pending_request" to (pendingRequests[frame.id] != null),
-            ),
-        )
+        if (frame.type == "event") {
+            logBridgeEventFrame(frame, processGeneration)
+            if (frame.event == "assistant_retry") {
+                eventScope.launch {
+                    runCatching { alpineRuntime.refreshGuestResolvConf() }
+                }
+            }
+        }
         val pending = pendingRequests[frame.id]
         if (pending != null && pending.processGeneration != processGeneration) {
             diagnosticLogger.event(
@@ -1157,6 +1111,111 @@ class PiKernelBridge(
         }
     }
 
+    private fun logBridgeEventFrame(
+        frame: PiBridgeFrame,
+        processGeneration: Long,
+    ) {
+        val payload = frame.payload
+        val sessionId = payload.optString("session_id").ifBlank { null }
+        when (frame.event) {
+            "assistant_retry" -> diagnosticLogger.event(
+                category = "pi_bridge",
+                event = "assistant_retry",
+                level = "warn",
+                sessionId = sessionId,
+                requestId = frame.id,
+                details = mapOf(
+                    "attempt" to payload.optInt("attempt"),
+                    "max_attempts" to payload.optInt("max_attempts"),
+                    "delay_ms" to payload.optLong("delay_ms"),
+                    "error_message" to payload.optString("error_message"),
+                    "process_generation" to processGeneration,
+                ),
+            )
+
+            "assistant_error" -> diagnosticLogger.event(
+                category = "pi_bridge",
+                event = "assistant_error",
+                level = "error",
+                sessionId = sessionId,
+                requestId = frame.id,
+                details = mapOf(
+                    "provider" to payload.optString("provider"),
+                    "model" to payload.optString("model"),
+                    "stop_reason" to payload.optString("stop_reason"),
+                    "error_message" to payload.optString("error_message"),
+                    "process_generation" to processGeneration,
+                ),
+            )
+
+            "tool_call_start" -> diagnosticLogger.event(
+                category = "pi_bridge",
+                event = "tool_call_start",
+                sessionId = sessionId,
+                requestId = frame.id,
+                details = mapOf(
+                    "tool_call_id" to payload.optString("id"),
+                    "tool_name" to payload.optString("name"),
+                ),
+            )
+
+            "tool_call_end" -> {
+                val isError = payload.optBoolean("is_error", false)
+                diagnosticLogger.event(
+                    category = "pi_bridge",
+                    event = "tool_call_end",
+                    level = if (isError) "warn" else "info",
+                    sessionId = sessionId,
+                    requestId = frame.id,
+                    details = mapOf(
+                        "tool_call_id" to payload.optString("id"),
+                        "tool_name" to payload.optString("name"),
+                        "is_error" to isError,
+                    ),
+                )
+            }
+
+            "compaction_start" -> diagnosticLogger.event(
+                category = "pi_bridge",
+                event = "compaction_start",
+                sessionId = sessionId,
+                requestId = frame.id,
+                details = mapOf("reason" to payload.optString("reason")),
+            )
+
+            "compaction_end" -> {
+                val aborted = payload.optBoolean("aborted", false)
+                val errorMessage = payload.optString("error_message")
+                diagnosticLogger.event(
+                    category = "pi_bridge",
+                    event = "compaction_end",
+                    level = if (aborted || errorMessage.isNotBlank()) "warn" else "info",
+                    sessionId = sessionId,
+                    requestId = frame.id,
+                    details = mapOf(
+                        "reason" to payload.optString("reason"),
+                        "aborted" to aborted,
+                        "will_retry" to payload.optBoolean("will_retry", false),
+                        "error_message" to errorMessage,
+                    ),
+                )
+            }
+
+            "extension_error" -> diagnosticLogger.event(
+                category = "pi_bridge",
+                event = "extension_error",
+                level = "warn",
+                sessionId = sessionId,
+                requestId = frame.id,
+                details = mapOf(
+                    "extension_path" to payload.optString("extension_path"),
+                    "event" to payload.optString("event"),
+                    "error" to payload.optString("error"),
+                ),
+            )
+        }
+    }
+
     private fun nextRequestId(type: String): String =
         "${type}-${System.currentTimeMillis()}-${UUID.randomUUID().toString().take(8)}"
 
@@ -1165,11 +1224,13 @@ class PiKernelBridge(
         payload: JSONObject,
     ): Map<String, Any?> {
         val modelConfig = payload.optJSONObject("model_config")
+        val baseUrl = modelConfig?.optString("base_url").orEmpty()
         return mapOf(
             "request_type" to type,
             "session_id" to payload.optString("session_id"),
             "provider" to modelConfig?.optString("pi_provider_id").orEmpty(),
             "model" to modelConfig?.optString("model_id").orEmpty(),
+            "base_url" to if (baseUrl.isNotBlank()) DiagnosticRedactor.sanitizedBaseUrl(baseUrl) else "",
         ).filterValues(String::isNotBlank)
     }
 }

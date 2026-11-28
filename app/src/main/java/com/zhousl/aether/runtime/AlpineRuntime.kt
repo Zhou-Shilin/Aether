@@ -2,6 +2,7 @@ package com.zhousl.aether.runtime
 
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.TrafficStats
 import android.os.Build
 import com.zhousl.aether.data.AetherDiagnosticLogger
@@ -26,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 
 private const val AlpineWatchWindowMillis = 45_000L
@@ -1156,13 +1158,78 @@ class AlpineRuntime(
         writeGuestResolvConf()
     }
 
+    fun currentNetworkDiagnosticSummary(): JSONObject {
+        val connectivity = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        val activeNetwork = connectivity?.let { runCatching { it.activeNetwork }.getOrNull() }
+        val capabilities = activeNetwork?.let { network ->
+            runCatching { connectivity.getNetworkCapabilities(network) }.getOrNull()
+        }
+        val activeLink = activeNetwork?.let { network ->
+            runCatching { connectivity.getLinkProperties(network) }.getOrNull()
+        }
+        val transports = buildList {
+            if (capabilities != null) {
+                if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) add("wifi")
+                if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) add("cellular")
+                if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) add("vpn")
+                if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) add("ethernet")
+                if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH)) add("bluetooth")
+            }
+        }
+        val resolvConf = File(rootfsDir, "etc/resolv.conf")
+        val guestNameservers = if (resolvConf.isFile) {
+            runCatching {
+                resolvConf.readLines()
+                    .map(String::trim)
+                    .filter { it.startsWith("nameserver ") }
+                    .map { it.removePrefix("nameserver ").trim() }
+                    .filter(String::isNotEmpty)
+            }.getOrDefault(emptyList())
+        } else {
+            emptyList()
+        }
+        val proxyHost = activeLink?.httpProxy?.host.orEmpty()
+        val proxyPort = activeLink?.httpProxy?.port ?: -1
+        return JSONObject().apply {
+            put("activeNetworkPresent", activeNetwork != null)
+            put("transports", JSONArray(transports))
+            put(
+                "hasInternetCapability",
+                capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true,
+            )
+            put(
+                "isValidated",
+                capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true,
+            )
+            put("isVpn", capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                put("privateDnsActive", activeLink?.isPrivateDnsActive == true)
+                put("privateDnsServerName", activeLink?.privateDnsServerName.orEmpty())
+            }
+            put("hasSystemHttpProxy", proxyHost.isNotBlank())
+            if (proxyHost.isNotBlank()) {
+                put("systemHttpProxy", if (proxyPort > 0) "$proxyHost:$proxyPort" else proxyHost)
+            }
+            put(
+                "activeLinkDnsServers",
+                JSONArray(activeLink?.dnsServers?.mapNotNull { it?.hostAddress }.orEmpty()),
+            )
+            put("guestResolvConfNameservers", JSONArray(guestNameservers))
+            put("guestResolvConfManaged", shouldRewriteGuestResolvConf(
+                if (resolvConf.isFile) runCatching { resolvConf.readText() }.getOrNull() else null,
+            ))
+        }
+    }
+
     private fun writeGuestResolvConf() {
         val resolvConf = File(rootfsDir, "etc/resolv.conf")
         // An unreadable resolver is left exactly as it is; a chat turn must not fail over it.
         val existing = if (resolvConf.isFile) runCatching { resolvConf.readText() }.getOrElse { return } else null
         if (!shouldRewriteGuestResolvConf(existing)) return
-        val content = guestResolvConfContent(deviceDnsLinks())
+        val links = deviceDnsLinks()
+        val content = guestResolvConfContent(links)
         if (existing == content) return
+        var written = false
         synchronized(guestResolvConfLock) {
             // Another caller may have written while this one was computing its own content.
             val current = if (resolvConf.isFile) runCatching { resolvConf.readText() }.getOrElse { return } else null
@@ -1180,7 +1247,34 @@ class AlpineRuntime(
                 staging.setReadable(true, false)
                 staging.setWritable(true, true)
                 if (!staging.renameTo(resolvConf)) throw IOException("Unable to replace ${resolvConf.path}")
-            }.onFailure { staging.delete() }
+                written = true
+            }.onFailure { throwable ->
+                staging.delete()
+                diagnosticLogger.exception(
+                    category = "alpine_network",
+                    event = "resolv_conf_write_failed",
+                    throwable = throwable,
+                    level = "warn",
+                )
+            }
+        }
+        if (written) {
+            val summary = currentNetworkDiagnosticSummary()
+            diagnosticLogger.event(
+                category = "alpine_network",
+                event = "resolv_conf_updated",
+                details = mapOf(
+                    "transports" to summary.optJSONArray("transports"),
+                    "is_vpn" to summary.optBoolean("isVpn"),
+                    "is_validated" to summary.optBoolean("isValidated"),
+                    "private_dns_active" to summary.optBoolean("privateDnsActive"),
+                    "has_system_http_proxy" to summary.optBoolean("hasSystemHttpProxy"),
+                    "nameservers" to summary.optJSONArray("guestResolvConfNameservers"),
+                    "using_fallback" to links.none { link ->
+                        link.nameservers.any { isUsableGuestNameserver(it.trim()) }
+                    },
+                ),
+            )
         }
     }
 
@@ -1486,9 +1580,14 @@ internal data class GuestDnsLink(
     val searchDomains: List<String> = emptyList(),
 )
 
-// A scoped IPv6 address is not valid in resolv.conf.
+// Scoped IPv6 addresses and unscoped link-local IPv6 addresses (fe80::/10) are not usable in
+// resolv.conf on Linux/musl (unscoped link-local lookups immediately fail with EINVAL).
+private val UnscopedLinkLocalIpv6Prefix = Regex("^fe[89ab][0-9a-f]:", RegexOption.IGNORE_CASE)
+
 private fun isUsableGuestNameserver(nameserver: String): Boolean =
-    nameserver.isNotBlank() && !nameserver.contains('%')
+    nameserver.isNotBlank() &&
+        !nameserver.contains('%') &&
+        !UnscopedLinkLocalIpv6Prefix.containsMatchIn(nameserver)
 
 internal fun guestResolvConfContent(links: List<GuestDnsLink>): String {
     // musl queries every configured nameserver at once and keeps the first answer, so resolvers of

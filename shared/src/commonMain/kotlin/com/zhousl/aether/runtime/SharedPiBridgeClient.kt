@@ -3,6 +3,8 @@ package com.zhousl.aether.runtime
 import com.zhousl.aether.data.platformRandomUuid
 import com.zhousl.aether.data.platformCurrentTimeMillis
 import com.zhousl.aether.data.SharedDiagnosticLogger
+import com.zhousl.aether.data.SharedDiagnosticRedactor
+import com.zhousl.aether.data.classifySharedPiBridgeStderrLevel
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
@@ -30,8 +32,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
-private const val PiBridgeStderrMaximumCharacters = 32 * 1024
-private const val PiBridgeStderrMaximumChunkCharacters = 2 * 1024
+private const val PiBridgeStderrMaximumLineCharacters = 2 * 1024
 private const val PiBridgeMalformedOutputMaximumCharacters = 2 * 1024
 
 class PiBridgeRequestException(
@@ -392,10 +393,14 @@ class SharedPiBridgeClient(
     ): JsonObject {
         val requestId = "$type-${platformRandomUuid()}"
         val startedAtMillis = platformCurrentTimeMillis()
+        val sessionId = payload.string("session_id").ifBlank { null }
+        val diagnosticDetails = sharedRequestDiagnosticDetails(type, payload)
         SharedDiagnosticLogger.event(
             category = "pi_bridge",
             event = "request_start",
-            details = mapOf("requestId" to requestId, "type" to type),
+            sessionId = sessionId,
+            requestId = requestId,
+            details = diagnosticDetails + mapOf("timeout_millis" to timeoutMillis),
         )
         val activeProcess = try {
             if (startIfNeeded) {
@@ -415,9 +420,9 @@ class SharedPiBridgeClient(
                 category = "pi_bridge",
                 event = "request_start_failed",
                 level = "error",
-                details = mapOf(
-                    "requestId" to requestId,
-                    "type" to type,
+                sessionId = sessionId,
+                requestId = requestId,
+                details = diagnosticDetails + mapOf(
                     "error" to failure.message.orEmpty(),
                 ),
             )
@@ -459,14 +464,20 @@ class SharedPiBridgeClient(
                 withTimeout(timeoutMillis) { deferred.await() }
             }
             return response.also {
+                val stopReason = it.string("stop_reason").trim()
+                val errorMessage = it.string("error_message").trim()
+                val hasPayloadError = stopReason == "error" || errorMessage.isNotBlank()
                 SharedDiagnosticLogger.event(
                     category = "pi_bridge",
                     event = "request_end",
-                    details = mapOf(
-                        "requestId" to requestId,
-                        "type" to type,
-                        "durationMillis" to (platformCurrentTimeMillis() - startedAtMillis).toString(),
-                    ),
+                    level = if (hasPayloadError) "warn" else "info",
+                    sessionId = sessionId,
+                    requestId = requestId,
+                    details = diagnosticDetails + buildMap {
+                        put("duration_millis", platformCurrentTimeMillis() - startedAtMillis)
+                        if (stopReason.isNotBlank()) put("stop_reason", stopReason)
+                        if (errorMessage.isNotBlank()) put("error_message", errorMessage)
+                    },
                 )
             }
         } catch (throwable: Throwable) {
@@ -482,10 +493,10 @@ class SharedPiBridgeClient(
                             )
                         }
                     }
-                    logRequestFailure(requestId, type, startedAtMillis, throwable)
+                    logRequestFailure(requestId, sessionId, diagnosticDetails, startedAtMillis, throwable)
                 }
             } else {
-                logRequestFailure(requestId, type, startedAtMillis, throwable)
+                logRequestFailure(requestId, sessionId, diagnosticDetails, startedAtMillis, throwable)
             }
             throw throwable
         } finally {
@@ -499,18 +510,19 @@ class SharedPiBridgeClient(
 
     private suspend fun logRequestFailure(
         requestId: String,
-        type: String,
+        sessionId: String?,
+        diagnosticDetails: Map<String, Any?>,
         startedAtMillis: Long,
         throwable: Throwable,
     ) {
         SharedDiagnosticLogger.event(
             category = "pi_bridge",
             event = if (throwable is CancellationException) "request_cancelled" else "request_failed",
-            level = if (throwable is CancellationException) "info" else "error",
-            details = mapOf(
-                "requestId" to requestId,
-                "type" to type,
-                "durationMillis" to (platformCurrentTimeMillis() - startedAtMillis).toString(),
+            level = if (throwable is CancellationException) "warn" else "error",
+            sessionId = sessionId,
+            requestId = requestId,
+            details = diagnosticDetails + mapOf(
+                "duration_millis" to (platformCurrentTimeMillis() - startedAtMillis),
                 "error" to throwable.message.orEmpty(),
             ),
         )
@@ -685,41 +697,41 @@ class SharedPiBridgeClient(
     }
 
     private suspend fun readStderr(activeProcess: RuntimeProcess) {
-        var loggedCharacters = 0
-        var reportedTruncation = false
+        val pendingLine = StringBuilder()
+        suspend fun emitStderrLine(rawLine: String) {
+            val trimmed = rawLine.trimEnd('\r')
+            if (trimmed.isBlank()) return
+            val retained = trimmed.take(PiBridgeStderrMaximumLineCharacters)
+            SharedDiagnosticLogger.event(
+                category = "pi_bridge",
+                event = "stderr",
+                level = classifySharedPiBridgeStderrLevel(retained),
+                details = mapOf(
+                    "pid" to activeProcess.pid.toString(),
+                    "line" to retained,
+                    "truncated" to (retained.length < trimmed.length),
+                ),
+            )
+        }
         try {
             activeProcess.stderr.collect { chunk ->
-                val decoded = chunk.decodeToString()
-                val remaining = PiBridgeStderrMaximumCharacters - loggedCharacters
-                if (remaining <= 0) {
-                    if (!reportedTruncation) {
-                        reportedTruncation = true
-                        SharedDiagnosticLogger.event(
-                            category = "pi_bridge",
-                            event = "process_stderr_truncated",
-                            level = "warn",
-                            details = mapOf("pid" to activeProcess.pid.toString()),
-                        )
-                    }
-                    return@collect
+                pendingLine.append(chunk.decodeToString())
+                while (true) {
+                    val newlineIndex = pendingLine.indexOf('\n')
+                    if (newlineIndex < 0) break
+                    val line = pendingLine.substring(0, newlineIndex)
+                    pendingLine.deleteRange(0, newlineIndex + 1)
+                    emitStderrLine(line)
                 }
-                val retained = decoded.take(
-                    minOf(remaining, PiBridgeStderrMaximumChunkCharacters),
-                )
-                if (retained.isNotBlank()) {
-                    loggedCharacters += retained.length
-                    SharedDiagnosticLogger.event(
-                        category = "pi_bridge",
-                        event = "process_stderr",
-                        level = "warn",
-                        details = mapOf(
-                            "pid" to activeProcess.pid.toString(),
-                            "message" to retained,
-                            "chunkCharacters" to decoded.length.toString(),
-                            "truncated" to (retained.length < decoded.length).toString(),
-                        ),
-                    )
+                if (pendingLine.length > PiBridgeStderrMaximumLineCharacters * 2) {
+                    val line = pendingLine.toString()
+                    pendingLine.clear()
+                    emitStderrLine(line)
                 }
+            }
+            if (pendingLine.isNotEmpty()) {
+                emitStderrLine(pendingLine.toString())
+                pendingLine.clear()
             }
         } catch (throwable: Throwable) {
             if (throwable !is CancellationException) {
@@ -744,6 +756,13 @@ class SharedPiBridgeClient(
             return
         }
         val id = frame.string("id")
+        if (frame.string("type") == "event") {
+            logSharedBridgeEventFrame(
+                requestId = id,
+                event = frame.string("event"),
+                payload = frame["payload"] as? JsonObject ?: JsonObject(emptyMap()),
+            )
+        }
         val request = stateMutex.withLock { pending[id] } ?: return
         when (frame.string("type")) {
             "event" -> request.events.send(
@@ -812,6 +831,126 @@ private fun extensionPackagePayload(
 ): JsonObject = buildJsonObject {
     put("source", source)
     options.toPayload().forEach { (key, value) -> put(key, value) }
+}
+
+private suspend fun logSharedBridgeEventFrame(
+    requestId: String,
+    event: String,
+    payload: JsonObject,
+) {
+    val sessionId = payload.string("session_id").ifBlank { null }
+    when (event) {
+        "assistant_retry" -> SharedDiagnosticLogger.event(
+            category = "pi_bridge",
+            event = "assistant_retry",
+            level = "warn",
+            sessionId = sessionId,
+            requestId = requestId,
+            details = mapOf(
+                "attempt" to payload.string("attempt").toIntOrNull(),
+                "max_attempts" to payload.string("max_attempts").toIntOrNull(),
+                "delay_ms" to payload.string("delay_ms").toLongOrNull(),
+                "error_message" to payload.string("error_message"),
+            ),
+        )
+
+        "assistant_error" -> SharedDiagnosticLogger.event(
+            category = "pi_bridge",
+            event = "assistant_error",
+            level = "error",
+            sessionId = sessionId,
+            requestId = requestId,
+            details = mapOf(
+                "provider" to payload.string("provider"),
+                "model" to payload.string("model"),
+                "stop_reason" to payload.string("stop_reason"),
+                "error_message" to payload.string("error_message"),
+            ),
+        )
+
+        "tool_call_start" -> SharedDiagnosticLogger.event(
+            category = "pi_bridge",
+            event = "tool_call_start",
+            sessionId = sessionId,
+            requestId = requestId,
+            details = mapOf(
+                "tool_call_id" to payload.string("id"),
+                "tool_name" to payload.string("name"),
+            ),
+        )
+
+        "tool_call_end" -> {
+            val isError = payload["is_error"]?.jsonPrimitive?.booleanOrNull == true
+            SharedDiagnosticLogger.event(
+                category = "pi_bridge",
+                event = "tool_call_end",
+                level = if (isError) "warn" else "info",
+                sessionId = sessionId,
+                requestId = requestId,
+                details = mapOf(
+                    "tool_call_id" to payload.string("id"),
+                    "tool_name" to payload.string("name"),
+                    "is_error" to isError,
+                ),
+            )
+        }
+
+        "compaction_start" -> SharedDiagnosticLogger.event(
+            category = "pi_bridge",
+            event = "compaction_start",
+            sessionId = sessionId,
+            requestId = requestId,
+            details = mapOf("reason" to payload.string("reason")),
+        )
+
+        "compaction_end" -> {
+            val aborted = payload["aborted"]?.jsonPrimitive?.booleanOrNull == true
+            val errorMessage = payload.string("error_message")
+            SharedDiagnosticLogger.event(
+                category = "pi_bridge",
+                event = "compaction_end",
+                level = if (aborted || errorMessage.isNotBlank()) "warn" else "info",
+                sessionId = sessionId,
+                requestId = requestId,
+                details = mapOf(
+                    "reason" to payload.string("reason"),
+                    "aborted" to aborted,
+                    "will_retry" to (payload["will_retry"]?.jsonPrimitive?.booleanOrNull == true),
+                    "error_message" to errorMessage,
+                ),
+            )
+        }
+
+        "extension_error" -> SharedDiagnosticLogger.event(
+            category = "pi_bridge",
+            event = "extension_error",
+            level = "warn",
+            sessionId = sessionId,
+            requestId = requestId,
+            details = mapOf(
+                "extension_path" to payload.string("extension_path"),
+                "event" to payload.string("event"),
+                "error" to payload.string("error"),
+            ),
+        )
+    }
+}
+
+private fun sharedRequestDiagnosticDetails(
+    type: String,
+    payload: JsonObject,
+): Map<String, Any?> {
+    val modelConfig = payload["model_config"] as? JsonObject
+    val baseUrl = modelConfig?.string("base_url").orEmpty()
+    return buildMap {
+        put("request_type", type)
+        payload.string("session_id").takeIf(String::isNotBlank)?.let { put("session_id", it) }
+        modelConfig?.string("pi_provider_id")?.takeIf(String::isNotBlank)?.let { put("provider", it) }
+        modelConfig?.string("model_id")?.takeIf(String::isNotBlank)?.let { put("model", it) }
+        if (baseUrl.isNotBlank()) {
+            put("base_url", SharedDiagnosticRedactor.sanitizedBaseUrl(baseUrl))
+        }
+    }
 }
 
 private fun JsonObject.string(name: String): String =

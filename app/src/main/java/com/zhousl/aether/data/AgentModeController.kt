@@ -123,6 +123,8 @@ class AgentModeController(
     private val actionMutex = Mutex()
     private val shizukuServiceMutex = Mutex()
     private val _displayState = MutableStateFlow(AgentModeDisplayState())
+    @Volatile
+    private var lastLoggedAuthorizationSignature: String? = null
     private val _virtualDisplayAuthorizationState = MutableStateFlow(AgentModeAuthorizationState())
     val virtualDisplayAuthorizationState = _virtualDisplayAuthorizationState.asStateFlow()
     private var pendingVirtualDisplayAuthorization = false
@@ -428,17 +430,21 @@ class AgentModeController(
             releaseDisplay("Virtual display reset because Phone Use authorization method changed.")
         }
         _authorizationState.value = inspectAuthorization(settings).also { state ->
-            diagnosticLogger.event(
-                category = "agent_mode",
-                event = "authorization_refreshed",
-                level = if (state.isReady || state.issue == AgentModeAuthorizationIssue.Disabled) "info" else "warn",
-                details = mapOf(
-                    "issue" to state.issue.name,
-                    "detail" to state.detail,
-                    "method" to settings.phoneUseAuthorizationMethod.storageValue,
-                    "enabled" to settings.agentModeAuthorizationEnabled,
-                ),
-            )
+            val signature = "${state.issue.name}|${state.detail}|${settings.phoneUseAuthorizationMethod.storageValue}|${settings.agentModeAuthorizationEnabled}"
+            if (signature != lastLoggedAuthorizationSignature) {
+                lastLoggedAuthorizationSignature = signature
+                diagnosticLogger.event(
+                    category = "agent_mode",
+                    event = "authorization_refreshed",
+                    level = if (state.isReady || state.issue == AgentModeAuthorizationIssue.Disabled) "info" else "warn",
+                    details = mapOf(
+                        "issue" to state.issue.name,
+                        "detail" to state.detail,
+                        "method" to settings.phoneUseAuthorizationMethod.storageValue,
+                        "enabled" to settings.agentModeAuthorizationEnabled,
+                    ),
+                )
+            }
         }
     }
 

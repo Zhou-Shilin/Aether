@@ -3146,3 +3146,44 @@ test("ordinary sessions never emit computer or context observer events", async (
   }
   assert.ok(!client.events.some(frame => frame.event.startsWith("process_") || frame.event === "context_usage"));
 });
+
+test("enriches opaque OpenAI connection errors with the real transport cause and emits fetch_error diagnostics", async (t) => {
+  const closedServer = createServer();
+  await new Promise((resolve) => closedServer.listen(0, "127.0.0.1", resolve));
+  const { port } = closedServer.address();
+  await new Promise((resolve) => closedServer.close(resolve));
+
+  const home = await mkdtemp(join(tmpdir(), "aether-conn-err-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const client = new BridgeClient({
+    HOME: home,
+    USERPROFILE: home,
+    AETHER_PI_BRIDGE_DEBUG: "",
+    PI_BRIDGE_DEBUG: "",
+  });
+
+  const result = await client.request("conn-err-once", "complete_once", {
+    model_config: {
+      provider_type: "builtin",
+      provider_config_id: "test-openai-conn-err",
+      pi_provider_id: "openai",
+      pi_api: "builtin",
+      model_id: "gpt-4.1-mini",
+      base_url: `http://127.0.0.1:${port}/v1?api_key=secret-in-query`,
+      api_key: "sk-test-key",
+      max_retries: 0,
+    },
+    messages: [userMessage("ping")],
+    stream: false,
+    max_retries: 0,
+  });
+
+  assert.equal(result.stop_reason, "error");
+  assert.match(result.error_message, /^Connection error: /i);
+  assert.match(result.error_message, /ECONNREFUSED|fetch failed/i);
+  assert.doesNotMatch(result.error_message, /secret-in-query/);
+  assert.match(client.stderr, /\[pi-bridge\] fetch_error /);
+  assert.match(client.stderr, /\[pi-bridge\] complete_once_error /);
+  assert.match(client.stderr, /ECONNREFUSED/);
+  assert.doesNotMatch(client.stderr, /secret-in-query/);
+});

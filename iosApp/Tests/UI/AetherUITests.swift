@@ -86,17 +86,16 @@ final class AetherUITests: XCTestCase {
         XCTAssertTrue(app.buttons["chat.menu.files"].waitForNonExistence(timeout: 5))
 
         if UIDevice.current.userInterfaceIdiom == .pad {
-            XCTAssertFalse(app.buttons["Menu"].exists)
+            // Native floating Liquid Glass sidebar starts open on wide iPad layouts
+            // and exposes a collapsible Menu toggle button.
+            XCTAssertTrue(app.buttons["Menu"].exists)
         } else {
             app.buttons["Menu"].tap()
         }
-        // The original Kotlin drawer exposes Search and Settings buttons,
-        // with a Kotlin text field that appears only after Search is pressed.
         XCTAssertTrue(app.buttons["Search"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Settings"].exists)
-        XCTAssertEqual(app.searchFields.count, 0)
         app.buttons["Search"].tap()
-        let search = app.textViews.firstMatch
+        let search = app.textFields["sidebar.searchField"]
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.tap()
         search.typeText("No matching conversation")
@@ -114,7 +113,7 @@ final class AetherUITests: XCTestCase {
         app.launch()
         if app.buttons["Agree"].waitForExistence(timeout: 5) { app.buttons["Agree"].tap() }
         waitForChatStartup(app)
-        if app.buttons["Menu"].exists { app.buttons["Menu"].tap() }
+        if !app.buttons["Settings"].exists && app.buttons["Menu"].exists { app.buttons["Menu"].tap() }
         XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
         app.buttons["Settings"].tap()
 
@@ -345,7 +344,7 @@ final class AetherUITests: XCTestCase {
         XCTAssertTrue((composer.value as? String)?.contains("keyboard-e2e") == true)
 
         if UIDevice.current.userInterfaceIdiom == .pad {
-            XCTAssertFalse(app.buttons["Menu"].exists)
+            XCTAssertTrue(app.buttons["Menu"].exists)
             XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
         } else {
             XCTAssertTrue(app.buttons["Menu"].exists)

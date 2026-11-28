@@ -2,6 +2,7 @@ package com.zhousl.aether.ui
 
 import android.app.Application
 import android.net.Uri
+import android.os.Build
 import android.provider.OpenableColumns
 import android.view.Surface
 import androidx.lifecycle.AndroidViewModel
@@ -5860,7 +5861,12 @@ class AetherViewModel(
         val logcat = readLogcatDump()
         val diagnosticEvents = diagnosticLogger.readEventsText()
         val lastCrash = diagnosticLogger.readLastCrashText()
+        val networkSummary = runCatching { runtime.alpineRuntime.currentNetworkDiagnosticSummary() }
+            .getOrElse { JSONObject().put("error", it.message.orEmpty()) }
         appendLine("Aether diagnostic log")
+        appendLine("platform=android")
+        appendLine("osVersion=Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+        appendLine("device=${Build.MANUFACTURER} ${Build.MODEL}")
         appendLine("generatedAtMillis=${System.currentTimeMillis()}")
         appendLine("versionName=${BuildConfig.VERSION_NAME}")
         appendLine("versionCode=${BuildConfig.VERSION_CODE}")
@@ -5876,6 +5882,9 @@ class AetherViewModel(
         appendLine("termuxReady=${snapshot.termuxSetupState.isReady}")
         appendLine("rootReady=${snapshot.rootSetupState.isReady}")
         appendLine("agentModeAuthorized=${snapshot.agentModeAuthorizationState.isReady}")
+        appendLine()
+        appendLine("networkSummary:")
+        appendLine(networkSummary.toString(2))
         appendLine()
         appendLine("settingsSummary:")
         appendLine(buildSettingsDiagnosticSummary(snapshot).toString(2))
@@ -5952,8 +5961,11 @@ class AetherViewModel(
                         put("id", config.id)
                         put("name", config.name)
                         put("piProviderId", config.piProviderId)
+                        put("authMethod", config.authMethod.storageValue)
                         put("baseUrl", DiagnosticRedactor.sanitizedBaseUrl(config.baseUrl))
                         put("modelId", config.modelId)
+                        put("compatibilityMode", config.compatibilityMode)
+                        if (config.serviceTier.isNotBlank()) put("serviceTier", config.serviceTier)
                         put("cachedModelCount", config.cachedModels.size)
                         put("enabledModelCount", config.enabledModelIds.size)
                         put("isEnabled", config.isEnabled)

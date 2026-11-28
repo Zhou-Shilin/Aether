@@ -40,6 +40,7 @@ struct AetherIOSApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var presentsAlpineFileManager = false
     @StateObject private var nativeSettings = NativeSettingsModel()
+    @StateObject private var nativeSidebar = NativeSidebarModel()
     @StateObject private var workspace = NativeWorkspaceModel()
     @State private var presentsTerminal = false
     @State private var presentsSkills = false
@@ -108,7 +109,7 @@ struct AetherIOSApp: App {
                         NativeSettingsView(model: nativeSettings, usesDuoLayout: true)
                     }
             } else {
-                ComposeRootView(workspace: workspace, settings: nativeSettings)
+                SplitRootView(workspace: workspace, settings: nativeSettings, sidebar: nativeSidebar)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .ignoresSafeArea()
                     .onReceive(NotificationCenter.default.publisher(for: .openAlpineFileManager)) { _ in
@@ -165,6 +166,23 @@ private final class NativeWorkspaceModel: NSObject, ObservableObject, @preconcur
     }
 }
 
+private struct SplitRootView: UIViewControllerRepresentable {
+    @ObservedObject var workspace: NativeWorkspaceModel
+    let settings: NativeSettingsModel
+    let sidebar: NativeSidebarModel
+
+    func makeUIViewController(context: Context) -> UIViewController {
+        let composeVC = FullscreenComposeViewController(
+            content: workspace.makeComposeContent(),
+            workspace: workspace,
+            settings: settings
+        )
+        return AetherRootSplitViewController(composeVC: composeVC, sidebar: sidebar)
+    }
+
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
+}
+
 private struct ComposeRootView: UIViewControllerRepresentable {
     @ObservedObject var workspace: NativeWorkspaceModel
     let settings: NativeSettingsModel
@@ -190,7 +208,11 @@ private final class FullscreenComposeViewController: UIViewController {
     private var lastComputerFrame: CGRect?
     private var lastComputerVisible = false
 
-    init(content: UIViewController, workspace: NativeWorkspaceModel, settings: NativeSettingsModel) {
+    init(
+        content: UIViewController,
+        workspace: NativeWorkspaceModel,
+        settings: NativeSettingsModel
+    ) {
         self.content = content
         self.workspace = workspace
         self.settings = settings

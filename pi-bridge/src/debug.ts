@@ -28,7 +28,20 @@ const INLINE_SECRET_PATTERNS = [
   /((api[_-]?key|token|secret|password)\s*[:=]\s*)[^\s,;}{]+/gi,
   /((api[_-]?key|token|secret|password)=)[^&\s]+/gi,
 ];
-const MAX_VALUE_CHARS = 400;
+const MAX_VALUE_CHARS = 700;
+
+export function sanitizeUrl(rawUrl: string): string {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return "";
+  try {
+    const parsed = new URL(trimmed);
+    const port = parsed.port ? `:${parsed.port}` : "";
+    const pathname = parsed.pathname || "/";
+    return `${parsed.protocol}//${parsed.hostname}${port}${pathname}`.replace(/\/+$/, "");
+  } catch {
+    return sanitizeString(trimmed);
+  }
+}
 
 function normalizeKey(key: string): string {
   return key.replace(/-/g, "_").toLowerCase();

@@ -122,6 +122,15 @@ private struct NativeChatControlView: View {
                 .menuOrder(.fixed)
                 .accessibilityLabel(model.text("label"))
                 .accessibilityIdentifier("chat.add")
+            } else if kind == "sidebarToggle" {
+                SidebarToggleGlassButton(
+                    label: model.text("label"),
+                    isDark: model.flag("dark"),
+                    action: {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        model.send("toggle")
+                    }
+                )
             }
         }
         .preferredColorScheme(model.flag("dark") ? .dark : .light)
@@ -138,6 +147,74 @@ private struct NativeChatControlView: View {
                 }.accessibilityIdentifier("chat.menu." + item.string("id"))
             }
         }
+    }
+}
+
+private struct SidebarToggleGlassButton: View {
+    let label: String
+    let isDark: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            SidebarMenuGlyph()
+                .frame(width: 38, height: 38)
+                .contentShape(Circle())
+        }
+        .buttonStyle(SidebarToggleGlassButtonStyle(isDark: isDark))
+        .accessibilityLabel(label.isEmpty ? "Menu" : label)
+        .accessibilityIdentifier("chat.sidebarToggle")
+    }
+}
+
+private struct SidebarToggleGlassButtonStyle: ButtonStyle {
+    let isDark: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        if #available(iOS 26.0, *) {
+            configuration.label
+                .foregroundStyle(.primary)
+                .glassEffect(.regular.interactive(), in: .circle)
+                .shadow(color: .black.opacity(isDark ? 0.30 : 0.08), radius: 8, x: 0, y: 3)
+        } else {
+            configuration.label
+                .foregroundStyle(.primary)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay(
+                    Circle()
+                        .strokeBorder(.primary.opacity(isDark ? 0.14 : 0.08), lineWidth: 0.5)
+                )
+                .shadow(color: .black.opacity(isDark ? 0.30 : 0.08), radius: 8, x: 0, y: 3)
+                .scaleEffect(configuration.isPressed ? 0.94 : 1.0)
+                .animation(.spring(response: 0.24, dampingFraction: 0.78), value: configuration.isPressed)
+        }
+    }
+}
+
+/// Minimal two-bar staggered menu glyph matching the ChatGPT iOS 26 sidebar toggle.
+private struct SidebarMenuGlyph: View {
+    var body: some View {
+        Canvas { context, size in
+            let lineWidth: CGFloat = 1.9
+            let topWidth: CGFloat = 14.5
+            let bottomWidth: CGFloat = 9.5
+            let verticalSpacing: CGFloat = 5.6
+            let startX = (size.width - topWidth) / 2
+            let centerY = size.height / 2
+
+            var path = Path()
+            path.move(to: CGPoint(x: startX, y: centerY - verticalSpacing / 2))
+            path.addLine(to: CGPoint(x: startX + topWidth, y: centerY - verticalSpacing / 2))
+            path.move(to: CGPoint(x: startX, y: centerY + verticalSpacing / 2))
+            path.addLine(to: CGPoint(x: startX + bottomWidth, y: centerY + verticalSpacing / 2))
+
+            context.stroke(
+                path,
+                with: .foreground,
+                style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round)
+            )
+        }
+        .accessibilityHidden(true)
     }
 }
 

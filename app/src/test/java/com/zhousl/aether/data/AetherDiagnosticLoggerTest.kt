@@ -54,4 +54,52 @@ class AetherDiagnosticLoggerTest {
 
         assertEquals("https://example.com/v1/chat/completions", sanitized)
     }
+
+    @Test
+    fun classifiesPiBridgeStderrSeverityConsistently() {
+        assertEquals(
+            "info",
+            classifyPiBridgeStderrLevel(
+                """[pi-bridge] agent_turn_thinking_level {"requested":"low","effective":"low"}""",
+            ),
+        )
+        assertEquals(
+            "warn",
+            classifyPiBridgeStderrLevel(
+                """[pi-bridge] agent_auto_retry {"attempt":1,"max_attempts":5}""",
+            ),
+        )
+        assertEquals(
+            "warn",
+            classifyPiBridgeStderrLevel(
+                """[pi-bridge] fetch_http_error {"status":502}""",
+            ),
+        )
+        assertEquals(
+            "error",
+            classifyPiBridgeStderrLevel(
+                """[pi-bridge] fetch_error {"code":"ECONNREFUSED"}""",
+            ),
+        )
+        assertEquals(
+            "error",
+            classifyPiBridgeStderrLevel(
+                """[pi-bridge] complete_once_error {"error_message":"Connection error"}""",
+            ),
+        )
+        assertEquals("error", classifyPiBridgeStderrLevel("pi-bridge fatal: boom"))
+        assertEquals("warn", classifyPiBridgeStderrLevel("unstructured warning output"))
+    }
+
+    @Test
+    fun redactsCookiesAndCredentials() {
+        val sanitized = DiagnosticRedactor.sanitizeMap(
+            mapOf(
+                "cookie" to "session=abc",
+                "oauth_credential" to "secret-cred",
+            ),
+        )
+        assertEquals("[REDACTED]", sanitized.getString("cookie"))
+        assertEquals("[REDACTED]", sanitized.getString("oauth_credential"))
+    }
 }

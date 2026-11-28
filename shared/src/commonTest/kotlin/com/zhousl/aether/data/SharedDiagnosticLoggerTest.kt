@@ -64,4 +64,34 @@ class SharedDiagnosticLoggerTest {
         assertFalse("secret" in sanitized)
         assertTrue(sanitized.startsWith("https://"))
     }
+
+    @Test
+    fun classifiesPiBridgeStderrSeverityConsistently() {
+        assertEquals(
+            "info",
+            classifySharedPiBridgeStderrLevel(
+                """[pi-bridge] agent_turn_thinking_level {"requested":"low","effective":"low"}""",
+            ),
+        )
+        assertEquals(
+            "warn",
+            classifySharedPiBridgeStderrLevel(
+                """[pi-bridge] agent_auto_retry {"attempt":1,"max_attempts":5}""",
+            ),
+        )
+        assertEquals(
+            "warn",
+            classifySharedPiBridgeStderrLevel(
+                """[pi-bridge] fetch_http_error {"status":502}""",
+            ),
+        )
+        assertEquals(
+            "error",
+            classifySharedPiBridgeStderrLevel(
+                """[pi-bridge] fetch_error {"code":"ECONNREFUSED"}""",
+            ),
+        )
+        assertEquals("error", classifySharedPiBridgeStderrLevel("pi-bridge fatal: boom"))
+        assertEquals("warn", classifySharedPiBridgeStderrLevel("unstructured warning output"))
+    }
 }

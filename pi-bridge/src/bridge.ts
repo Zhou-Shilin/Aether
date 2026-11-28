@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { readFileSync } from "node:fs";
 import { flushCompileCache } from "node:module";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -90,7 +91,13 @@ import {
   invokeAetherAppExtensionAction,
   loadAetherAppExtensions,
 } from "./aether-extensions.js";
-import { bridgeDebug, bridgeDebugEnabled, bridgeDiagnostic, elapsedMillis } from "./debug.js";
+import {
+  bridgeDebug,
+  bridgeDebugEnabled,
+  bridgeDiagnostic,
+  elapsedMillis,
+  sanitizeUrl,
+} from "./debug.js";
 import { reserveProtocolStdout, writeProtocolFrame } from "./protocol-output.js";
 
 reserveProtocolStdout();
@@ -560,6 +567,83 @@ configureAetherExtensionTransport({
   },
 });
 
+interface FetchAttemptTracker {
+  lastFetchError?: string;
+}
+
+const fetchAttemptContext = new AsyncLocalStorage<FetchAttemptTracker>();
+
+function readResolvNameserversSafe(): string[] {
+  try {
+    const content = readFileSync("/etc/resolv.conf", "utf8");
+    const servers: string[] = [];
+    for (const line of content.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith(";")) continue;
+      const match = /^nameserver\s+(\S+)/i.exec(trimmed);
+      if (match?.[1] && !servers.includes(match[1])) {
+        servers.push(match[1]);
+        if (servers.length >= 4) break;
+      }
+    }
+    return servers;
+  } catch {
+    return [];
+  }
+}
+
+function extractNetworkErrorFields(error: unknown): {
+  code?: string;
+  errno?: string;
+  syscall?: string;
+  host?: string;
+} {
+  const seen = new Set<object>();
+  const pending: unknown[] = [error];
+  let code: string | undefined;
+  let errno: string | undefined;
+  let syscall: string | undefined;
+  let host: string | undefined;
+  while (pending.length > 0 && seen.size < 32) {
+    const current = pending.shift();
+    if (!current || typeof current !== "object" || seen.has(current)) continue;
+    seen.add(current);
+    const record = current as {
+      code?: unknown;
+      errno?: unknown;
+      syscall?: unknown;
+      address?: unknown;
+      hostname?: unknown;
+      port?: unknown;
+      cause?: unknown;
+      reason?: unknown;
+      errors?: unknown;
+    };
+    if (!code && (typeof record.code === "string" || typeof record.code === "number")) {
+      const value = String(record.code).trim();
+      if (value) code = value;
+    }
+    if (!errno && (typeof record.errno === "string" || typeof record.errno === "number")) {
+      const value = String(record.errno).trim();
+      if (value) errno = value;
+    }
+    if (!syscall && typeof record.syscall === "string" && record.syscall.trim()) {
+      syscall = record.syscall.trim();
+    }
+    if (!host) {
+      const candidate = [record.hostname ?? record.address, record.port]
+        .filter((value) => typeof value === "string" || typeof value === "number")
+        .map(String)
+        .filter(Boolean)
+        .join(":");
+      if (candidate) host = candidate;
+    }
+    pending.push(record.cause, record.reason);
+    if (Array.isArray(record.errors)) pending.push(...record.errors);
+  }
+  return { code, errno, syscall, host };
+}
+
 function errorMessageWithCause(error: unknown): string {
   const messages: string[] = [];
   const seen = new Set<object>();
@@ -569,6 +653,7 @@ function errorMessageWithCause(error: unknown): string {
     if (!current || typeof current !== "object" || seen.has(current)) continue;
     seen.add(current);
     const record = current as {
+      name?: unknown;
       message?: unknown;
       code?: unknown;
       errno?: unknown;
@@ -576,6 +661,8 @@ function errorMessageWithCause(error: unknown): string {
       address?: unknown;
       hostname?: unknown;
       port?: unknown;
+      status?: unknown;
+      statusCode?: unknown;
       cause?: unknown;
       reason?: unknown;
       errors?: unknown;
@@ -588,16 +675,24 @@ function errorMessageWithCause(error: unknown): string {
       ? String(record.errno).trim()
       : "";
     const syscall = typeof record.syscall === "string" ? record.syscall.trim() : "";
+    const status = typeof record.status === "number"
+      ? `HTTP ${record.status}`
+      : typeof record.statusCode === "number"
+        ? `HTTP ${record.statusCode}`
+        : "";
     const host = [record.hostname ?? record.address, record.port]
       .filter((value) => typeof value === "string" || typeof value === "number")
       .map(String)
       .filter(Boolean)
       .join(":");
-    const context = [code, errno !== code ? errno : "", syscall, host]
+    const context = [status, code, errno !== code ? errno : "", syscall, host]
       .filter((value) => value && !message.includes(value))
       .join(", ");
+    const fallbackLabel = typeof record.name === "string" && record.name.trim() && record.name !== "Error"
+      ? record.name.trim()
+      : "Network request failed";
     const detail = context
-      ? `${message || "Network request failed"} (${context})`
+      ? `${message || fallbackLabel} (${context})`
       : message;
     if (detail && !messages.includes(detail)) messages.push(detail);
     pending.push(record.cause, record.reason);
@@ -613,27 +708,62 @@ function fetchWithDetailedErrors(
 ): typeof fetch {
   return async (input, init) => {
     const url = fetchUrl(input);
+    const safeUrl = sanitizeUrl(url);
     const method = typeof init?.method === "string" ? init.method : "GET";
     const startedAt = Date.now();
-    bridgeDebug("fetch_start", { method, url });
+    const tracker = fetchAttemptContext.getStore();
+    bridgeDebug("fetch_start", { method, url: safeUrl });
     try {
       const response = await fetchImplementation(input, init);
+      const elapsedMs = elapsedMillis(startedAt);
+      if (tracker && response.ok) {
+        tracker.lastFetchError = undefined;
+      }
       bridgeDebug("fetch_end", {
         method,
-        url,
+        url: safeUrl,
         status: response.status,
-        elapsed_ms: elapsedMillis(startedAt),
+        elapsed_ms: elapsedMs,
       });
+      if (!response.ok) {
+        const requestId = response.headers.get("x-request-id") ?? response.headers.get("request-id") ?? "";
+        bridgeDiagnostic("fetch_http_error", {
+          method,
+          url: safeUrl,
+          status: response.status,
+          elapsed_ms: elapsedMs,
+          ...(requestId ? { x_request_id: requestId } : {}),
+        });
+      }
       return response;
     } catch (error) {
       const detail = errorMessageWithCause(error);
-      bridgeDebug("fetch_error", {
+      const elapsedMs = elapsedMillis(startedAt);
+      const aborted = Boolean(init?.signal?.aborted);
+      const networkFields = extractNetworkErrorFields(error);
+      const eventDetails: Record<string, unknown> = {
         method,
-        url,
+        url: safeUrl,
         error: detail,
-        aborted: Boolean(init?.signal?.aborted),
-        elapsed_ms: elapsedMillis(startedAt),
-      });
+        aborted,
+        elapsed_ms: elapsedMs,
+        ...(networkFields.code ? { code: networkFields.code } : {}),
+        ...(networkFields.errno && networkFields.errno !== networkFields.code
+          ? { errno: networkFields.errno }
+          : {}),
+        ...(networkFields.syscall ? { syscall: networkFields.syscall } : {}),
+        ...(networkFields.host ? { host: networkFields.host } : {}),
+      };
+      if (!aborted) {
+        if (tracker) tracker.lastFetchError = detail;
+        const resolvNameservers = readResolvNameserversSafe();
+        if (resolvNameservers.length > 0) {
+          eventDetails.resolv_nameservers = resolvNameservers;
+        }
+        bridgeDiagnostic("fetch_error", eventDetails);
+      } else {
+        bridgeDebug("fetch_error", eventDetails);
+      }
       onError?.(detail);
       if (error instanceof Error && detail === error.message) throw error;
       throw new Error(detail, { cause: error });
@@ -1009,6 +1139,84 @@ function requestContainsDeveloperMessage(payload: unknown): boolean {
   );
 }
 
+function enrichAssistantErrorMessage(
+  message: AssistantMessage,
+  tracker: FetchAttemptTracker,
+): AssistantMessage {
+  if (message.stopReason !== "error") return message;
+  const fetchError = tracker.lastFetchError?.trim();
+  if (!fetchError) return message;
+  const current = (message.errorMessage ?? "").trim();
+  if (current.includes(fetchError)) return message;
+  const normalized = current.toLowerCase();
+  let enriched: string;
+  if (!current) {
+    enriched = fetchError;
+  } else if (normalized === "connection error." || normalized === "connection error") {
+    enriched = `Connection error: ${fetchError}`;
+  } else if (
+    normalized === "request timed out." ||
+    normalized === "request timed out" ||
+    normalized === "fetch failed" ||
+    normalized === "an unknown error occurred"
+  ) {
+    enriched = `${current.replace(/\.$/, "")}: ${fetchError}`;
+  } else {
+    enriched = `${current} (${fetchError})`;
+  }
+  return { ...message, errorMessage: enriched };
+}
+
+// SDKs such as OpenAI/Anthropic collapse low-level fetch errors into an opaque
+// "Connection error." message while burying the real cause on error.cause, and
+// pi-ai's error formatter reads only error.message. Track the attempt's fetch
+// failure and re-attach the real transport detail so retries and diagnostics
+// preserve it.
+function diagnosticProvider(provider: Provider): Provider {
+  const wrap = (call: ProviderStreams["streamSimple"]): ProviderStreams["streamSimple"] =>
+    (model, context, options) => {
+      const tracker: FetchAttemptTracker = {};
+      const inner = fetchAttemptContext.run(tracker, () => call(model, context, options));
+      const output = createAssistantMessageEventStream();
+      void (async () => {
+        for await (const event of inner) {
+          if (event.type === "error") {
+            output.push({
+              ...event,
+              error: enrichAssistantErrorMessage(event.error, tracker),
+            });
+          } else {
+            output.push(event);
+          }
+        }
+        output.end(enrichAssistantErrorMessage(await inner.result(), tracker));
+      })().catch((error) => {
+        const fallbackMessage = enrichAssistantErrorMessage(
+          {
+            role: "assistant",
+            content: [],
+            api: model.api,
+            provider: model.provider,
+            model: model.id,
+            usage: emptyUsage(),
+            stopReason: "error",
+            errorMessage: errorMessageWithCause(error),
+            timestamp: Date.now(),
+          },
+          tracker,
+        );
+        output.push({ type: "error", reason: "error", error: fallbackMessage });
+        output.end(fallbackMessage);
+      });
+      return output;
+    };
+  return {
+    ...provider,
+    stream: wrap(provider.stream.bind(provider)) as Provider["stream"],
+    streamSimple: wrap(provider.streamSimple.bind(provider)),
+  };
+}
+
 // Apply at the provider boundary so AgentSession turns, retries, compaction,
 // and one-shot requests all use the configured body field.
 function serviceTierProvider(provider: Provider, config: ModelConfig): Provider {
@@ -1344,7 +1552,9 @@ function buildModels(config: ModelConfig): {
       applyModelsDevMetadata(catalogModel, config.models_dev),
       config.thinking_level_map,
     );
-    const servingProvider = serviceTierProvider(providerServingModel(provider, model), config);
+    const servingProvider = diagnosticProvider(
+      serviceTierProvider(providerServingModel(provider, model), config),
+    );
     models.setProvider(servingProvider);
     return { models, model, provider: servingProvider, credentialStore, compatibilityFallbackState };
   }
@@ -1356,7 +1566,7 @@ function buildModels(config: ModelConfig): {
   );
   bridgeDebug("build_models_path", { path: "custom", pi_api: config.pi_api });
   const headers = config.custom_headers ?? {};
-  const provider = serviceTierProvider(createProvider({
+  const provider = diagnosticProvider(serviceTierProvider(createProvider({
     id: config.pi_provider_id,
     name: config.pi_provider_id,
     baseUrl: config.base_url,
@@ -1381,7 +1591,7 @@ function buildModels(config: ModelConfig): {
         : apiStreamsFor(config.pi_api),
       compatibilityFallbackState,
     ),
-  }), config);
+  }), config));
   models.setProvider(provider);
   return { models, model, provider, compatibilityFallbackState };
 }
@@ -2676,6 +2886,13 @@ function emitAgentSessionEvent(state: AgentSessionState, event: AgentSessionEven
       state.toolArgsById.delete(event.toolCallId);
       return;
     case "auto_retry_start":
+      bridgeDiagnostic("agent_auto_retry", {
+        session_id: state.sessionId,
+        attempt: event.attempt,
+        max_attempts: event.maxAttempts,
+        delay_ms: event.delayMs,
+        error_message: event.errorMessage,
+      });
       writeEvent(requestId, "assistant_stream_reset", {});
       writeEvent(requestId, "assistant_retry", {
         attempt: event.attempt,
@@ -2683,6 +2900,15 @@ function emitAgentSessionEvent(state: AgentSessionState, event: AgentSessionEven
         delay_ms: event.delayMs,
         error_message: event.errorMessage,
       });
+      return;
+    case "auto_retry_end":
+      if (!event.success) {
+        bridgeDiagnostic("agent_auto_retry_failed", {
+          session_id: state.sessionId,
+          attempt: event.attempt,
+          final_error: event.finalError ?? "",
+        });
+      }
       return;
     case "compaction_start":
       writeEvent(requestId, "compaction_start", { reason: event.reason });
@@ -3247,6 +3473,14 @@ async function runSimpleCompletion(id: string, payload: JsonObject, stream: bool
         emitStreamEvent(id, event);
       }
       const message = await eventStream.result();
+      if (message.stopReason === "error") {
+        bridgeDiagnostic("complete_once_error", {
+          provider: message.provider,
+          model: message.model,
+          base_url: sanitizeUrl(config.base_url),
+          error_message: message.errorMessage ?? "",
+        });
+      }
       return {
         ...assistantPayload(message),
         ...(await credentialPayload(credentialStore)),
@@ -3255,6 +3489,14 @@ async function runSimpleCompletion(id: string, payload: JsonObject, stream: bool
       };
     }
     const message = await models.completeSimple(model, context, options);
+    if (message.stopReason === "error") {
+      bridgeDiagnostic("complete_once_error", {
+        provider: message.provider,
+        model: message.model,
+        base_url: sanitizeUrl(config.base_url),
+        error_message: message.errorMessage ?? "",
+      });
+    }
     return {
       ...assistantPayload(message),
       ...(await credentialPayload(credentialStore)),

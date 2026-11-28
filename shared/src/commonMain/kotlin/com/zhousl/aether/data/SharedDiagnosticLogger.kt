@@ -62,6 +62,31 @@ internal object SharedDiagnosticLogger {
         snapshot?.let { PlatformDiagnosticStorage.writeEventsText(it) }
     }
 
+    suspend fun exception(
+        category: String,
+        event: String,
+        throwable: Throwable,
+        level: String = "error",
+        sessionId: String? = null,
+        turnId: String? = null,
+        requestId: String? = null,
+        details: Map<String, Any?> = emptyMap(),
+    ) {
+        this.event(
+            category = category,
+            event = event,
+            level = level,
+            sessionId = sessionId,
+            turnId = turnId,
+            requestId = requestId,
+            details = details + mapOf(
+                "exception_type" to (throwable::class.simpleName ?: "Throwable"),
+                "exception_message" to throwable.message.orEmpty(),
+                "exception_stack" to throwable.stackTraceToString().take(5_000),
+            ),
+        )
+    }
+
     suspend fun readEventsText(): String = mutex.withLock { events }
 
     suspend fun readLastCrashText(): String = PlatformDiagnosticStorage.readLastCrashText()
@@ -90,6 +115,8 @@ internal object SharedDiagnosticRedactor {
         "token",
         "secret",
         "password",
+        "credential",
+        "cookie",
         "tavilykey",
     )
     private val largeContentKeyFragments = listOf(
@@ -179,6 +206,28 @@ internal object SharedDiagnosticRedactor {
     private fun shouldSummarizeLargeContent(key: String): Boolean {
         val normalized = key.replace("-", "_").lowercase()
         return largeContentKeyFragments.any { it in normalized }
+    }
+}
+
+internal fun classifySharedPiBridgeStderrLevel(line: String): String {
+    val trimmed = line.trim()
+    if (trimmed.isEmpty()) return "info"
+    if (trimmed.startsWith("pi-bridge fatal:")) return "error"
+    if (!trimmed.startsWith("[pi-bridge] ")) return "warn"
+    val eventName = trimmed.removePrefix("[pi-bridge] ").substringBefore(' ').trim()
+    return when {
+        eventName == "fetch_http_error" ||
+            eventName == "agent_auto_retry" ||
+            eventName.endsWith("_timeout") ||
+            eventName.endsWith("_orphaned") -> "warn"
+
+        eventName == "fetch_error" ||
+            eventName == "complete_once_error" ||
+            eventName == "agent_auto_retry_failed" ||
+            eventName.endsWith("_failed") ||
+            eventName.endsWith("_error") -> "error"
+
+        else -> "info"
     }
 }
 

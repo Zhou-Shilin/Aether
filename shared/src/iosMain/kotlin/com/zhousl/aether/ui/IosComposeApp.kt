@@ -18,6 +18,7 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.keyframes
@@ -120,6 +121,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import com.zhousl.aether.platform.IosNativeSidebarActionHandler
+import com.zhousl.aether.platform.IosNativeSidebarHost
 import com.zhousl.aether.platform.IosWorkspaceHost
 import com.zhousl.aether.platform.PlatformBrowserView
 import androidx.compose.runtime.mutableIntStateOf
@@ -150,6 +153,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.graphics.drawscope.scale
@@ -162,8 +166,10 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.SpanStyle
@@ -2144,6 +2150,18 @@ fun IosComposeApp(
                 target.activeSkills.clear()
                 target.activeMcpServerIds.clear()
                 persistSession(target)
+                SharedDiagnosticLogger.event(
+                    category = "session",
+                    event = "turn_start",
+                    sessionId = target.id,
+                    details = mapOf(
+                        "session_title" to target.title,
+                        "provider" to config.piProviderId,
+                        "model" to config.modelId,
+                        "base_url" to SharedDiagnosticRedactor.sanitizedBaseUrl(config.baseUrl),
+                        "request_message_count" to turnMessages.size,
+                    ),
+                )
                 runSharedAppCatching {
                     val reasoningTraceToolRoutingEnabled = config.supportsSharedVisibleReasoningTrace()
                     chatClient.runTurn(
@@ -2362,6 +2380,39 @@ fun IosComposeApp(
                         completedPiTurnResult = result
                         analyticsOutcome = if (result.errorMessage.isBlank()) "success" else "failure"
                         val completedAt = platformCurrentTimeMillis()
+                        val turnDurationMillis = (completedAt - turnStartedAt).coerceAtLeast(0L)
+                        if (result.errorMessage.isBlank()) {
+                            SharedDiagnosticLogger.event(
+                                category = "session",
+                                event = "turn_model_success",
+                                sessionId = target.id,
+                                details = mapOf(
+                                    "reply_chars" to result.assistantText.length,
+                                    "duration_millis" to turnDurationMillis,
+                                ),
+                            )
+                        } else {
+                            SharedDiagnosticLogger.event(
+                                category = "session",
+                                event = "turn_model_failed",
+                                level = "error",
+                                sessionId = target.id,
+                                details = mapOf(
+                                    "error_message" to result.errorMessage,
+                                    "duration_millis" to turnDurationMillis,
+                                ),
+                            )
+                        }
+                        SharedDiagnosticLogger.event(
+                            category = "session",
+                            event = "turn_end",
+                            level = if (result.errorMessage.isBlank()) "info" else "warn",
+                            sessionId = target.id,
+                            details = mapOf(
+                                "outcome" to if (result.errorMessage.isBlank()) "Success" else "Failure",
+                                "duration_millis" to turnDurationMillis,
+                            ),
+                        )
                         val resolvedUsage = if (result.usageAvailable) result.usage else estimatedUsage
                         target.messages.updateMessage(assistantId) { current ->
                             current.withAssistantResultFallback(result)
@@ -2438,10 +2489,37 @@ fun IosComposeApp(
                     },
                     onFailure = { error ->
                         if (error is CancellationException && error !is TimeoutCancellationException) {
+                            SharedDiagnosticLogger.event(
+                                category = "session",
+                                event = "turn_cancelled",
+                                level = "warn",
+                                sessionId = target.id,
+                                details = mapOf(
+                                    "duration_millis" to (platformCurrentTimeMillis() - turnStartedAt).coerceAtLeast(0L),
+                                ),
+                            )
                             throw error
                         }
                         analyticsOutcome = "failure"
                         val completedAt = platformCurrentTimeMillis()
+                        val turnDurationMillis = (completedAt - turnStartedAt).coerceAtLeast(0L)
+                        SharedDiagnosticLogger.exception(
+                            category = "session",
+                            event = "turn_model_failed",
+                            throwable = error,
+                            sessionId = target.id,
+                            details = mapOf("duration_millis" to turnDurationMillis),
+                        )
+                        SharedDiagnosticLogger.event(
+                            category = "session",
+                            event = "turn_end",
+                            level = "warn",
+                            sessionId = target.id,
+                            details = mapOf(
+                                "outcome" to "Failure",
+                                "duration_millis" to turnDurationMillis,
+                            ),
+                        )
                         enqueueReasoningSummary(
                             target = target,
                             assistantId = assistantId,
@@ -4118,6 +4196,10 @@ fun IosComposeApp(
                     },
                     drawerOpenedEventRegistered = "drawer.opened" in extensionSnapshot.eventNames,
                     useTabletLayout = useTabletLayout,
+                    sidebarHostAllowed = startupResolved &&
+                        (sharedAppSettings.privacyPolicyAccepted || showcaseEnabled) &&
+                        !alpineSetupPreviewVisible &&
+                        piExtensionUiRequest == null,
                     contextWindow = modelOptions.findModelOption(currentSession.selectedModelKey)?.let {
                         modelLimitsByProviderModel[sharedThinkingCatalogKey(it.piProviderId, it.modelId)]?.contextWindow
                     },
@@ -4390,8 +4472,12 @@ private suspend fun buildSharedDiagnosticLogText(
 ): String {
     val diagnosticEvents = SharedDiagnosticLogger.readEventsText()
     val lastCrash = SharedDiagnosticLogger.readLastCrashText()
+    val device = platform.UIKit.UIDevice.currentDevice
     return buildString {
         appendLine("Aether diagnostic log")
+        appendLine("platform=ios")
+        appendLine("osVersion=${device.systemName} ${device.systemVersion}")
+        appendLine("device=${device.model}")
         appendLine("generatedAtMillis=${platformCurrentTimeMillis()}")
         appendLine("versionName=$appVersion")
         appendLine("screen=${route.name}")
@@ -4442,8 +4528,11 @@ private fun buildSharedProviderConfigsDiagnosticSummary(
             put("id", config.id)
             put("name", config.name)
             put("piProviderId", config.piProviderId)
+            put("authMethod", config.authMethod.storageValue)
             put("baseUrl", SharedDiagnosticRedactor.sanitizedBaseUrl(config.baseUrl))
             put("modelId", config.modelId)
+            put("compatibilityMode", config.compatibilityMode)
+            if (config.serviceTier.isNotBlank()) put("serviceTier", config.serviceTier)
             put("cachedModelCount", config.cachedModels.size)
             put("enabledModelCount", config.enabledModelIds.size)
             put("isEnabled", config.isEnabled)
@@ -5675,10 +5764,15 @@ private fun SharedChatScreen(
     onDrawerOpened: () -> Unit,
     drawerOpenedEventRegistered: Boolean,
     useTabletLayout: Boolean,
+    sidebarHostAllowed: Boolean = true,
     contextWindow: Int?,
     runtimeReady: Boolean,
 ) {
     val isDuo by IosWorkspaceHost.isDuo.collectAsState()
+    val useNativeSidebar = !isDuo
+    val nativeSidebarLeadingInsetDp by IosNativeSidebarHost.leadingInsetDp.collectAsState()
+    val nativeSidebarObscuresChat by IosNativeSidebarHost.obscuresChatControls.collectAsState()
+    val nativeSidebarOpen by IosNativeSidebarHost.isOpen.collectAsState()
     val fold = if (isDuo) IosWorkspaceHost.fold.collectAsState().value else com.zhousl.aether.platform.IosWorkspaceFold()
     val contextUsage = if (isDuo) com.zhousl.aether.data.AgentComputerStore.contexts.collectAsState().value else emptyMap()
     if (isDuo) {
@@ -5791,6 +5885,148 @@ private fun SharedChatScreen(
     var composerBodyHeightPx by remember(selectedSessionId) { mutableIntStateOf(0) }
     var composerFocused by remember(selectedSessionId) { mutableStateOf(false) }
     var previewAttachment by remember(selectedSessionId) { mutableStateOf<SharedChatAttachment?>(null) }
+    if (useNativeSidebar) {
+        val sidebarVisible = sidebarHostAllowed && previewAttachment == null
+        val isDarkTheme = AetherBackground.luminance() < 0.5f
+        val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+        val sidebarAppName = stringResource(Res.string.app_name)
+        val sidebarChatLabel = stringResource(Res.string.common_chat)
+        val sidebarNewChatLabel = stringResource(Res.string.common_new_chat)
+        val sidebarSearchLabel = stringResource(Res.string.common_search)
+        val sidebarSettingsLabel = stringResource(Res.string.settings_title)
+        val sidebarRecentsLabel = stringResource(Res.string.chat_recent)
+        val sidebarNoConversations = stringResource(Res.string.chat_no_conversations_yet)
+        val sidebarNoMatches = stringResource(Res.string.search_no_chats_match)
+        val sidebarRenameLabel = stringResource(Res.string.common_rename)
+        val sidebarExportLabel = stringResource(Res.string.common_export)
+        val sidebarDeleteLabel = stringResource(Res.string.common_delete)
+        val sidebarCancelLabel = stringResource(Res.string.common_cancel)
+        val sidebarSaveLabel = stringResource(Res.string.common_save)
+        val sidebarCloseLabel = stringResource(Res.string.common_close)
+        val sidebarMenuLabel = stringResource(Res.string.common_menu)
+
+        val latestOnNewChat by rememberUpdatedState(onNewChat)
+        val latestOnSessionSelected by rememberUpdatedState(onSessionSelected)
+        val latestOnRenameSession by rememberUpdatedState(onRenameSession)
+        val latestOnExportSession by rememberUpdatedState(onExportSession)
+        val latestOnDeleteSession by rememberUpdatedState(onDeleteSession)
+        val latestOnOpenSettings by rememberUpdatedState(onOpenSettings)
+        val latestDismissKeyboard by rememberUpdatedState(dismissKeyboard)
+
+        DisposableEffect(Unit) {
+            IosNativeSidebarHost.setActionHandler(object : IosNativeSidebarActionHandler {
+                override fun handle(action: String, payloadJson: String) {
+                    val payload = runCatching {
+                        Json.parseToJsonElement(payloadJson).jsonObject
+                    }.getOrNull()
+                    when (action) {
+                        "selectSession" -> {
+                            val id = payload?.nativeStringOrNull("id").orEmpty()
+                            if (id.isNotBlank()) latestOnSessionSelected(id)
+                        }
+                        "newChat" -> latestOnNewChat()
+                        "renameSession" -> {
+                            val id = payload?.nativeStringOrNull("id").orEmpty()
+                            val title = payload?.nativeStringOrNull("title").orEmpty()
+                            if (id.isNotBlank() && title.isNotBlank()) {
+                                latestOnRenameSession(id, title)
+                            }
+                        }
+                        "exportSession" -> {
+                            val id = payload?.nativeStringOrNull("id").orEmpty()
+                            if (id.isNotBlank()) latestOnExportSession(id)
+                        }
+                        "deleteSession" -> {
+                            val id = payload?.nativeStringOrNull("id").orEmpty()
+                            if (id.isNotBlank()) latestOnDeleteSession(id)
+                        }
+                        "openSettings" -> latestOnOpenSettings()
+                        "dismissKeyboard" -> latestDismissKeyboard()
+                        "drawerOpened" -> {
+                            if (drawerOpenedEventGate.onMobileDrawerOpened(latestDrawerOpenedEventRegistered)) {
+                                latestOnDrawerOpened()
+                            }
+                        }
+                        "drawerClosed" -> {
+                            drawerOpenedEventGate.onMobileDrawerClosed()
+                        }
+                    }
+                }
+            })
+            onDispose {
+                IosNativeSidebarHost.setActionHandler(null)
+                IosNativeSidebarHost.publishHidden()
+            }
+        }
+
+        val sidebarSnapshot = remember(
+            sidebarVisible,
+            isDarkTheme,
+            reduceMotion,
+            isRtl,
+            selectedSessionId,
+            sessions,
+            sidebarAppName,
+            sidebarChatLabel,
+            sidebarNewChatLabel,
+            sidebarSearchLabel,
+            sidebarSettingsLabel,
+            sidebarRecentsLabel,
+            sidebarNoConversations,
+            sidebarNoMatches,
+            sidebarRenameLabel,
+            sidebarExportLabel,
+            sidebarDeleteLabel,
+            sidebarCancelLabel,
+            sidebarSaveLabel,
+            sidebarCloseLabel,
+            sidebarMenuLabel,
+        ) {
+            buildJsonObject {
+                put("visible", sidebarVisible)
+                put("dark", isDarkTheme)
+                put("reduceMotion", reduceMotion)
+                put("rtl", isRtl)
+                put("selectedSessionId", selectedSessionId)
+                putJsonArray("sessions") {
+                    sessions.forEach { session ->
+                        add(buildJsonObject {
+                            put("id", session.id)
+                            put("title", session.title)
+                            put(
+                                "indicator",
+                                when (session.indicator) {
+                                    SharedConversationIndicator.Working -> "working"
+                                    SharedConversationIndicator.UnviewedComplete -> "unviewed"
+                                    SharedConversationIndicator.None -> "none"
+                                },
+                            )
+                        })
+                    }
+                }
+                put("strings", buildJsonObject {
+                    put("appName", sidebarAppName)
+                    put("chat", sidebarChatLabel)
+                    put("newChat", sidebarNewChatLabel)
+                    put("search", sidebarSearchLabel)
+                    put("settings", sidebarSettingsLabel)
+                    put("recents", sidebarRecentsLabel)
+                    put("noConversations", sidebarNoConversations)
+                    put("noMatches", sidebarNoMatches)
+                    put("rename", sidebarRenameLabel)
+                    put("export", sidebarExportLabel)
+                    put("delete", sidebarDeleteLabel)
+                    put("cancel", sidebarCancelLabel)
+                    put("save", sidebarSaveLabel)
+                    put("close", sidebarCloseLabel)
+                    put("menu", sidebarMenuLabel)
+                })
+            }.toString()
+        }
+        LaunchedEffect(sidebarSnapshot) {
+            IosNativeSidebarHost.publishSnapshot(sidebarSnapshot)
+        }
+    }
     val density = LocalDensity.current
     val edgeBounce = remember(selectedSessionId) { Animatable(0f) }
     val maxEdgeBouncePx = with(density) { 34.dp.toPx() }
@@ -5978,6 +6214,10 @@ private fun SharedChatScreen(
     }
     IosConversationWorkspace(
         isDuo = isDuo,
+        useNativeSidebar = useNativeSidebar,
+        nativeSidebarLeadingInsetDp = nativeSidebarLeadingInsetDp,
+        nativeSidebarObscuresChat = nativeSidebarObscuresChat,
+        reduceMotion = reduceMotion,
         expanded = useTabletLayout && (!isDuo || !fold.active),
         drawerState = drawerState,
         drawer = {
@@ -6237,8 +6477,17 @@ private fun SharedChatScreen(
                 ConversationTopBar(
                     modifier = Modifier.align(Alignment.TopCenter),
                     onHeightChanged = { topBarBodyHeightPx = it },
-                    onMenu = { scope.launch { drawerState.open() } },
-                    showMenu = !useTabletLayout || (isDuo && fold.active),
+                    onMenu = {
+                        if (useNativeSidebar) {
+                            dismissKeyboard()
+                            IosNativeSidebarHost.requestToggle()
+                        } else {
+                            scope.launch { drawerState.open() }
+                        }
+                    },
+                    showMenu = useNativeSidebar || !useTabletLayout || (isDuo && fold.active),
+                    nativeSidebarToggle = useNativeSidebar,
+                    nativeSidebarOpen = nativeSidebarOpen,
                     duoWorkspace = isDuo,
                     onNewChat = onNewChat,
                     selectedModelKey = selectedModelKey,
@@ -6417,6 +6666,8 @@ private fun ConversationTopBar(
     onHeightChanged: (Int) -> Unit,
     onMenu: () -> Unit,
     showMenu: Boolean,
+    nativeSidebarToggle: Boolean = false,
+    nativeSidebarOpen: Boolean = false,
     duoWorkspace: Boolean = false,
     onNewChat: () -> Unit,
     selectedModelKey: String,
@@ -6429,6 +6680,8 @@ private fun ConversationTopBar(
     onModelSelected: (String, (Boolean) -> Unit) -> Unit,
     onReasoningSelected: (String) -> Unit,
 ) {
+    val menuDescription = stringResource(Res.string.common_menu)
+    val newChatDescription = stringResource(Res.string.common_new_chat)
     Column(modifier = modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier.fillMaxWidth().background(
@@ -6444,28 +6697,81 @@ private fun ConversationTopBar(
             ).onSizeChanged { onHeightChanged(it.height) },
         ) {
             Column {
-                AetherConversationTopBarFrame(
-                    modifier = Modifier.fillMaxWidth().statusBarsPadding(),
-                    menuDescription = stringResource(Res.string.common_menu),
-                    newChatDescription = stringResource(Res.string.common_new_chat),
-                    onMenu = onMenu,
-                    onNewChat = onNewChat,
-                    showMenu = showMenu,
-                    menuIcon = if (duoWorkspace) Icons.AutoMirrored.Rounded.ArrowBack else Icons.Rounded.Menu,
-                    showTrailingAction = !duoWorkspace,
-                ) {
-                    SharedConversationModelSelector(
-                        options = modelOptions,
-                        modelCatalogInfo = modelCatalogInfo,
-                        selectedModelKey = selectedModelKey,
-                        reasoningEffort = reasoningEffort,
-                        thinkingLevelsByProviderModel = thinkingLevelsByProviderModel,
-                        thinkingLevelClampsByProviderModel = thinkingLevelClampsByProviderModel,
-                        onSelected = onModelSelected,
-                        onOpened = onOpened,
-                        onReasoningEffortSelected = onReasoningSelected,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                if (nativeSidebarToggle) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .statusBarsPadding()
+                            .padding(horizontal = 15.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        NativeChatControl(
+                            kind = "sidebarToggle",
+                            snapshot = buildJsonObject {
+                                put("label", menuDescription)
+                                put("open", nativeSidebarOpen)
+                            },
+                            modifier = Modifier.size(38.dp),
+                        ) { action, _, completion ->
+                            if (action == "toggle") {
+                                onMenu()
+                                completion(true)
+                            } else {
+                                completion(false)
+                            }
+                        }
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 12.dp, end = 12.dp),
+                        ) {
+                            SharedConversationModelSelector(
+                                options = modelOptions,
+                                modelCatalogInfo = modelCatalogInfo,
+                                selectedModelKey = selectedModelKey,
+                                reasoningEffort = reasoningEffort,
+                                thinkingLevelsByProviderModel = thinkingLevelsByProviderModel,
+                                thinkingLevelClampsByProviderModel = thinkingLevelClampsByProviderModel,
+                                onSelected = onModelSelected,
+                                onOpened = onOpened,
+                                onReasoningEffortSelected = onReasoningSelected,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                        LocalShowcaseControls.current?.let { ShowcasePlaybackButton(it) }
+                        HeaderCircleButton(
+                            icon = LucideIcons.SquarePen,
+                            contentDescription = newChatDescription,
+                            onClick = onNewChat,
+                            size = 38.dp,
+                            iconSize = 19.dp,
+                            containerColor = AetherSurface.copy(alpha = 0.96f),
+                        )
+                    }
+                } else {
+                    AetherConversationTopBarFrame(
+                        modifier = Modifier.fillMaxWidth().statusBarsPadding(),
+                        menuDescription = menuDescription,
+                        newChatDescription = newChatDescription,
+                        onMenu = onMenu,
+                        onNewChat = onNewChat,
+                        showMenu = showMenu,
+                        menuIcon = if (duoWorkspace) Icons.AutoMirrored.Rounded.ArrowBack else Icons.Rounded.Menu,
+                        showTrailingAction = !duoWorkspace,
+                    ) {
+                        SharedConversationModelSelector(
+                            options = modelOptions,
+                            modelCatalogInfo = modelCatalogInfo,
+                            selectedModelKey = selectedModelKey,
+                            reasoningEffort = reasoningEffort,
+                            thinkingLevelsByProviderModel = thinkingLevelsByProviderModel,
+                            thinkingLevelClampsByProviderModel = thinkingLevelClampsByProviderModel,
+                            onSelected = onModelSelected,
+                            onOpened = onOpened,
+                            onReasoningEffortSelected = onReasoningSelected,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                 }
                 SharedAetherExtensionSlot(
                     SharedExtensionSlotChatTop,
@@ -9010,15 +9316,37 @@ private fun JsonObject.nativeStringMap(name: String): Map<String, String> =
     }.toMap()
 
 
-/** Only Duo uses the workspace container; all other devices keep the original layout. */
+/** Only Duo uses the workspace container; ordinary iPhone/iPad use the native SwiftUI Liquid Glass sidebar. */
 @Composable
 private fun IosConversationWorkspace(
     isDuo: Boolean,
+    useNativeSidebar: Boolean = false,
+    nativeSidebarLeadingInsetDp: Float = 0f,
+    nativeSidebarObscuresChat: Boolean = false,
+    reduceMotion: Boolean = false,
     expanded: Boolean,
     drawerState: DrawerState,
     drawer: @Composable () -> Unit,
     content: @Composable () -> Unit,
 ) {
+    if (useNativeSidebar && !isDuo) {
+        val animatedLeadingInset by animateDpAsState(
+            targetValue = nativeSidebarLeadingInsetDp.coerceAtLeast(0f).dp,
+            animationSpec = if (reduceMotion) snap() else spring(
+                dampingRatio = Spring.DampingRatioNoBouncy,
+                stiffness = 480f,
+            ),
+            label = "ios_native_sidebar_leading_inset",
+        )
+        Box(Modifier.fillMaxSize().background(AetherBackground)) {
+            Box(Modifier.fillMaxSize().padding(start = animatedLeadingInset.coerceAtLeast(0.dp))) {
+                CompositionLocalProvider(LocalNativeChatControlsObscured provides nativeSidebarObscuresChat) {
+                    content()
+                }
+            }
+        }
+        return
+    }
     val conversation: @Composable () -> Unit = {
         val obscured = !expanded &&
             (drawerState.currentValue == DrawerValue.Open || drawerState.targetValue == DrawerValue.Open)

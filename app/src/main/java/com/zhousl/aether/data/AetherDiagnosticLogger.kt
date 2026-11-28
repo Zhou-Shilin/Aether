@@ -37,9 +37,10 @@ class AetherDiagnosticLogger private constructor(
         details: Map<String, Any?> = emptyMap(),
     ) {
         val file = eventsFile ?: return
+        val timestampMillis = System.currentTimeMillis()
         val line = JSONObject().apply {
-            put("timestamp", isoTimestamp(System.currentTimeMillis()))
-            put("timestampMillis", System.currentTimeMillis())
+            put("timestamp", isoTimestamp(timestampMillis))
+            put("timestampMillis", timestampMillis)
             put("level", level)
             put("category", category)
             put("event", event)
@@ -82,9 +83,10 @@ class AetherDiagnosticLogger private constructor(
         thread: Thread,
         throwable: Throwable,
     ) {
+        val timestampMillis = System.currentTimeMillis()
         val crash = JSONObject().apply {
-            put("timestamp", isoTimestamp(System.currentTimeMillis()))
-            put("timestampMillis", System.currentTimeMillis())
+            put("timestamp", isoTimestamp(timestampMillis))
+            put("timestampMillis", timestampMillis)
             put("thread", thread.name)
             put("exceptionType", throwable.javaClass.name)
             put("message", DiagnosticRedactor.sanitizeString(throwable.message.orEmpty()))
@@ -165,6 +167,8 @@ internal object DiagnosticRedactor {
         "token",
         "secret",
         "password",
+        "credential",
+        "cookie",
         "tavilykey",
     )
     private val largeContentKeyFragments = listOf(
@@ -280,6 +284,28 @@ private class AetherUncaughtExceptionHandler(
     ) {
         logger.recordCrash(thread, throwable)
         previous?.uncaughtException(thread, throwable)
+    }
+}
+
+internal fun classifyPiBridgeStderrLevel(line: String): String {
+    val trimmed = line.trim()
+    if (trimmed.isEmpty()) return "info"
+    if (trimmed.startsWith("pi-bridge fatal:")) return "error"
+    if (!trimmed.startsWith("[pi-bridge] ")) return "warn"
+    val eventName = trimmed.removePrefix("[pi-bridge] ").substringBefore(' ').trim()
+    return when {
+        eventName == "fetch_http_error" ||
+            eventName == "agent_auto_retry" ||
+            eventName.endsWith("_timeout") ||
+            eventName.endsWith("_orphaned") -> "warn"
+
+        eventName == "fetch_error" ||
+            eventName == "complete_once_error" ||
+            eventName == "agent_auto_retry_failed" ||
+            eventName.endsWith("_failed") ||
+            eventName.endsWith("_error") -> "error"
+
+        else -> "info"
     }
 }
 

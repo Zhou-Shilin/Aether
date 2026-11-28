@@ -58,7 +58,7 @@ class AlpineGuestResolvConfTest {
             nameserversOf(
                 guestResolvConfContent(
                     listOf(
-                        GuestDnsLink(nameservers = listOf("fe80::54:ff:fe00:0%wlan0", "")),
+                        GuestDnsLink(nameservers = listOf("fe80::54:ff:fe00:0%wlan0", "fe80::1", "")),
                         GuestDnsLink(nameservers = listOf("192.168.1.1")),
                     ),
                 ),
